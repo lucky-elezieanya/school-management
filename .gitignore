@@ -1,0 +1,148 @@
+# ======================================================
+# ROOT
+# ======================================================
+
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+
+# ======================================================
+# PYTHON / DJANGO (backend)
+# ======================================================
+
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/*.py[cod]
+
+backend/.Python
+backend/env/
+backend/venv/
+backend/.venv/
+
+backend/build/
+backend/dist/
+backend/*.egg-info/
+
+# Environment variables
+backend/.env
+backend/.env.*
+backend/.python-version
+
+# Pytest
+backend/.pytest_cache/
+
+# Coverage
+backend/.coverage
+backend/htmlcov/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.tox/
+
+# SQLite
+backend/db.sqlite3
+backend/db.sqlite3-journal
+
+# Uploaded media
+backend/media/
+
+# Collected static files
+backend/staticfiles/
+
+
+# Celery
+backend/celerybeat-schedule
+backend/celerybeat.pid
+
+# Django logs
+backend/logs/
+backend/*.log
+
+# ======================================================
+# NODE / NEXT.JS (frontend)
+# ======================================================
+
+frontend/node_modules/
+
+frontend/.next/
+frontend/out/
+frontend/build/
+
+frontend/.turbo/
+
+frontend/.vercel/
+
+frontend/coverage/
+
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.production.local
+frontend/.env.test.local
+
+frontend/.eslintcache
+
+frontend/tsconfig.tsbuildinfo
+
+# ======================================================
+# IDES
+# ======================================================
+
+.vscode/
+.idea/
+
+*.iml
+
+# ======================================================
+# MAC / WINDOWS
+# ======================================================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+
+Icon?
+
+Thumbs.db
+Desktop.ini
+
+# ======================================================
+# CACHE
+# ======================================================
+
+.cache/
+.temp/
+tmp/
+
+# ======================================================
+# ARCHIVES
+# ======================================================
+
+*.zip
+*.tar
+*.gz
+*.rar
+
+# ======================================================
+# SECRETS
+# ======================================================
+
+*.pem
+*.key
+*.crt
+*.p12
+
+# ======================================================
+# MISC
+# ======================================================
+
+*.pid
+*.seed
+*.orig

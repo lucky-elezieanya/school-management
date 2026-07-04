@@ -1,0 +1,20 @@
+DEFAULT_RESULT_CUSTOMIZATION = {
+    "subject_average": True,
+    "class_average": True,
+    "subject_position": True,
+    "class_size": True,
+    "subject_score": True,
+    "cumulative_average": True,
+    "class_position": True,
+    "highest_lowest_scores": True,
+    "overall_grade": True,
+    "test_scores": True,
+    "show_teacher_comment": True,
+    "show_principal_comment": True,
+    "show_behaviour": True,
+    "show_attendance": True,
+    "show_school_days": True,
+    "show_class_fees": True,
+    "show_grading_scale": True,
+    "show_performance_chart": True
+}
