@@ -10,6 +10,7 @@ import {
   apiHeaders,
   handleResponse,
 } from "@/app/lib/api";
+import {toast} from "sonner"
 
 import { Plus, Pencil, Trash2, X, ClipboardList, Save } from "lucide-react";
 
@@ -141,7 +142,7 @@ export default function MaxScoresComponent() {
 
         resetForm();
         setShowCreateModal(false);
-        alert(`Max scores for ${existing.school_class.name} updated successfully`);
+        toast.success(`Max scores for ${existing.school_class.name} updated successfully`);
       } else {
         res = await createAction("results", "maxscores", payload, "POST");
         setScores((prev) => [...prev, res]);
@@ -149,11 +150,11 @@ export default function MaxScoresComponent() {
         resetForm();
         setShowCreateModal(false);
 
-        alert("Max scores created successfully");
+        toast.success("Max scores created successfully");
       }
     } catch (error) {
       console.log(error);
-      alert("Failed to create max scores");
+      toast.error("Failed to create max scores");
     } finally {
       setLoading(false);
     }
@@ -209,11 +210,13 @@ export default function MaxScoresComponent() {
         resetForm();
         setShowEditModal(false);
 
-        alert(`Max scores for ${res.school_class.name} updated successfully`);
+        toast.success(
+          `Max scores for ${res.school_class.name} updated successfully`,
+        );
       }
     } catch (error) {
       console.log(error);
-      alert("Failed to update max scores");
+      toast.error("Failed to update max scores");
     } finally {
       setLoading(false);
     }

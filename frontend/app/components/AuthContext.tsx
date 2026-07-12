@@ -74,6 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [termSession, setTermSession] = useState<TermSession | null>(null);
 
   const [termMessage, setTermMessage] = useState("");
+  const [userId, setUserId] = useState<number | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +104,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
   };
-
 
   /* =========================
 	   ACTIVE TERM
@@ -163,6 +163,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const decoded: JwtPayload = jwtDecode(data.access);
 
       await activeTerm();
+      setUserId(decoded.user_id);
       await fetchUser(decoded.user_id, data.access);
 
       switch (decoded.role) {
@@ -286,9 +287,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(interval);
   }, []);
 
-  /* =========================
-	   INIT
-	========================= */
+  useEffect(() => {
+    if (!userId || !authToken) return;
+    fetchUser(userId, authToken.access);
+  }, [authToken, userId]);
+
+  /* ============ INIT =========== */
 
   useEffect(() => {
     initializeAuth();

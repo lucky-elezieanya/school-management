@@ -255,168 +255,165 @@ export default function BehaviourComponent() {
 	};
 
 	return (
-		<div className="space-y-8">
-			{/* HEADER */}
-			<div className="bg-linear-to-r from-emerald-500 to-emerald-700 rounded-3xl p-6 text-white">
-				<h1 className="text-3xl font-bold">Behavioural Assessment</h1>
-			</div>
+    <div className="space-y-8">
+      {/* HEADER */}
+      <div className="bg-linear-to-r from-emerald-500 to-emerald-700 rounded-3xl p-6 text-white">
+        <h1 className="text-3xl font-bold">Behavioural Assessment</h1>
+      </div>
 
-			{/* GRID */}
-			<div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-				{/* CLASSES */}
-				<div className="bg-white border rounded-3xl overflow-hidden">
-					<div className="p-4 border-b bg-emerald-50 flex items-center gap-2">
-						<Users />
-						<h2 className="font-bold">Classes</h2>
-					</div>
+      {/* GRID */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* CLASSES */}
+        <div className="bg-white border rounded-3xl overflow-hidden">
+          <div className="p-4 border-b bg-emerald-50 flex items-center gap-2">
+            <Users />
+            <h2 className="font-bold">Classes</h2>
+          </div>
 
-					<table className="w-full">
-						<tbody>
-							{classes.map((c) => (
-								<tr
-									key={c.id}
-									className={`border-t cursor-pointer flex ${
-										classId === c.id
-											? "bg-emerald-100"
-											: "hover:bg-emerald-50"
-									}`}
-								>
-									<td className="p-4">
-										<input
-											type="checkbox"
-											checked={classId === c.id}
-											onChange={() => setClassId(c.id)}
-										/>
-									</td>
-									<td className="p-4 w-full">{c.name} {c.arm.name}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
+          <table className="w-full">
+            <tbody>
+              {classes.map((c) => (
+                <tr
+                  key={c.id}
+                  className={`border-t cursor-pointer flex ${
+                    classId === c.id ? "bg-emerald-100" : "hover:bg-emerald-50"
+                  }`}
+                >
+                  <td className="p-4">
+                    <input
+                      type="checkbox"
+                      checked={classId === c.id}
+                      onChange={() => setClassId(c.id)}
+                    />
+                  </td>
+                  <td className="p-4 w-full">
+                    {c.name} {c.arm.name}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-				{/* STUDENTS */}
-				<div className="bg-white border rounded-3xl overflow-hidden">
-					<div className="p-4 border-b bg-emerald-50">
-						<h2 className="font-bold">Students</h2>
-					</div>
+        {/* STUDENTS */}
+        <div className="bg-white border rounded-3xl overflow-hidden">
+          <div className="p-4 border-b bg-emerald-50">
+            <h2 className="font-bold">Students</h2>
+          </div>
 
-					<div className="p-4 text-sm">
-						Completed: {completedCount} | Pending: {pendingCount} |{" "}
-						{completionRate}%
-					</div>
+          <div className="p-3 text-sm">
+            Completed: {completedCount} | Pending: {pendingCount} |{" "}
+            {completionRate}%
+          </div>
 
-					<table className="w-full">
-						<tbody>
-							{students.map((s) => (
-								<tr
-									key={s.id}
-									className={`border-t ${
-										s.behaviour_exists
-											? "bg-emerald-50"
-											: "bg-red-50"
-									}`}
-								>
-									<td className="p-4">{s.user.full_name}</td>
+          <table className="w-full">
+            <tbody>
+              {students.map((s) => (
+                <tr
+                  key={s.id}
+                  className={`border-t ${
+                    s.behaviour_exists ? "bg-emerald-50" : "bg-red-50"
+                  }`}
+                >
+                  <td className="p-3 flex gap-2 items-center">
+                    <img
+                      src={s.user.profile_picture || "/avatar.png"}
+                      alt=""
+                      className="object-cover w-11 h-11 rounded-full"
+                    />
+                    <span>{s.user.full_name}</span>
+                  </td>
 
-									<td className="p-4">
-										{s.behaviour_exists
-											? "Completed"
-											: "Pending"}
-									</td>
+                  <td className="p-3 gap-2 items-center">
+                    {s.behaviour_exists ? "Completed" : "Pending"}
+                  </td>
 
-									<td className="p-4 flex gap-2">
-										{!s.behaviour_exists ? (
-											<button
-												onClick={() => selectStudent(s)}
-												className="px-3 py-1 bg-emerald-600 text-white rounded-lg"
-											>
-												Assess
-											</button>
-										) : (
-											<>
-												<button
-													onClick={() =>
-														selectStudent(s)
-													}
-													className="px-3 py-1 bg-amber-500 text-white rounded-lg"
-												>
-													Edit
-												</button>
+                  <td className="p-3  flex gap-2 items-center ">
+                    {!s.behaviour_exists ? (
+                      <button
+                        onClick={() => selectStudent(s)}
+                        className="px-3 py-1 bg-emerald-600 text-white rounded-lg"
+                      >
+                        Assess
+                      </button>
+                    ) : (
+                      <div className="flex gap-2 items-center">
+                        <button
+                          onClick={() => selectStudent(s)}
+                          className="px-3 py-1 bg-amber-500 text-white rounded-lg flex items-center gap-2"
+                        >
+                          Edit
+                        </button>
 
-												<button
-													onClick={() =>
-														handleDelete(s)
-													}
-													className="px-3 py-1 bg-red-600 text-white rounded-lg"
-												>
-													<Trash2 size={14} />
-												</button>
-											</>
-										)}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			</div>
+                        <button
+                          onClick={() => handleDelete(s)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-			{/* MODAL */}
-			{selectedStudent && (
-				<div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-					<form
-						onSubmit={handleSubmit}
-						className="bg-white p-6 rounded-3xl w-125"
-					>
-						<h2 className="text-xl font-bold mb-4">
-							{selectedStudent.user.full_name}
-						</h2>
+      {/* MODAL */}
+      {selectedStudent && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white p-6 rounded-3xl w-125"
+          >
+            <h2 className="text-xl font-bold mb-4">
+              {selectedStudent.user.full_name}
+            </h2>
 
-						<div className="grid grid-cols-2 gap-3">
-							{Object.keys(form).map((key) => (
-								<div key={key}>
-									<label className="text-sm capitalize">
-										{key}
-									</label>
-									<select
-										value={(form as any)[key]}
-										onChange={(e) =>
-											setForm({
-												...form,
-												[key]: e.target.value,
-											})
-										}
-										className="w-full border p-2 rounded-lg"
-									>
-										{grades.map((g) => (
-											<option key={g}>{g}</option>
-										))}
-									</select>
-								</div>
-							))}
-						</div>
+            <div className="grid grid-cols-2 gap-3">
+              {Object.keys(form).map((key) => (
+                <div key={key}>
+                  <label className="text-sm capitalize">{key}</label>
+                  <select
+                    value={(form as any)[key]}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        [key]: e.target.value,
+                      })
+                    }
+                    className="w-full border p-2 rounded-lg"
+                  >
+                    {grades.map((g) => (
+                      <option key={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
 
-						<div className="flex gap-2 mt-6">
-							<button
-                            type="submit"
-								className="flex-1 bg-emerald-600 text-white py-2 rounded-xl"
-								disabled={loading}
-							>
-								Save
-							</button>
+            <div className="flex gap-2 mt-6">
+              <button
+                type="submit"
+                className="flex-1 bg-emerald-600 text-white py-2 rounded-xl"
+                disabled={loading}
+              >
+                Save
+              </button>
 
-							<button
-								type="button"
-								onClick={closeModal}
-								className="flex-1 bg-gray-300 py-2 rounded-xl"
-							>
-								Cancel
-							</button>
-						</div>
-					</form>
-				</div>
-			)}
-		</div>
-	);
+              <button
+                type="button"
+                onClick={closeModal}
+                className="flex-1 bg-gray-300 py-2 rounded-xl"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
 }

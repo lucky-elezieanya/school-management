@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-
+import { toast } from "sonner";
 import { apiAction, updateAction } from "@/app/lib/api";
 import { ArrowLeft, Save } from "lucide-react";
 import { ArmsType, ClassType } from "@/app/lib/types";
@@ -143,7 +143,7 @@ export default function EditClassPage() {
 				"PUT",
 			);
 			if (res) {
-				alert("Class updated successfully");
+				toast.success("Class updated successfully");
 				router.push(`/admin/administration/classes/${classId}`);
 			}
 		} catch (err: any) {

@@ -19,7 +19,7 @@ export default function SchoolDaysCard() {
         setLoading(true);
 
         const res = await fetch(
-          `${BASE_URL}/results/school-days/?term_id=currentTerm?.id&session_id=currentTerm?.session.id`,
+          `${BASE_URL}/results/school-days/?term=${currentTerm?.id}&session=${currentTerm?.session.id}`,
           {
             headers: apiHeaders(),
           },
@@ -41,13 +41,17 @@ export default function SchoolDaysCard() {
   }, []);
 
   const handleSave = async () => {
+    if (!currentTerm?.id || !currentTerm?.session?.id) {
+      setError("Current term or session is not available");
+      return;
+    }
     setSaving(true);
     setError("");
 
     const payload = {
       days_school_opened: Number(days),
-      term: currentTerm?.id,
-      session: currentTerm?.session.id,
+      term_id: currentTerm?.id,
+      session_id: currentTerm?.session.id,
     };
 
     try {

@@ -12,11 +12,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
-import { ClassType } from "@/app/lib/types";
+import { AcademicSession, ClassType, Term } from "@/app/lib/types";
 import { getOrdinal } from "@/app/services/results";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getSessions, sessionTerms } from "@/app/services/academics";
 
 type ResultCell = {
   class_subject_id: number;
@@ -95,9 +96,66 @@ export default function AdminViewResults() {
   const [loadingResults, setLoadingResults] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState(currentTerm?.session?.id);
+  const [sessions, setSessions] = useState<AcademicSession[]>([]);
+  const [session, setSession] = useState({
+    id: currentTerm?.session.id,
+    name: currentTerm?.session?.name,
+    is_active: currentTerm?.session?.is_active,
+  });
+  const [termId, setTermId] = useState(currentTerm?.id);
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [term, setTerm] = useState({
+    id: currentTerm && currentTerm.id,
+    name: currentTerm && currentTerm.name,
+    is_active: currentTerm && currentTerm.is_active,
+  });
+  const [resultExist, setResultExist] = useState(false);
 
-  const sessionId = currentTerm?.session?.id;
-  const termId = currentTerm?.id;
+  const checkResultSheetExists = async () => {
+    const url = `${BASE_URL}/results/results/results-sheets-exist/?school_class_id=${Number(selectedClass?.id)}?term_id=${termId}`;
+    const res = await fetch(url, {
+      headers: apiHeaders(),
+    });
+    const data = await res.json();
+    if (res && data.class_results_exists) {
+      setResultExist(!resultExist);
+    }
+  };
+
+  useEffect(() => {
+    if (!termId || !selectedClass) return;
+    checkResultSheetExists();
+  }, [termId, selectedClass, sessionId]);
+  //   sessions
+  useEffect(() => {
+    const fetchSessions = async () => {
+      const res = await getSessions();
+
+      if (res) {
+        setSessions(res.results);
+      }
+    };
+
+    fetchSessions();
+  }, []);
+  // terms
+  const fetchTerms = async (sessionId: number) => {
+    if (!sessionId) return;
+
+    setTerms([]);
+
+    const res = await sessionTerms(sessionId);
+
+    if (res) {
+      setTerms(res.terms);
+    }
+  };
+
+  useEffect(() => {
+    if (!sessionId) return;
+    fetchTerms(sessionId);
+  }, [sessionId]);
 
   useEffect(() => {
     const loadClasses = async () => {
@@ -199,7 +257,6 @@ export default function AdminViewResults() {
     }
   };
 
-
   const previewClassPdf = () => {
     if (!selectedClass || !termId || !sessionId) return;
 
@@ -211,7 +268,6 @@ export default function AdminViewResults() {
       }?class_id=${selectedClass.id}&term_id=${termId}&session_id=${sessionId}`,
     );
   };
-
 
   return (
     <section className="min-h-screen bg-slate-50 p-3 sm:p-4 lg:p-6">
@@ -245,7 +301,99 @@ export default function AdminViewResults() {
             Download Class CSV
           </button>
         </div>
+        {/* Select Session & Term */}
+        <div className="grid grid-cols-1 gap-6 rounded-xl border border-emerald-100 bg-white p-5 shadow-sm md:grid-cols-2 md:p-6 lg:p-8">
+          {/* Session */}
+          <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+              Session
+            </p>
 
+            <h2 className="mt-1 text-xl font-bold text-slate-900">
+              Select a Session
+            </h2>
+
+            {sessions.length > 0 ? (
+              <select
+                value={session?.id || ""}
+                onChange={(event) => {
+                  const selectedSession = sessions.find(
+                    (s: AcademicSession) => s.id === Number(event.target.value),
+                  );
+
+                  if (selectedSession) {
+                    setSession(selectedSession);
+                    setSessionId(selectedSession.id);
+                  }
+                }}
+                className="mt-4 h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Select a Session</option>
+
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.is_active ? "(Active)" : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">
+                No sessions available
+              </p>
+            )}
+
+            <p className="mt-4 text-sm text-slate-500">
+              {session
+                ? `${session.name} / ${term?.name ?? "No term selected"}`
+                : "Waiting for active session"}
+            </p>
+          </div>
+
+          {/* Term */}
+          <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+              Term
+            </p>
+
+            <h2 className="mt-1 text-xl font-bold text-slate-900">
+              Select a Term
+            </h2>
+
+            {terms.length > 0 ? (
+              <select
+                value={term?.id || ""}
+                onChange={(event) => {
+                  const selectedTerm = terms.find(
+                    (t: Term) => t.id === Number(event.target.value),
+                  );
+
+                  if (selectedTerm) {
+                    setTerm(selectedTerm);
+                    setTermId(selectedTerm.id);
+                  }
+                }}
+                className="mt-4 h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Select a Term</option>
+
+                {terms.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.is_active ? "(Active)" : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">No terms available</p>
+            )}
+
+            <p className="mt-4 text-sm text-slate-500">
+              {term
+                ? `${term.name} - ${session?.name ?? ""}`
+                : "No term selected"}
+            </p>
+          </div>
+        </div>
+        {/* =============== classes ================== */}
         <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-4">
@@ -361,13 +509,13 @@ export default function AdminViewResults() {
                     <tr className="bg-emerald-700 text-white">
                       <th
                         rowSpan={2}
-                        className="sticky left-0 z-20 min-w-5 border-r border-emerald-600 bg-emerald-700 px-3 py-3 text-left align-middle"
+                        className="stick left-0 z-20 min-w-5 border-r border-emerald-600 bg-emerald-700 px-3 py-3 text-left align-middle"
                       >
                         S/N
                       </th>
                       <th
                         rowSpan={2}
-                        className="sticky left-0 z-20 min-w-56 border-r border-emerald-600 bg-emerald-700 px-3 py-3 text-left align-middle"
+                        className="stick left-0 z-20 min-w-56 border-r border-emerald-600 bg-emerald-700 px-3 py-3 text-left align-middle"
                       >
                         Student
                       </th>
@@ -429,10 +577,10 @@ export default function AdminViewResults() {
                             rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50"
                           }
                         >
-                          <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-inherit px-3 py-3 font-semibold text-slate-900 ">
+                          <td className="stick left-0 z-10 border-b border-r border-slate-200 bg-inherit px-3 py-3 font-semibold text-slate-900 ">
                             <span>{rowIndex + 1}</span>
                           </td>
-                          <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-inherit px-3 py-3 font-semibold text-slate-900 flex flex-row gap-2">
+                          <td className="stick left-0 z-10 border-b border-r border-slate-200 bg-inherit px-3 py-3 font-semibold text-slate-900 flex flex-row gap-2">
                             <Link
                               className="flex flex-row gap-1 text-blue-600"
                               href={`${user.role === "admin" ? `/admin/administration/students/${row.student_id}` : `/teachers/students/${row.student_id}`}`}
@@ -477,7 +625,6 @@ export default function AdminViewResults() {
                           </td>
 
                           <td className="border-b border-r border-slate-200 px-3 py-3 text-center text-blue-700">
-                            {/* {formatValue(row.position)}{" "} */}
                             {getOrdinal(formatValue(row.position))}
                           </td>
                           <td className="border-b border-slate-200 px-3 py-3 text-center">

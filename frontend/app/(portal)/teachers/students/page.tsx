@@ -155,7 +155,7 @@ export default function TeacherStudentsPage() {
   // =========================
   // TOTAL PAGES
   // =========================
-  const pageSize = 10;
+  const pageSize = 40;
   const totalPages = Math.ceil(totalStudents / pageSize);
 
   return (
@@ -391,18 +391,18 @@ export default function TeacherStudentsPage() {
             <table className="w-full min-w-237.5">
               <thead className="bg-emerald-600 text-white">
                 <tr>
-                  <th className="text-left px-6 py-4">Student</th>
+                  <th className="text-center px-2 py-4">Student</th>
 
-                  <th className="text-left px-6 py-4">Username</th>
+                  <th className="text-center px-2 py-4">Username</th>
 
-                  <th className="text-left px-6 py-4">Class</th>
+                  <th className="text-center px-2 py-4">Class</th>
 
-                  <th className="text-left px-6 py-4">ADM No.</th>
+                  <th className="text-center px-2 py-4">ADM No.</th>
 
-                  <th className="text-left px-6 py-4">Gender</th>
+                  <th className="text-center px-2 py-4">Gender</th>
 
-                  <th className="text-center px-6 py-4">Active status</th>
-                  <th className="text-center px-6 py-4">Actions</th>
+                  <th className="text-center px-2 py-4">Active status</th>
+                  <th className="text-center px-2 py-4">Actions</th>
                 </tr>
               </thead>
 
@@ -484,20 +484,6 @@ export default function TeacherStudentsPage() {
                           >
                             <Eye size={18} />
                           </Link>
-
-                          <Link
-                            href={`/admin/administration/students/${student.id}/edit`}
-                            className="w-10 h-10 rounded-xl bg-blue-100 hover:bg-blue-200 flex items-center justify-center text-blue-800 transition"
-                          >
-                            <Pencil size={18} />
-                          </Link>
-
-                          <button
-                            onClick={() => handleDelete(student.id)}
-                            className="w-10 h-10 rounded-xl bg-red-100 hover:bg-red-200 flex items-center justify-center text-red-700 transition"
-                          >
-                            <Trash2 size={18} />
-                          </button>
                         </div>
                       </td>
                     </tr>

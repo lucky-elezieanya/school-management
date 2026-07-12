@@ -49,10 +49,11 @@ import {
 } from "@/components/ui/card";
 import { getOrdinal } from "@/app/services/results";
 import { AcademicSession, TermSession } from "@/app/lib/types";
+import { sessionTerms } from "@/app/services/academics";
 
 export default function StudentDashboardPage() {
   useRoleGuard(["student"]);
-  const { user } = useAuth();
+  const { user, currentTerm } = useAuth();
   const router = useRouter();
 
   // Tab navigation state
@@ -67,8 +68,8 @@ export default function StudentDashboardPage() {
   const [isDownloading, setIsDownloading] = useState(false);
 
   // Selected filters for results & fees
-  const [selectedSession, setSelectedSession] = useState<string>("");
-  const [selectedTerm, setSelectedTerm] = useState<string>("");
+  const [selectedSession, setSelectedSession] = useState<string>(String(currentTerm?.session.id));
+  const [selectedTerm, setSelectedTerm] = useState<string>(String(currentTerm?.id));
 
   // Results & performance metrics state
   const [results, setResults] = useState<any[]>([]);
@@ -85,6 +86,17 @@ export default function StudentDashboardPage() {
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsReleased, setResultsReleased] = useState(false);
   
+  const fetchTerms = async (sessionId: number) => {
+    if (!sessionId) return;
+
+    setTerms([]);
+
+    const res = await sessionTerms(sessionId);
+
+    if (res) {
+      setTerms(res.terms);
+    }
+  };
 
   // Fetch initial profile, sessions, and terms
   useEffect(() => {
@@ -118,21 +130,6 @@ export default function StudentDashboardPage() {
         const sessionsJson = await sessionsRes.json();
         setSessions(sessionsJson.results || []);
 
-        // 3. Fetch Terms list
-        const termsRes = await fetch(`${BASE_URL}/academics/terms/`, {
-          headers,
-        });
-        const termsJson = await termsRes.json();
-        const termList = termsJson.results || [];
-        setTerms(termList);
-
-        // Find active term and set as default selected term
-        const activeTerm = termList.find((t: any) => t.is_active);
-        if (activeTerm) {
-          setSelectedTerm(activeTerm.id.toString());
-        } else if (termList.length > 0) {
-          setSelectedTerm(termList[0].id.toString());
-        }
       } catch (err) {
         console.error("Error fetching initial student dashboard data:", err);
       } finally {
@@ -142,6 +139,12 @@ export default function StudentDashboardPage() {
 
     fetchInitialData();
   }, []);
+
+  useEffect(() => {
+    if (!selectedSession) return;
+    fetchTerms(Number(selectedSession));
+  }, [selectedSession]);
+
 
   const handleDownloadPdf = async () => {
     if (!pdfUrl) return;
@@ -238,8 +241,8 @@ export default function StudentDashboardPage() {
             : null;
         setSummary(fetchedSummary);
 
-        // 3. Set Release Gating (we query empty sets if results are draft / unreleased)
-        const isReleased = fetchedResults.length > 0 || fetchedSummary !== null;
+        // 3. Set Release Gating (we check if PDF generation returns 403 Forbidden which implies results are not released)
+        const isReleased = pdfRes.status !== 403;
         setResultsReleased(isReleased);
 
         // 4. Set other performance details (only populated fully if released)
@@ -825,37 +828,63 @@ export default function StudentDashboardPage() {
                   </div>
 
                   {/* PDF DOWNLOAD BAR */}
-                  <div className="bg-white px-6 py-4.5 rounded-3xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 border border-blue-50 bg-gradient-to-r from-blue-50/20 to-indigo-50/25">
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-5 h-5 text-blue-600 shrink-0" />
-                      <div className="text-center sm:text-left">
-                        <h4 className="font-extrabold text-slate-800 text-sm">
-                          Download PDF Report Sheet
-                        </h4>
-                        <p className="text-slate-500 text-xs mt-0.5">
-                          Generate a print-ready version of this term results
-                        </p>
+                  <div className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50/60 via-white to-indigo-50/60 shadow-sm px-6 py-5">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                      {/* Left Content */}
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-100">
+                          <FileText className="h-5 w-5 text-blue-700" />
+                        </div>
+
+                        <div>
+                          <h4 className="text-base font-bold text-slate-800">
+                            Download PDF Report Sheet
+                          </h4>
+
+                          <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                            Generate or download the official print-ready
+                            version of this student's result sheet.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right Actions */}
+                      <div className="flex w-full flex-col sm:flex-row sm:justify-center lg:justify-end items-center gap-3 lg:w-auto">
+                        <button
+                          onClick={() =>
+                            router.push(
+                              `/students/${studentData.id}/result?class_id=${currentClass.id}&term_id=${currentTerm?.id}&session_id=${currentTerm?.session.id}`,
+                            )
+                          }
+                          className="w-full sm:w-auto min-w-[170px] rounded-xl border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm"
+                        >
+                          View Results
+                        </button>
+
+                        {pdfUrl ? (
+                          <button
+                            onClick={handleDownloadPdf}
+                            disabled={isDownloading}
+                            className="w-full sm:w-auto min-w-[210px] inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            <Download size={16} />
+                            <span>
+                              {isDownloading
+                                ? "Opening PDF..."
+                                : "View / Download PDF"}
+                            </span>
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="w-full sm:w-auto min-w-[210px] inline-flex items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-6 py-3 text-sm font-medium text-blue-500"
+                          >
+                            <Clock size={16} />
+                            <span>Generating Report Sheet...</span>
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    {pdfUrl ? (
-                      <button
-                        onClick={handleDownloadPdf}
-                        disabled={isDownloading}
-                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
-                      >
-                        <Download size={14} />
-                        <span>View / Download PDF</span>
-                      </button>
-                    ) : (
-                      <button
-                        disabled
-                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-400 rounded-xl text-xs font-semibold cursor-not-allowed"
-                      >
-                        <Clock size={14} />
-                        <span>Report Sheet Generating...</span>
-                      </button>
-                    )}
                   </div>
 
                   {/* DETAILED GRADES TABLE */}

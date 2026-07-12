@@ -1,11 +1,8 @@
 import {
-  BASE_URL,
-  apiHeaders,
+
   request,
-  handleUserDelete,
+  
   apiAction,
-  createAction,
-  updateAction,
 } from "@/app/lib/api";
 
 export const getSessions = async () => {
@@ -27,7 +24,7 @@ export const getMaxScores = async () => {
   return res;
 };
 export const getGrades = async () => {
-  const res = await apiAction("results", "grades");
+  const res = await apiAction("results", "grading-scales");
   return res;
 };
 
@@ -36,13 +33,4 @@ export const fetchStudents = (classId: number, sessionId: number) =>
     `/academics/enrollments/students/?school_class=${classId}&session=${sessionId}`,
   );
 
-// export const getSchoolLogo = async () => {
-//   const res = await fetch(
-//     `${BASE_URL}/academics/school-assets/?asset_type=logo&is_active=true`,
-//     {
-//       headers: apiHeaders(),
-//     },
-//   );
-//   const asset = await res.json();
-//   return asset;
-// };
+

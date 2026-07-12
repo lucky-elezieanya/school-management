@@ -24,7 +24,7 @@ export default function ResultsComponent() {
       const res = await getWorkFlowApprovedStatus(school_class, term, session);
       if (res?.results?.length) {
         setApprovedStatus(res.results[0].status);
-        console.log("status:  ", res);
+       
       } else {
         setApprovedStatus("");
       }
@@ -43,7 +43,6 @@ export default function ResultsComponent() {
         currentTerm?.session.id,
       );
 
-    console.log("approved: ", approvedStatus);
   }, [selectedClass]);
 
   return (

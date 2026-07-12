@@ -19,7 +19,6 @@ interface StudentResultPreviewProps {
   termId: number;
   sessionId: number;
   title?: string;
-  //   onClose?: () => void;
 }
 
 export default function StudentResultPreview({
@@ -28,7 +27,7 @@ export default function StudentResultPreview({
   termId,
   sessionId,
   title = "Student Result Sheet",
-  //   onClose,
+  
 }: StudentResultPreviewProps) {
   const [pdfUrl, setPdfUrl] = useState("");
   const router = useRouter();
@@ -110,7 +109,8 @@ export default function StudentResultPreview({
           <button
             onClick={() =>
               router.push(
-                `${user.role === "admin" ? `/admin/administration/students/${studentId}` : `/teachers/students/${studentId}`}`,
+                `${user.role === "admin" ? `/admin/administration/students/${studentId}` : user.role === "teacher"?
+                 `/teachers/students/${studentId}`: `/students`}`,
               )
             }
             className="flex items-center gap-2 rounded-lg border px-4 py-2 hover:bg-slate-50"

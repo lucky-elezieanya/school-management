@@ -14,12 +14,14 @@ export default function DashboardCards({
 	teachersCount,
 	subjectsCount,
 	classesCount,
+    resultsCount
 }: {
 	usersCount: number;
 	studentsCount: number;
 	teachersCount: number;
 	subjectsCount: number;
 	classesCount: number;
+    resultsCount: number
 }) {
 	const cards = [
 		{
@@ -54,7 +56,7 @@ export default function DashboardCards({
 		},
 		{
 			title: "Results",
-			value: 10,
+			value: resultsCount,
 			icon: FileBarChart2,
 			color: "bg-pink-50 text-pink-600",
 		},

@@ -12,6 +12,7 @@ import {
 } from "@/app/services/results";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import Link from "next/link";
+import {toast} from "sonner"
 
 export default function ResultEntryTable({
   subject,
@@ -28,7 +29,7 @@ export default function ResultEntryTable({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const getMaxScores = async () => {
-    if (!selectedClass?.id) throw new Error("selectedClass is undefined");
+    if (!selectedClass?.id) toast.error("selectedClass is undefined");
     const res = await fetchMaxScores(selectedClass.id);
     const maxScoresResponse = res?.results ?? null;
     maxScoresResponse &&
@@ -165,21 +166,21 @@ export default function ResultEntryTable({
     students.length > 0 && incompleteStudents.length === 0;
   const submit = async () => {
     if (approvedStatus === "Approved") {
-      alert("Results have already been approved and cannot be modified.");
+      toast.error("Results have already been approved and cannot be modified.");
       return;
     }
     if (Object.keys(errors).length > 0) {
-      alert("Please correct all errors before submitting.");
+      toast.error("Please correct all errors before submitting.");
       return;
     }
 
     if (Object.keys(entries).length === 0) {
-      alert("Please enter at least one result.");
+      toast.error("Please enter at least one result.");
       return;
     }
 
     if (!allStudentsCompleted) {
-      alert(
+      toast.error(
         `Results are incomplete. ${incompleteStudents.length} student(s) still require score entry.`,
       );
       return;
@@ -198,19 +199,23 @@ export default function ResultEntryTable({
     try {
       await submitBulkResults(payload);
 
-      alert("Results saved successfully");
+      toast.success("Results saved successfully");
       getEntryData();
 
       setErrors({});
     } catch (error) {
       console.error(error);
-      alert("Failed to save results");
+      toast.error("Failed to save results");
     }
   };
+
+  
   const isDisabled =
     Object.keys(errors).length > 0 ||
     !allStudentsCompleted ||
-    approvedStatus === "Approved";
+    approvedStatus === "Approved" || approvedStatus === "Released";
+
+
 
   return (
     <div className="p-2 m-0 bg-white rounded-xl shadow-md overflow-hidden w-full">
@@ -267,6 +272,13 @@ export default function ResultEntryTable({
           </p>
         </div>
       )}
+      {
+        errors && Object.keys(errors).length > 0 && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-2">
+            <p className="font-medium text-red-800">{errors[Object.keys(errors)[0]]}</p>   
+          </div>
+        )
+      }
       {/* TABLE WRAPPER */}
       <section className="w-full overflow-x-auto border rounded-lg">
         <table className="w-full min-w-150 border-collapse text-xs sm:text-sm">
@@ -343,17 +355,22 @@ export default function ResultEntryTable({
                         type="number"
                         min={0}
                         max={maxScores.first_test}
-                        disabled={approvedStatus === "Approved"}
+                        disabled={
+                          approvedStatus === "Approved" ||
+                          approvedStatus === "Released"
+                        }
                         value={entry.first_test ?? ""}
                         className={`w-14 sm:w-20 px-1 sm:px-2 py-1 border rounded text-center text-xs sm:text-sm ${
                           errors[`${s.id}-first_test`]
                             ? "border-red-500 bg-red-50"
                             : ""
-                        } ${
+                        } 
+                        ${
                           approvedStatus === "Approved"
                             ? "bg-gray-100 cursor-not-allowed"
                             : ""
-                        }`}
+                        }
+                        `}
                         onChange={(e) =>
                           updateEntry(
                             s.id,
@@ -370,7 +387,10 @@ export default function ResultEntryTable({
                         type="number"
                         min={0}
                         max={maxScores.second_test}
-                        disabled={approvedStatus === "Approved"}
+                        disabled={
+                          approvedStatus === "Approved" ||
+                          approvedStatus === "Released"
+                        }
                         value={entry.second_test ?? ""}
                         className={`w-14 sm:w-20 px-1 sm:px-2 py-1 border rounded text-center text-xs sm:text-sm ${
                           errors[`${s.id}-second_test`]
@@ -397,7 +417,10 @@ export default function ResultEntryTable({
                         type="number"
                         min={0}
                         max={maxScores.exam}
-                        disabled={approvedStatus === "Approved"}
+                        disabled={
+                          approvedStatus === "Approved" ||
+                          approvedStatus === "Released"
+                        }
                         value={entry.exam_score ?? ""}
                         className={`w-14 sm:w-20 px-1 sm:px-2 py-1 border rounded text-center text-xs sm:text-sm ${
                           errors[`${s.id}-exam_score`]

@@ -1,339 +1,442 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  apiHeaders,
-  BASE_URL,
-  createAction,
-  updateAction,
-} from "@/app/lib/api";
+import { apiHeaders, BASE_URL } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { getClasses } from "@/app/services/academics";
+import { toast } from "sonner";
 
 export default function TermCommentEntryPage() {
-  const router = useRouter();
   const { currentTerm } = useAuth();
 
   const [classes, setClasses] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
 
   const [selectedClass, setSelectedClass] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState("");
 
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(false);
-  const [loadingComment, setLoadingComment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const [existingCommentId, setExistingCommentId] = useState<number | null>(
-    null,
-  );
-
-  const initialFormState = {
-    class_teacher_comment: "",
-    principal_comment: "",
-  };
-
-  const [formData, setFormData] = useState(initialFormState);
 
   useEffect(() => {
     loadClasses();
   }, []);
 
-  // =========================
-  // LOAD CLASSES (UNCHANGED)
-  // =========================
+  // =====================================================
+  // LOAD CLASSES
+  // =====================================================
+
   const loadClasses = async () => {
     try {
       setLoadingClasses(true);
+
       const res = await getClasses();
+
       setClasses(res?.results || res || []);
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoadingClasses(false);
     }
   };
 
-  // =========================
-  // LOAD STUDENTS (UNCHANGED)
-  // =========================
+  // =====================================================
+  // LOAD STUDENTS + EXISTING COMMENTS
+  // =====================================================
   const loadStudents = async (classId: number) => {
+    if (!currentTerm) return;
+
     try {
       setLoadingStudents(true);
 
-      const url = `${BASE_URL}/academics/enrollments/?school_class=${classId}&session=${currentTerm?.session.id}`;
+      const [studentRes, commentRes, attendanceRes] = await Promise.all([
+        fetch(
+          `${BASE_URL}/academics/enrollments/?school_class=${classId}&session=${currentTerm.session.id}`,
+          { headers: apiHeaders() },
+        ),
 
-      const resp = await fetch(url, {
-        headers: apiHeaders(),
+        fetch(
+          `${BASE_URL}/results/term-comments/?school_class=${classId}&term=${currentTerm.id}&session=${currentTerm.session.id}`,
+          { headers: apiHeaders() },
+        ),
+
+        fetch(
+          `${BASE_URL}/results/attendance/?school_class=${classId}&term=${currentTerm.id}&session=${currentTerm.session.id}`,
+          { headers: apiHeaders() },
+        ),
+      ]);
+
+      const studentJson = await studentRes.json();
+      const commentJson = await commentRes.json();
+      const attendanceJson = await attendanceRes.json();
+
+      const studentList = studentJson.results || studentJson || [];
+      const commentList = commentJson.results || commentJson || [];
+      const attendanceList = attendanceJson.results || attendanceJson || [];
+      const attendanceMap: Record<number, any> = {};
+
+      attendanceList.forEach((item: any) => {
+        attendanceMap[item.student.id] = item;
       });
 
-      const res = await resp.json();
-      setStudents(res?.results || res || []);
-    } catch (error) {
-      console.error(error);
+      const commentMap: Record<number, any> = {};
+
+      commentList.forEach((comment: any) => {
+        // Handle both nested object and plain id
+        const studentId =
+          typeof comment.student === "object"
+            ? comment.student.id
+            : comment.student;
+
+        commentMap[studentId] = comment;
+      });
+
+      const merged = studentList.map((student: any) => {
+        // enrollment serializer returns student id here
+        const studentId =
+          typeof student.student === "object"
+            ? student.student.id
+            : student.student;
+
+        const existing = commentMap[studentId];
+        const attendance = attendanceMap[student.student];
+
+        return {
+          ...student,
+
+          existing: Boolean(existing),
+          attendance: attendance?.attendance ?? 0,
+
+          comment_id: existing?.id ?? null,
+
+          class_teacher_comment: existing?.class_teacher_comment ?? "",
+
+          principal_comment: existing?.principal_comment ?? "",
+        };
+      });
+
+      setStudents(merged);
+    } catch (err) {
+      console.error(err);
       setStudents([]);
     } finally {
       setLoadingStudents(false);
     }
   };
+  // =====================================================
+  // CLASS SELECT
+  // =====================================================
 
-  // =========================
-  // LOAD COMMENT (UNCHANGED)
-  // =========================
-  const loadExistingComment = async (studentId: number) => {
-    if (!currentTerm?.id) return;
-
-    try {
-      setLoadingComment(true);
-
-      setExistingCommentId(null);
-      setFormData(initialFormState);
-
-      const url = `${BASE_URL}/results/term-comments/?student=${studentId}&term=${currentTerm.id}`;
-
-      const resp = await fetch(url, {
-        headers: apiHeaders(),
-      });
-
-      const res = await resp.json();
-
-      const comment = (res && res?.results?.[0]) || res?.data?.[0] || res?.[0];
-
-      if (!comment) return;
-
-      setExistingCommentId(comment.id);
-
-      setFormData({
-        class_teacher_comment: comment.class_teacher_comment || "",
-        principal_comment: comment.principal_comment || "",
-      });
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoadingComment(false);
-    }
-  };
-
-  // =========================
-  // CLASS SELECT (checkbox UI)
-  // =========================
   const handleClassSelect = async (classId: string) => {
-    const newClass = selectedClass === classId ? "" : classId;
+    const next = selectedClass === classId ? "" : classId;
 
-    setSelectedClass(newClass);
-    setSelectedStudent("");
+    setSelectedClass(next);
     setStudents([]);
-    setFormData(initialFormState);
-    setExistingCommentId(null);
 
-    if (newClass) {
-      await loadStudents(Number(newClass));
+    if (next) {
+      await loadStudents(Number(next));
     }
   };
 
-  // =========================
-  // STUDENT SELECT (checkbox UI)
-  // =========================
-  const handleStudentSelect = async (studentId: string) => {
-    setSelectedStudent(studentId);
-
-    if (studentId) {
-      await loadExistingComment(Number(studentId));
-    }
+  const updateStudent = (studentId: number, field: string, value: any) => {
+    setStudents((prev) =>
+      prev.map((student) =>
+        student.student === studentId
+          ? {
+              ...student,
+              [field]: value,
+            }
+          : student,
+      ),
+    );
   };
-
-  // =========================
-  // SUBMIT (UNCHANGED)
-  // =========================
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!currentTerm?.id) {
-      alert("Current term not found");
-      return;
-    }
+  // =====================================================
+  // SAVE
+  // =====================================================
+  const handleSubmit = async () => {
+    if (!selectedClass || !currentTerm) return;
 
     try {
       setSubmitting(true);
 
-      const payload = {
-        student_id: Number(selectedStudent),
-        school_class_id: Number(selectedClass),
+      const attendancePayload = {
         term_id: currentTerm.id,
+
         session_id: currentTerm.session.id,
 
-        class_teacher_comment: formData.class_teacher_comment
-          ? formData.class_teacher_comment[0].toUpperCase() +
-            formData.class_teacher_comment.slice(1).toLowerCase()
-          : "",
+        school_class_id: Number(selectedClass),
 
-        principal_comment: formData.principal_comment
-          ? formData.principal_comment[0].toUpperCase() +
-            formData.principal_comment.slice(1).toLowerCase()
-          : "",
+        records: students.map((student) => ({
+          student: student.student,
+
+          attendance: student.attendance,
+        })),
       };
 
-      if (existingCommentId) {
-        await updateAction(
-          "results",
-          `term-comments`,
-          existingCommentId,
-          payload,
-        );
-      } else {
-        await createAction("results", "term-comments", payload);
+      const commentPayload = {
+        term_id: currentTerm.id,
+
+        session_id: currentTerm.session.id,
+
+        school_class_id: Number(selectedClass),
+
+        comments: students.map((student) => ({
+          student: student.student,
+
+          class_teacher_comment: student.class_teacher_comment,
+
+          principal_comment: student.principal_comment,
+        })),
+      };
+
+      const [attendanceResponse, commentResponse] = await Promise.all([
+        fetch(`${BASE_URL}/results/attendance/bulk_upsert/`, {
+          method: "POST",
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(attendancePayload),
+        }),
+
+        fetch(`${BASE_URL}/results/term-comments/bulk-save/`, {
+          method: "POST",
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(commentPayload),
+        }),
+      ]);
+
+      if (!attendanceResponse.ok || !commentResponse.ok) {
+        throw new Error("Unable to save records.");
       }
 
-      alert(
-        existingCommentId
-          ? "Comment updated successfully"
-          : "Comment saved successfully",
-      );
-
-      return;
-    } catch (error: any) {
-      console.error(error);
-      alert(error?.message || "Unable to save comment");
+      toast.success("Attendance and comments saved successfully.");
+    } catch (err: any) {
+      toast.error(err.message || "Unable to save.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // =========================
-  // FILTER STUDENTS (optional search-ready)
-  // =========================
-  const visibleStudents = students;
-
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Term Comment Entry</h1>
-
-      {/* ===================== CLASSES ===================== */}
-      <div className="bg-white border rounded-xl p-6 mb-6">
-        <h2 className="font-semibold mb-3">Select Class</h2>
-
-        {loadingClasses && (
-          <p className="text-sm text-gray-500 mb-2">Loading classes...</p>
-        )}
-
-        <div className="space-y-2 grid grid-cols-2 md:grid-cols-3">
-          {classes.map((cls: any) => (
-            <label
-              key={cls.id}
-              className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50"
-            >
-              <input
-                type="checkbox"
-                checked={selectedClass === String(cls.id)}
-                onChange={() => handleClassSelect(String(cls.id))}
-                className="h-4 w-4 text-emerald-600"
-              />
-
-              <span>
-                {cls.name} {cls.arm?.code}
-              </span>
-            </label>
-          ))}
-        </div>
+    <div className="mx-auto max-w-7xl p-4 md:p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">
+          Term Comment Entry
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Enter or update teacher and principal comments for an entire class at
+          once.
+        </p>
       </div>
 
-      {/* ===================== STUDENTS ===================== */}
-      {selectedClass && (
-        <div className="bg-white border rounded-xl p-6 mb-6">
-          <h2 className="font-semibold mb-3">Select Student</h2>
+      {/* ===================== CLASS SELECTION ===================== */}
 
-          {loadingStudents && (
-            <p className="text-sm text-gray-500 mb-2">Loading students...</p>
-          )}
+      <div className="mb-6 rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-slate-800">
+          Select Class
+        </h2>
 
-          <div className="max-h-75 overflow-y-auto space-y-2 grid grid-cols-1 md:grid-cols-2">
-            {visibleStudents.map((student: any) => (
+        {loadingClasses ? (
+          <p className="text-sm text-slate-500">Loading classes...</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {classes.map((cls: any) => (
               <label
-                key={student.student}
-                className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50"
+                key={cls.id}
+                className={`cursor-pointer rounded-xl border p-3 transition ${
+                  selectedClass === String(cls.id)
+                    ? "border-emerald-600 bg-emerald-50"
+                    : "border-slate-200 hover:border-emerald-300 hover:bg-slate-50"
+                }`}
               >
                 <input
-                  type="checkbox"
-                  checked={selectedStudent === String(student.student)}
-                  onChange={() => handleStudentSelect(String(student.student))}
-                  className="h-4 w-4 text-emerald-600"
+                  type="radio"
+                  name="class"
+                  className="hidden"
+                  checked={selectedClass === String(cls.id)}
+                  onChange={() => handleClassSelect(String(cls.id))}
                 />
 
-                <div>
-                  <div className="font-medium">{student.student_name}</div>
+                <div className="font-semibold text-slate-800">
+                  {cls.name} {cls.arm?.code}
                 </div>
               </label>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* ===================== FORM ===================== */}
-      {selectedStudent && !loadingComment && (
+      {/* ===================== TABLE ===================== */}
+
+      {selectedClass && (
         <form
           onSubmit={handleSubmit}
-          className="bg-white border rounded-xl p-6 space-y-4"
+          className="overflow-hidden rounded-xl border bg-white shadow-sm"
         >
-          {existingCommentId && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-700">
-              Existing comment found. Updating will overwrite it.
+          <div className="flex items-center justify-between border-b bg-slate-50 px-6 py-4">
+            <div>
+              <h2 className="font-semibold text-slate-800">Student Comments</h2>
+
+              <p className="text-sm text-slate-500">
+                {students.length} students
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {submitting ? "Saving..." : "Save All"}
+            </button>
+          </div>
+
+          {loadingStudents ? (
+            <div className="p-10 text-center text-slate-500">
+              Loading students...
+            </div>
+          ) : students.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">
+              No students found.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px] table-fixed">
+                <thead className="sticky top-0 z-10 bg-slate-100">
+                  <tr>
+                    <th className="w-[180px] px-3 py-2 text-left text-sm font-semibold text-slate-700">
+                      Student
+                    </th>
+
+                    <th className="w-[90px] px-2 py-2 text-center text-sm font-semibold text-slate-700">
+                      Attendance
+                    </th>
+
+                    <th className="px-3 py-2 text-left text-sm font-semibold text-slate-700">
+                      Comments
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {students.map((student: any) => (
+                    <tr
+                      key={student.student}
+                      className="border-t hover:bg-slate-50 transition"
+                    >
+                      {/* STUDENT */}
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex items-start gap-2">
+                          <img
+                            src={student.profile_picture || "/avatar.png"}
+                            alt={student.student_name}
+                            className="h-10 w-10 rounded-full border object-cover flex-shrink-0"
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-800">
+                              {student.student_name}
+                            </p>
+
+                            <p className="truncate text-xs text-slate-500">
+                              {student.admission_number}
+                            </p>
+
+                            {student.existing && (
+                              <span className="mt-1 inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                                Existing
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* ATTENDANCE */}
+                      <td className="px-2 py-2 text-center align-top">
+                        <input
+                          type="number"
+                          min={0}
+                          value={student.attendance ?? ""}
+                          onChange={(e) =>
+                            updateStudent(
+                              student.student,
+                              "attendance",
+                              Number(e.target.value),
+                            )
+                          }
+                          className="h-9 w-16 rounded-md border border-slate-300 text-center text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                        />
+                      </td>
+
+                      {/* COMMENTS */}
+                      <td className="px-3 py-2 align-top">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="">
+                            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">
+                              Teacher
+                            </label>
+
+                            <textarea
+                              rows={3}
+                              value={student.class_teacher_comment}
+                              onChange={(e) =>
+                                updateStudent(
+                                  student.student,
+                                  "class_teacher_comment",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder="Teacher's comment..."
+                              className="w-full resize-none rounded-md border border-slate-300 p-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">
+                              Principal
+                            </label>
+
+                            <textarea
+                              rows={3}
+                              value={student.principal_comment}
+                              onChange={(e) =>
+                                updateStudent(
+                                  student.student,
+                                  "principal_comment",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder="Principal's comment..."
+                              className="w-full resize-none rounded-md border border-slate-300 p-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
-          <div>
-            <label className="block mb-2 font-medium">
-              Class Teacher Comment
-            </label>
-
-            <textarea
-              rows={4}
-              value={formData.class_teacher_comment}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  class_teacher_comment: e.target.value,
-                })
-              }
-              className="w-full border rounded-lg p-3"
-            />
-          </div>
-
-          <div>
-            <label className="block mb-2 font-medium">Principal Comment</label>
-
-            <textarea
-              rows={4}
-              value={formData.principal_comment}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  principal_comment: e.target.value,
-                })
-              }
-              className="w-full border rounded-lg p-3"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="px-6 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700"
-          >
-            {submitting
-              ? "Saving..."
-              : existingCommentId
-                ? "Update Comment"
-                : "Save Comment"}
-          </button>
+          {!loadingStudents && students.length > 0 && (
+            <div className="border-t bg-slate-50 px-6 py-4">
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-xl bg-emerald-600 px-8 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {submitting ? "Saving..." : "Save All Comments"}
+                </button>
+              </div>
+            </div>
+          )}
         </form>
-      )}
-
-      {loadingComment && (
-        <div className="mt-4 text-sm text-gray-500">
-          Loading existing comment...
-        </div>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ClassType, TeacherFormDataType } from "@/app/lib/types";
 import { ArrowLeft } from "lucide-react";
+import {toast} from "sonner"
 
 export default function EditTeacherPage() {
 	const router = useRouter();
@@ -76,13 +77,13 @@ export default function EditTeacherPage() {
 				"PATCH",
 			);
 			if (res) {
-				alert(
+				toast.success(
 					`Teacher ${submittedData.first_name} with id:${teacherId} has been updated successfully`,
 				);
 				router.push(`/admin/administration/teachers/${teacherId}`);
 			}
 		} catch (error) {
-			alert("Something went wrong");
+			toast.error("Something went wrong");
 		} finally {
 			setLoading(false);
 		}

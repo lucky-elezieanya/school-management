@@ -5,24 +5,29 @@ from django.http import FileResponse
 from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+
 from .permissions import IsAdminUser, IsTeacherOrAdmin
 from rest_framework import viewsets, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import ( Attendance, Behaviour, ClassFees, ClassResultPDF, ClassTeacherSignature, GradingScale, HeadTeacherSignature, MaxScores, Result, ResultCustomization, SchoolDays,  SubjectResultStatus, TermComment, ResultSummary, ResumptionDate, ActivateResultPortal, ResultWorkflow, SubjectSummary, ResultPDF)
-from .serializers import  (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassTeacherSignatureSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultPDFSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
+from .serializers import (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassTeacherSignatureSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultPDFSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
+
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.db.utils import IntegrityError
-
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.permissions import IsAuthenticated
 from academics.models import AcademicSession, ClassSubject, SchoolAsset, Student, StudentEnrollment, Teacher, Term, Class
 from django.db import transaction
+from .utils.report_service import get_student_report_data
+from .utils.report import ReportSerializer
+from dataclasses import asdict
 
 from celery.result import AsyncResult
 from rest_framework.decorators import api_view
 
-from .tasks import compute_all_results_task, generate_result_pdfs_task, recompute_all_results_task
-from .services import get_student_results, update_result_workflow
+from .tasks import compute_all_results_for_Class_task, compute_all_results_task, generate_result_pdfs_for_class_task, generate_result_pdfs_task, recompute_all_results_task
+from .services import get_student_results, update_result_workflow, merge_class_result_pdfs
 
 import csv
 import base64
@@ -40,16 +45,20 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
     queryset = ResultCustomization.objects.select_related(
         "session",
         "term",
+        "school_class",
     )
 
     def list(self, request, *args, **kwargs):
         """
         Returns the customization for a given session and term.
-        If none exists, returns the default configuration.
+
+        If a class is supplied, it first looks for a class-specific
+        customization. If none exists, it falls back to the global one.
         """
 
         session_id = request.query_params.get("session")
         term_id = request.query_params.get("term")
+        school_class_id = request.query_params.get("school_class_id")
 
         if not session_id or not term_id:
             return Response(
@@ -59,10 +68,31 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        customization = self.get_queryset().filter(
-            session_id=session_id,
-            term_id=term_id,
-        ).first()
+        customization = None
+
+        # Look for class customization first
+        if school_class_id:
+            customization = (
+                self.get_queryset()
+                .filter(
+                    session_id=session_id,
+                    term_id=term_id,
+                    school_class_id=school_class_id,
+                )
+                .first()
+            )
+
+        # Fallback to global customization
+        if customization is None:
+            customization = (
+                self.get_queryset()
+                .filter(
+                    session_id=session_id,
+                    term_id=term_id,
+                    school_class__isnull=True,
+                )
+                .first()
+            )
 
         if customization:
             serializer = self.get_serializer(customization)
@@ -73,17 +103,24 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
                 "id": None,
                 "session": int(session_id),
                 "term": int(term_id),
+                "school_class": school_class_id,
                 **DEFAULT_RESULT_CUSTOMIZATION,
             }
         )
 
     def create(self, request, *args, **kwargs):
         """
-        Creates or updates the customization for a session and term.
+        Creates or updates a customization.
+
+        If school_class is supplied, updates the customization
+        for that class.
+
+        Otherwise updates the global customization.
         """
 
         session_id = request.data.get("session")
         term_id = request.data.get("term")
+        school_class_id = request.data.get("school_class_id")
 
         if not session_id or not term_id:
             return Response(
@@ -95,6 +132,7 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
 
         defaults = {
             "subject_average": request.data.get("subject_average"),
+            "class_average": request.data.get("class_average"),
             "subject_position": request.data.get("subject_position"),
             "class_size": request.data.get("class_size"),
             "subject_score": request.data.get("subject_score"),
@@ -111,14 +149,25 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
             "show_class_fees": request.data.get("show_class_fees"),
             "show_grading_scale": request.data.get("show_grading_scale"),
             "show_performance_chart": request.data.get("show_performance_chart"),
-            
-            
         }
+
+        lookup = {
+            "session_id": session_id,
+            "term_id": term_id,
+        }
+
+        # Global customization uses school_class=None
+        if school_class_id:
+            lookup["school_class_id"] = school_class_id
+        else:
+            lookup["school_class"] = None
+
         with transaction.atomic():
-            customization, created = ResultCustomization.objects.update_or_create(
-                session_id=session_id,
-                term_id=term_id,
-                defaults=defaults,
+            customization, created = (
+                ResultCustomization.objects.update_or_create(
+                    defaults=defaults,
+                    **lookup,
+                )
             )
 
         serializer = self.get_serializer(customization)
@@ -126,8 +175,7 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
         return Response(
             serializer.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
-        
+        )    
 
 class SchoolDaysViewSet(viewsets.ModelViewSet):
     queryset = SchoolDays.objects.select_related("term", "session").all()
@@ -140,156 +188,8 @@ class SchoolDaysViewSet(viewsets.ModelViewSet):
     filterset_fields = [
         "term",
         "session",
-   
     ]
 
-def generate_chart(results):
-
-    subjects = [r.subject_name[:8] for r in results]
-    scores = [r.total_score for r in results]
-    class_average = [r.class_average for r in results]
-
-    x = np.arange(len(subjects)) * 1.4 # label positions
-    width = 0.5  # no gap between grouped bars
-
-    plt.figure(figsize=(14, 4))
-
-    # First bar: student score (blue)
-    plt.bar(x, scores, width=width, color='blue', label='Score', zorder=3)
-
-    # Second bar: class average (purple), shifted right
-    plt.bar(x + width, class_average, width=width, color='purple', label='Class Avg', zorder=3)
-    
-    plt.grid(True, axis='y', linestyle='-', alpha=1, zorder=0)
-    plt.grid(True, axis='x', linestyle='-', alpha=1, zorder=0)
-    # X-axis labels (subjects)
-    plt.xticks(x + width / 2, subjects, rotation=45, ha='right')
-
-    # Y-axis label
-    plt.ylabel("Scores")
-
-    plt.ylim(0, 120)
-
-    plt.legend()
-
-    plt.tight_layout()
-
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format="png", bbox_inches="tight")
-    buffer.seek(0)
-
-    image_png = buffer.getvalue()
-    buffer.close()
-
-    graphic = base64.b64encode(image_png)
-
-    plt.close()
-
-    return f"data:image/png;base64,{graphic.decode('utf-8')}"
-
-
-def behavioural_assessment():
-    return [
-        ("Attendance", "A"),
-        ("Neatness", "A"),
-        ("Punctuality", "A"),
-        ("Politeness", "A"),
-        ("Self Control", "A"),
-        ("Reliability", "A"),
-    ]
-
-def generate_chart(results):
-    """
-    results = [
-        {
-            "subject_code": "ENG",
-            "total_score": 75,
-            "subject_average": 64,
-        }
-    ]
-    """
-
-    subjects = [r["subject_code"] for r in results]
-    scores = [float(r["total_score"]) for r in results]
-    subject_averages = [
-        float(r["subject_average"] or 0)
-        for r in results
-    ]
-
-    x = np.arange(len(subjects)) * 1.4
-    width = 0.5
-
-    plt.figure(figsize=(14, 4))
-
-    plt.bar(
-        x,
-        scores,
-        width=width,
-        label="Student Scores",
-        zorder=3,
-        color="blue"
-    )
-
-    plt.bar(
-        x + width,
-        subject_averages,
-        width=width,
-        label="Subject Average",
-        zorder=3,
-        color="purple"
-    )
-
-    plt.grid(
-        True,
-        axis="y",
-        linestyle="-",
-        alpha=1,
-        zorder=0,
-    )
-
-    plt.grid(
-        True,
-        axis="x",
-        linestyle="-",
-        alpha=1,
-        zorder=0,
-    )
-
-    plt.xticks(
-        x + width / 2,
-        subjects,
-        rotation=45,
-        ha="right",
-    )
-
-    plt.ylabel("Subject Scores")
-    plt.ylim(0, 120)
-
-    plt.legend()
-    plt.tight_layout()
-
-    buffer = io.BytesIO()
-
-    plt.savefig(
-        buffer,
-        format="png",
-        bbox_inches="tight",
-    )
-
-    buffer.seek(0)
-
-    image_png = buffer.getvalue()
-
-    graphic = base64.b64encode(image_png)
-
-    buffer.close()
-    plt.close()
-
-    return (
-        f"data:image/png;base64,"
-        f"{graphic.decode('utf-8')}"
-    )
-   
 def preview_pdf_html(request):
 
     student = Student.objects.get(id=44)
@@ -341,172 +241,7 @@ class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
 
         serializer.save()
         
-class ResultPDFViewSet(viewsets.ViewSet):
-    queryset = ResultPDF.objects.all()
-    serializer_class = ResultPDFSerializer
-    permission_classes = [IsAuthenticated]
-    
-    @action(detail=False, methods=["get"], url_path="my-pdf")
-    def my_pdf(self, request):
-        user = self.request.user
-        term_id = request.query_params.get("term_id")
-        session_id = request.query_params.get("session_id")
-        
-        if not term_id or not session_id:
-            return Response({"detail": "term_id and session_id are required."}, status=400)
-            
-        
-        if user.role == "student":       
-            student = Student.objects.get(user=user)
-            current_class = student.current_class
-        
-        if not user == student.user:
-            return Response({"detail": "Only students can view their PDF results."}, status=403)
-            
-        if not current_class:
-            return Response({"detail": "No current enrollment found for student."}, status=404)
-            
-        workflow = ResultWorkflow.objects.filter(
-            school_class=current_class,
-            term_id=term_id,
-            session_id=session_id
-        ).first()
-        
-        if not workflow or workflow.status != "Released":
-            return Response({"detail": "Results have not been released yet."}, status=403)
-            
-        pdf_record = ResultPDF.objects.filter(
-            student=student,
-            term_id=term_id,
-            session_id=session_id,
-            status="DONE"
-        ).first()
-        
-        if not pdf_record:
-            return Response({"detail": "PDF report sheet is not available or is still generating."}, status=404)
-        print("backend return url: ", pdf_record.file.url)
-            
-        return Response({
-            "pdf_url": pdf_record.file.url if pdf_record.file else None
-        })
-
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="generate",
-    )
-    def generate(self, request):
-        term_id = request.data.get("term_id")
-        session_id = request.data.get("session_id")
-
-        if not term_id or not session_id:
-            return Response(
-                {
-                    "detail":
-                    "term_id and session_id are required."
-                },
-                status=400,
-            )
-
-        task = generate_result_pdfs_task.delay(
-            term_id,
-            session_id,
-        )
-
-        return Response({
-            "task_id": task.id,
-            "status": "queued",
-        })
-        
-
-    @action(detail=False, methods=["get"], url_path="status")
-    def status(self, request):
-
-        task_id = request.query_params.get("task_id")
-
-        if not task_id:
-            return Response({
-                "detail": "task_id is required"
-            }, status=400)
-
-        result = AsyncResult(task_id)
-
-        response_data = {
-            "task_id": task_id,
-            "state": result.state,
-            "ready": result.ready(),
-        }
-
-        # --------------------------------------------------
-        # SAFE RESULT HANDLING
-        # --------------------------------------------------
-        if result.ready():
-            try:
-                # if success → normal result
-                response_data["result"] = result.result
-
-            except Exception:
-                # fallback safety
-                response_data["result"] = None
-
-            # if failure → convert exception to string
-            if result.failed():
-                response_data["error"] = str(result.result)
-                response_data["result"] = None
-
-        return Response(response_data)
-        
-    @action(detail=False, methods=["get"], url_path="precheck")
-    def precheck(self, request):
-
-        term_id = request.query_params.get("term_id")
-        session_id = request.query_params.get("session_id")
-
-        if not term_id or not session_id:
-            return Response(
-                {"detail": "term_id and session_id are required."},
-                status=400
-            )
-            
-        enrollments = StudentEnrollment.objects.filter(session_id=session_id, is_current=True).count()
-        attendance = Attendance.objects.filter(
-                term_id=term_id,
-                session_id=session_id,
-            ).count()
-        termComments = TermComment.objects.filter(term_id=term_id, session_id=session_id).count()
-        classes =  Class.objects.all().count()
-
-        return Response({
-            # All behaviour records are complete
-            "behaviours": Behaviour.objects.filter(
-                term_id=term_id,
-                session_id=session_id,
-            ).count() == enrollments,
-
-            # attendance exists
-            "attendance": attendance == enrollments,
-            "comments": termComments == enrollments,
-            "grades": GradingScale.objects.filter(grade_type="subject").exists(),
-
-            # active school logo/header exists
-            "school_assets": SchoolAsset.objects.filter(
-                is_active=True,
-                asset_type="logo"
-            ).exists(),
-            "class_teacher_signatures": ClassTeacherSignature.objects.filter(is_active=True).count() == classes,
-            "head_teacher_signature": HeadTeacherSignature.objects.exists(),
-            # class fees exist
-            "class_fees": ClassFees.objects.filter(
-                term_id=term_id,
-                session_id=session_id,
-            ).count() == classes,
-            # resumption date exists
-            "resumption_date": ResumptionDate.objects.filter(
-                current_term_id=term_id,
-                current_session_id=session_id,
-            ).exists(),
-        })
-        
+     
 class ResultComputationViewSet(viewsets.ViewSet):
     """
     Handles async result computation via Celery
@@ -608,100 +343,121 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     # BULK UPSERT (FIXED)
     # =========================
 
+
     @action(detail=False, methods=["post"])
     def bulk_upsert(self, request):
-        try:
-            term_id = request.data.get("term_id")
-            session_id = request.data.get("session_id")
-            school_class_id = request.data.get("school_class_id")
-            records = request.data.get("records", [])
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+        school_class_id = request.data.get("school_class_id")
+        records = request.data.get("records", [])
 
-            # -------------------------
-            # VALIDATION
-            # -------------------------
-            if not term_id or not session_id or not school_class_id:
-                return Response(
-                    {
-                        "status": "error",
-                        "message": "term_id, session_id and school_class_id are required"
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            if not isinstance(records, list) or len(records) == 0:
-                return Response(
-                    {
-                        "status": "error",
-                        "message": "records must be a non-empty list"
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            results = []
-            errors = []
-
-            # -------------------------
-            # BULK PROCESS USING SERIALIZER (CORRECT WAY)
-            # -------------------------
-            with transaction.atomic():
-                for index, item in enumerate(records):
-
-                    payload = {
-                        "student_id": item.get("student"),
-                        "attendance": item.get("attendance", 0),
-                        "school_class_id": school_class_id,
-                        "term_id": term_id,
-                        "session_id": session_id,
-                    }
-
-                    try:
-                        # check if exists (for update logic)
-                        instance = Attendance.objects.filter(
-                            student_id=item.get("student"),
-                            term_id=term_id,
-                            session_id=session_id,
-                            school_class_id=item.get("school_class_id")
-                        ).first()
-
-                        serializer = self.get_serializer(
-                            instance,
-                            data=payload,
-                            partial=True
-                        )
-
-                        serializer.is_valid(raise_exception=True)
-                        obj = serializer.save()
-
-                        results.append(obj)
-
-                    except Exception as e:
-                        errors.append({
-                            "index": index,
-                            "student": item.get("student"),
-                            "error": str(e)
-                        })
-
-            response_serializer = self.get_serializer(results, many=True)
-
-            return Response(
-                {
-                    "status": "success" if not errors else "partial_success",
-                    "message": "Bulk attendance processed",
-                    "results": response_serializer.data,
-                    "errors": errors
-                },
-                status=status.HTTP_200_OK
-            )
-
-        except Exception as e:
+        # ---------------------------------------------------
+        # VALIDATION
+        # ---------------------------------------------------
+        if not all([term_id, session_id, school_class_id]):
             return Response(
                 {
                     "status": "error",
-                    "message": "Unexpected server error",
-                    "detail": str(e)
+                    "message": "term_id, session_id and school_class_id are required.",
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if not isinstance(records, list) or not records:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "records must be a non-empty list.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        saved_records = []
+        errors = []
+
+        # ---------------------------------------------------
+        # PROCESS RECORDS
+        # ---------------------------------------------------
+        with transaction.atomic():
+
+            for index, item in enumerate(records):
+
+                payload = {
+                    "student_id": item.get("student"),
+                    "attendance": item.get("attendance", 0),
+                    "school_class_id": school_class_id,
+                    "term_id": term_id,
+                    "session_id": session_id,
+                }
+
+                instance = Attendance.objects.filter(
+                    student_id=item.get("student"),
+                    school_class_id=school_class_id,
+                    term_id=term_id,
+                    session_id=session_id,
+                ).first()
+
+                serializer = self.get_serializer(
+                    instance=instance,
+                    data=payload,
+                    partial=instance is not None,
+                )
+               
+
+                try:
+                    serializer.is_valid(raise_exception=True)
+                    attendance = serializer.save()
+                    saved_records.append(attendance)
+
+                except DjangoValidationError as exc:
+                    errors.append(
+                        {
+                            "index": index,
+                            "student": item.get("student"),
+                            "errors": exc.detail,
+                        }
+                    )
+
+                except Exception as exc:
+                    errors.append(
+                        {
+                            "index": index,
+                            "student": item.get("student"),
+                            "errors": str(exc),
+                        }
+                    )
+
+        # ---------------------------------------------------
+        # RESPONSE
+        # ---------------------------------------------------
+        serializer = self.get_serializer(saved_records, many=True)
+
+        if errors and not saved_records:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "No attendance records were saved.",
+                    "results": [],
+                    "errors": errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "status": "success" if not errors else "partial_success",
+                "message": (
+                    "Attendance saved successfully."
+                    if not errors
+                    else "Attendance saved with some errors."
+                ),
+                "results": serializer.data,
+                "saved_count": len(saved_records),
+                "failed_count": len(errors),
+                "errors": errors,
+            },
+            status=status.HTTP_200_OK,
+        )
             
 class BehaviourViewSet(viewsets.ModelViewSet):
     queryset = Behaviour.objects.select_related(
@@ -866,6 +622,384 @@ class GradingScaleViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
         
+
+class ResultPDFViewSet(viewsets.ViewSet):
+    queryset = ResultPDF.objects.all()
+    serializer_class = ResultPDFSerializer
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=["get"], url_path="my-pdf")
+    def my_pdf(self, request):
+        user = self.request.user
+        term_id = request.query_params.get("term_id")
+        session_id = request.query_params.get("session_id")
+        
+        if not term_id or not session_id:
+            return Response({"detail": "term_id and session_id are required."}, status=400)
+            
+        
+        if user.role == "student":       
+            student = Student.objects.get(user=user)
+            current_class = student.current_class
+        
+        if not user == student.user:
+            return Response({"detail": "Only students can view their PDF results."}, status=403)
+            
+        if not current_class:
+            return Response({"detail": "No current enrollment found for student."}, status=404)
+            
+        workflow = ResultWorkflow.objects.filter(
+            school_class=current_class,
+            term_id=term_id,
+            session_id=session_id
+        ).first()
+        
+        if not workflow or workflow.status != "Released":
+            return Response({"detail": "Results have not been released yet."}, status=403)
+            
+        pdf_record = ResultPDF.objects.filter(
+            student=student,
+            term_id=term_id,
+            session_id=session_id,
+            status="DONE"
+        ).first()
+        
+        if not pdf_record:
+            return Response({"detail": "PDF report sheet is not available or is still generating."}, status=404)
+        print("backend return url: ", pdf_record.file.url)
+            
+        return Response({
+            "pdf_url": pdf_record.file.url if pdf_record.file else None
+        })
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="generate",
+    )
+    def generate(self, request):
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+        school_class_id = request.data.get("class_id")
+
+        if not term_id or not session_id:
+            return Response(
+                {
+                    "detail":
+                    "term_id and session_id are required."
+                },
+                status=400,
+            )
+        if school_class_id:
+            task = generate_result_pdfs_for_class_task.delay(
+                term_id,
+                session_id,
+                school_class_id
+            )
+
+        task = generate_result_pdfs_task.delay(
+            term_id,
+            session_id,
+        )
+
+        return Response({
+            "task_id": task.id,
+            "status": "queued",
+        })
+        
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="upload-student-pdf",
+        permission_classes=[IsTeacherOrAdmin],
+    )
+    def upload_student_pdf(self, request):
+        student_id = request.data.get("student_id")
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+        file_obj = request.FILES.get("file")
+
+        if not all([student_id, term_id, session_id, file_obj]):
+            return Response(
+                {"detail": "student_id, term_id, session_id, and file are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            student = Student.objects.get(pk=student_id)
+            term = Term.objects.get(pk=term_id)
+            session = AcademicSession.objects.get(pk=session_id)
+        except (Student.DoesNotExist, Term.DoesNotExist, AcademicSession.DoesNotExist) as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+        pdf_obj, _ = ResultPDF.objects.get_or_create(
+            student=student,
+            term=term,
+            session=session,
+        )
+
+        if pdf_obj.file:
+            pdf_obj.file.delete(save=False)
+
+        file_name = f"{student.admission_number}_result_{session.name}_{term.name}.pdf"
+        pdf_obj.file.save(file_name, file_obj, save=False)
+        pdf_obj.status = "DONE"
+        pdf_obj.save()
+
+        return Response({
+            "detail": "Student result PDF uploaded successfully.",
+            "pdf_url": pdf_obj.file.url if pdf_obj.file else None
+        }, status=status.HTTP_200_OK)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="merge-class-pdf",
+        permission_classes=[IsTeacherOrAdmin],
+    )
+    def merge_class_pdf(self, request):
+        class_id = request.data.get("school_class_id") or request.data.get("class_id")
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+
+        if not all([class_id, term_id, session_id]):
+            return Response(
+                {"detail": "school_class_id, term_id, and session_id are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            school_class = Class.objects.get(pk=class_id)
+            term = Term.objects.get(pk=term_id)
+            session = AcademicSession.objects.get(pk=session_id)
+        except (Class.DoesNotExist, Term.DoesNotExist, AcademicSession.DoesNotExist) as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+        merged_pdf = merge_class_result_pdfs(school_class, term, session)
+
+        if not merged_pdf or merged_pdf.status == "FAILED":
+            return Response(
+                {"detail": "Merging class PDFs failed or no student PDFs were found."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response({
+            "detail": "Class PDFs merged successfully.",
+            "pdf_url": merged_pdf.file.url if merged_pdf.file else None
+        }, status=status.HTTP_200_OK)
+        
+    @action(detail=False, methods=["get"], url_path="status")
+    def status(self, request):
+
+        task_id = request.query_params.get("task_id")
+
+        if not task_id:
+            return Response({
+                "detail": "task_id is required"
+            }, status=400)
+
+        result = AsyncResult(task_id)
+
+        response_data = {
+            "task_id": task_id,
+            "state": result.state,
+            "ready": result.ready(),
+        }
+
+        # --------------------------------------------------
+        # SAFE RESULT HANDLING
+        # --------------------------------------------------
+        if result.ready():
+            try:
+                # if success → normal result
+                response_data["result"] = result.result
+
+            except Exception:
+                # fallback safety
+                response_data["result"] = None
+
+            # if failure → convert exception to string
+            if result.failed():
+                response_data["error"] = str(result.result)
+                response_data["result"] = None
+
+        return Response(response_data)
+        
+
+    @action(detail=False, methods=["get"], url_path="precheck")
+    def precheck(self, request):
+        term_id = request.query_params.get("term_id")
+        session_id = request.query_params.get("session_id")
+        school_class_id = request.query_params.get("class_id")
+
+        if not term_id or not session_id:
+            return Response(
+                {
+                    "detail": "term_id and session_id are required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # -------------------------------------------------------
+        # COUNTS
+        # -------------------------------------------------------
+
+        if school_class_id:
+            enrollment_count = StudentEnrollment.objects.filter(
+                session_id=session_id,
+                school_class_id=school_class_id,
+                is_current=True,
+            ).count()
+
+            attendance_count = Attendance.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+                school_class_id=school_class_id,
+            ).count()
+
+            behaviour_count = Behaviour.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+                school_class_id=school_class_id,
+            ).count()
+
+            comment_count = TermComment.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+                school_class_id=school_class_id,
+            ).count()
+
+            class_teacher_signature = (
+                ClassTeacherSignature.objects.filter(
+                    school_class_id=school_class_id,
+                    is_active=True,
+                ).exists()
+            )
+
+            class_fees = ClassFees.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+                school_class_id=school_class_id,
+            ).exists()
+
+        else:
+            enrollment_count = StudentEnrollment.objects.filter(
+                session_id=session_id,
+                is_current=True,
+            ).count()
+
+            attendance_count = Attendance.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+            ).count()
+
+            behaviour_count = Behaviour.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+            ).count()
+
+            comment_count = TermComment.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+            ).count()
+
+            total_classes = Class.objects.count()
+
+            class_teacher_signature = (
+                ClassTeacherSignature.objects.filter(
+                    is_active=True,
+                ).count()
+                == total_classes
+            )
+
+            class_fees = (
+                ClassFees.objects.filter(
+                    term_id=term_id,
+                    session_id=session_id,
+                ).count()
+                == total_classes
+            )
+
+        # -------------------------------------------------------
+        # CHECKS
+        # -------------------------------------------------------
+
+        checks = {
+            "attendance": attendance_count == enrollment_count,
+            "behaviours": behaviour_count == enrollment_count,
+            "comments": comment_count == enrollment_count,
+
+            "grades": GradingScale.objects.filter(
+                grading_type="subject",
+            ).exists(),
+
+            "school_days": SchoolDays.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+            ).exists(),
+
+            "school_assets": SchoolAsset.objects.filter(
+                is_active=True,
+                asset_type="logo",
+            ).exists(),
+
+            "class_teacher_signatures": class_teacher_signature,
+
+            "head_teacher_signature": HeadTeacherSignature.objects.filter(
+                is_active=True,
+            ).exists(),
+
+            "class_fees": class_fees,
+
+            "resumption_date": ResumptionDate.objects.filter(
+                current_term_id=term_id,
+                current_session_id=session_id,
+            ).exists(),
+        }
+
+        checks["ready"] = all(checks.values())
+
+        checks["summary"] = {
+            "students": enrollment_count,
+            "attendance_records": attendance_count,
+            "behaviour_records": behaviour_count,
+            "comment_records": comment_count,
+        }
+
+        return Response({
+            "attendance": attendance_count == enrollment_count,
+            "behaviours": behaviour_count == enrollment_count,
+            "comments": comment_count == enrollment_count,
+
+            "grades": GradingScale.objects.filter(
+                grading_type="subject",
+            ).exists(),
+
+            "school_days": SchoolDays.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+            ).exists(),
+
+            "school_assets": SchoolAsset.objects.filter(
+                is_active=True,
+                asset_type="logo",
+            ).exists(),
+
+            "class_teacher_signatures": class_teacher_signature,
+
+            "head_teacher_signature": HeadTeacherSignature.objects.filter(
+                is_active=True,
+            ).exists(),
+
+            "class_fees": class_fees,
+
+            "resumption_date": ResumptionDate.objects.filter(
+                current_term_id=term_id,
+                current_session_id=session_id,
+            ).exists(),
+        })
+
 # RESULT VIEWSET
 # ============================== 
 class ResultViewSet(viewsets.ModelViewSet):
@@ -912,6 +1046,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return queryset.none()        
     
+       
     @action(detail=False, methods=["get"], url_path="subject-results")
     def subject_results(self, request):
         user_role = request.user.role
@@ -982,6 +1117,140 @@ class ResultViewSet(viewsets.ModelViewSet):
             }
         )
     
+    
+    @action(detail=False, methods=['get'], url_path="results-sheets-exist")
+    def result_sheets_exist(self, request):
+        user_role = request.user.role
+        if not request.user.is_staff and not user_role == "teacher":
+            return Response({"detail": "Permission denied"}, status=403)
+
+        term_id = request.query_params.get("term_id")
+        school_class_id = request.query_params.get("school_class_id")
+        
+        if not term_id and not school_class_id:
+            return Response(
+                {
+                    "detail": "term_id is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            
+        class_merged_pdf = ClassResultPDF.objects.filter(
+            term_id=term_id,
+            school_class_id=school_class_id
+        ).exists()
+       
+        return Response({
+            "class_results_exists": class_merged_pdf
+        })
+    
+    @action(detail=False, methods=["get"], url_path="all-results-submitted")
+    def all_results_submitted(self, request):
+        user_role = request.user.role
+        if not request.user.is_staff and not user_role == "teacher":
+            return Response({"detail": "Permission denied"}, status=403)
+
+        term_id = request.query_params.get("term_id")
+        
+        if not term_id:
+            return Response(
+                {
+                    "detail": "term_id is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        class_subjects = ClassSubject.objects.select_related(
+            "school_class",
+            "subject"
+        ).filter(
+            term_id=term_id,
+        ).count()
+        
+        submission_statuses = SubjectResultStatus.objects.filter(
+            term_id=term_id,
+            is_submitted=True,
+        ).count()
+
+        
+        all_submitted = submission_statuses == class_subjects
+       
+
+        return Response(
+          {
+            "all_results_submitted": all_submitted,
+           }
+        )
+    
+    @action(detail=False, methods=["get"], url_path="completed-results")
+    def completed_results(self, request):
+        user_role = request.user.role
+        if not request.user.is_staff and not user_role == "teacher":
+            return Response({"detail": "Permission denied"}, status=403)
+
+        class_id = request.query_params.get("class_id")
+        class_subject_id = request.query_params.get("class_subject_id")
+        
+        if not class_id or not class_subject_id:
+            return Response(
+                {
+                    "detail": "class_id and class_subject_id are required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            class_subject = ClassSubject.objects.select_related(
+                "school_class",
+                "subject"
+            ).get(
+                id=class_subject_id,
+                school_class_id=class_id
+            )
+        except ClassSubject.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Class subject not found"
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        results = Result.objects.select_related(
+            "student__user",
+                "student"
+            ).filter(
+                term=request.query_params.get("term"),
+                class_subject_id=class_subject_id,
+                class_subject__school_class_id=class_id
+            )
+
+        return Response(
+            {
+                "class_subject": {
+                    "id": class_subject.id,
+                    "subject": class_subject.subject.name,
+                    "class": class_subject.school_class.name,
+                },
+                "results": [
+                    {
+                        "result_id": result.id,
+                        "student_id": result.student.id,
+                        "student_name": result.student.user.full_name,
+                        "profile_picture": request.build_absolute_uri(result.student.user.profile_picture.url) if result.student.user.profile_picture else None,
+                        
+                        "admission_number": result.student.admission_number,
+                        "first_test": result.first_test,
+                        "second_test": result.second_test,
+                        "exam_score": result.exam_score,
+                        "total_score": result.total_score,
+                        "grade": result.grade,
+                        "remark": result.remark,
+                        "teacher_submitted": result.teacher_submitted,
+                    }
+                    for result in results
+                ],
+            }
+        )
     # -----------------------------
     # BULK CREATE / UPDATE OPTIMIZED
     # -----------------------------
@@ -1015,7 +1284,8 @@ class ResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        grades = list(GradingScale.objects.filter(grade_type="subject").all())
+        grades = list(GradingScale.objects.filter(grading_type="subject").all())
+        school_class = class_subject.school_class
 
         # -----------------------------
         # PRELOAD STUDENTS (REDUCE QUERIES)
@@ -1121,7 +1391,19 @@ class ResultViewSet(viewsets.ModelViewSet):
                         "is_submitted": True,
                     },
                 )
-
+                
+        # -----------------------------
+        # WORKFLOW CHECK (OUTSIDE TRANSACTION)
+        # -----------------------------
+        update_result_workflow(school_class, term, session)
+        workflow = ResultWorkflow.objects.get(school_class=school_class)
+        if workflow.all_results_submitted:           
+            compute_all_results_for_Class_task.delay(
+                term_id=term.id,
+                session_id=session.id,
+                class_id=school_class.id,
+            )
+          
         return Response(
             {
                 "message": "Results processed successfully",
@@ -1358,6 +1640,7 @@ class ResultViewSet(viewsets.ModelViewSet):
             or request.user.is_superuser
             or request.user.role == "admin"
             or request.user.role == "teacher"
+            or request.user.role == "student"
         ):
             return None, Response(
                 {"detail": "Permission denied."},
@@ -1601,6 +1884,76 @@ class ResultViewSet(viewsets.ModelViewSet):
             content_type="application/pdf",
         )
 
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="report-card",
+    )
+    def report_card(self, request):
+        student_id = request.query_params.get("student")
+        term_id = request.query_params.get("term")
+        session_id = request.query_params.get("session")
+
+        if not all([student_id, term_id, session_id]):
+            return Response(
+                {
+                    "detail": "student, term and session are required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            student = Student.objects.select_related("user").get(pk=student_id)
+            term = Term.objects.get(pk=term_id)
+            session = AcademicSession.objects.get(pk=session_id)
+
+            enrollment = (
+                student.enrollments.filter(session=session)
+                .select_related("school_class", "school_class__arm")
+                .first()
+            )
+
+            if not enrollment:
+                return Response(
+                    {
+                        "detail": "Student is not enrolled for this session."
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            report = get_student_report_data(
+                request=request,
+                student=student,
+                school_class=enrollment.school_class,
+                term=term,
+                session=session,
+            )
+
+            # return Response(report)
+            serializer = ReportSerializer(
+                data=asdict(report)
+            )
+
+            serializer.is_valid(raise_exception=True)
+
+            return Response(serializer.validated_data)
+
+        except Student.DoesNotExist:
+            return Response(
+                {"detail": "Student not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Term.DoesNotExist:
+            return Response(
+                {"detail": "Term not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except AcademicSession.DoesNotExist:
+            return Response(
+                {"detail": "Session not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
 class TermCommentViewSet(viewsets.ModelViewSet):
     queryset = TermComment.objects.select_related("student", "student__user", "term", "session", "school_class")
     serializer_class = TermCommentSerializer
@@ -1635,6 +1988,58 @@ class TermCommentViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         serializer.save()
+
+    @action(detail=False, methods=["post"], url_path="bulk-save")
+    def bulk_save(self, request):
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+        school_class_id = request.data.get("school_class_id")
+        comments = request.data.get("comments", [])
+
+        if not all([term_id, session_id, school_class_id]):
+            return Response(
+                {
+                    "detail": "term_id, session_id and school_class_id are required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated = 0
+        created = 0
+
+        with transaction.atomic():
+            for item in comments:
+                student_id = item.get("student")
+
+                obj, was_created = TermComment.objects.update_or_create(
+                    student_id=student_id,
+                    term_id=term_id,
+                    session_id=session_id,
+                    school_class_id=school_class_id,
+                    defaults={
+                        "class_teacher_comment": item.get(
+                            "class_teacher_comment",
+                            "",
+                        ),
+                        "principal_comment": item.get(
+                            "principal_comment",
+                            "",
+                        ),
+                    },
+                )
+
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+
+        return Response(
+            {
+                "created": created,
+                "updated": updated,
+                "total": created + updated,
+            }
+        )
 
 class ResultSummaryViewset(viewsets.ModelViewSet):
     queryset = ResultSummary.objects.select_related("student", "school_class", "term", "session")
@@ -1829,6 +2234,112 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
         "status",
     ]
 
+    # helper function to handle pdf generation after approval of results
+    def approve_workflow(
+        self,
+        workflow,
+        user,
+        school_class_id,
+        session_id,
+        term_id,
+    ):
+        if workflow.status == "Approved":
+            return False
+
+        workflow.status = "Approved"
+        workflow.approved_by = user
+        workflow.approved_at = timezone.now()
+        workflow.save(update_fields=[
+            "status",
+            "approved_by",
+            "approved_at",
+        ])
+
+        enrollment_count = StudentEnrollment.objects.filter(
+            session_id=session_id,
+            school_class_id=school_class_id,
+            is_current=True,
+        ).count()
+
+        attendance_count = Attendance.objects.filter(
+            term_id=term_id,
+            session_id=session_id,
+            school_class_id=school_class_id,
+        ).count()
+
+        behaviour_count = Behaviour.objects.filter(
+            term_id=term_id,
+            session_id=session_id,
+            school_class_id=school_class_id,
+        ).count()
+
+        comment_count = TermComment.objects.filter(
+            term_id=term_id,
+            session_id=session_id,
+            school_class_id=school_class_id,
+        ).count()
+
+        class_count = Class.objects.count()
+
+        checks = {
+            "attendance": attendance_count == enrollment_count,
+            "behaviour": behaviour_count == enrollment_count,
+            "comments": comment_count == enrollment_count,
+
+            "grades": GradingScale.objects.filter(
+                grading_type="subject"
+            ).exists(),
+
+            "school_days": SchoolDays.objects.filter(
+                term_id=term_id,
+                session_id=session_id,
+            ).exists(),
+
+            "school_assets": SchoolAsset.objects.filter(
+                is_active=True,
+                asset_type="logo",
+            ).exists(),
+
+            "class_teacher_signatures": (
+                ClassTeacherSignature.objects.filter(
+                    is_active=True,
+                ).count()
+                == class_count
+            ),
+
+            "head_teacher_signature": (
+                HeadTeacherSignature.objects.filter(
+                    is_active=True
+                ).exists()
+            ),
+
+            "class_fees": (
+                ClassFees.objects.filter(
+                    term_id=term_id,
+                    session_id=session_id,
+                ).count()
+                == class_count
+            ),
+
+            "resumption_date": ResumptionDate.objects.filter(
+                current_term_id=term_id,
+                current_session_id=session_id,
+            ).exists(),
+        }
+
+        if all(checks.values()):
+            transaction.on_commit(
+                lambda: generate_result_pdfs_for_class_task.delay(
+                    workflow.term_id,
+                    workflow.session_id,
+                    workflow.school_class_id,
+                )
+            )
+
+            return True
+
+        return False
+
     @action(
         detail=False,
         methods=["post"],
@@ -1889,7 +2400,72 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        workflow.status = "Approved"
+        self.approve_workflow(workflow, request.user, school_class_id, session_id, term_id)
+
+        serializer = self.get_serializer(workflow)
+        return Response(serializer.data)
+    
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="unlock",
+    )
+    def unlock(self, request):
+
+        school_class_id = request.data.get(
+            "school_class_id"
+        )
+
+        term_id = request.data.get(
+            "term_id"
+        )
+
+        session_id = request.data.get(
+            "session_id"
+        )
+
+        if not all([
+            school_class_id,
+            term_id,
+            session_id,
+        ]):
+            return Response(
+                {
+                    "detail":
+                    "school_class_id, "
+                    "term_id and "
+                    "session_id "
+                    "are required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        workflow = ResultWorkflow.objects.filter(
+            school_class_id=school_class_id,
+            term_id=term_id,
+            session_id=session_id,
+        ).first()
+
+        if not workflow:
+            return Response(
+                {
+                    "detail":
+                    "Workflow not found."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not workflow.all_results_submitted:
+            return Response(
+                {
+                    "detail":
+                    "All subjects "
+                    "have not been submitted."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        workflow.status = "Pending"
 
         workflow.approved_by = (
             request.user
@@ -1956,7 +2532,71 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
 
                 continue
 
-            workflow.status = "Approved"
+            self.approve_workflow(workflow, request.user, workflow.school_class_id, session_id, term_id)
+
+            approved.append({
+                "class_id": workflow.school_class_id,
+                "class_name": str(workflow.school_class),
+            })
+
+        return Response(
+            {
+                "approved_count": len(approved),
+                "approved": approved,
+                "skipped": skipped,
+            }
+        )
+    
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="unlock-all",
+    )
+    def unlock_all(self, request):
+
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+
+        if not term_id or not session_id:
+            return Response(
+                {
+                    "detail":
+                    "term_id and session_id are required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        workflows = ResultWorkflow.objects.filter(
+            term_id=term_id,
+            session_id=session_id,
+        )
+
+        if not workflows.exists():
+            return Response(
+                {
+                    "detail":
+                    "No workflows found."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        approved = []
+        skipped = []
+
+        for workflow in workflows:
+
+            if not workflow.all_results_submitted:
+
+                skipped.append({
+                    "class_id": workflow.school_class_id,
+                    "class_name": str(workflow.school_class),
+                    "reason":
+                    "All subjects have not been submitted.",
+                })
+
+                continue
+
+            workflow.status = "Pending"
             workflow.approved_by = request.user
             workflow.approved_at = timezone.now()
             workflow.save()
@@ -1973,6 +2613,8 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                 "skipped": skipped,
             }
         )
+    
+    
     @action(
         detail=False,
         methods=["post"],

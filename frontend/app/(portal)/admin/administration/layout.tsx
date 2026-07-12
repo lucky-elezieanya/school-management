@@ -6,19 +6,31 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
-  Menu,
-  X,
-  LayoutDashboard,
-  Banknote,
-  FileBarChart,
-  FileSearch,
-  School,
   AwardIcon,
+  Banknote,
   BookAIcon,
-  UserCog,
+  Brain,
+  FileBarChart,
+  FileLock2Icon,
   GraduationCap,
-  ArrowLeft,
+  HousePlus,
+  School,
+  UserCheck2,
+  UserCog,
+  ArrowUpCircle,
+  CalendarClock,
+  PenBox,
+  UserPlus2,
+  BookCopyIcon,
+  Calculator,
+  FileOutput,
+  FilePlus,
+  FileSearch,
+  LayoutDashboard,
   ClipboardList,
+  X,
+  Menu,
+  ArrowLeft,
 } from "lucide-react";
 import { logout } from "@/app/lib/auth";
 import { useAuth } from "@/app/lib/hooks/useAuth";
@@ -30,9 +42,14 @@ const navLinks = [
     icon: LayoutDashboard,
   },
   {
-    name: "Classes",
+    name: "Classes and Arms",
     href: "/admin/administration/classes",
     icon: School,
+  },
+  {
+    name: "Sessions and Terms",
+    href: "/admin/administration/sessions",
+    icon: BookCopyIcon,
   },
   {
     name: "Students",
@@ -40,22 +57,62 @@ const navLinks = [
     icon: GraduationCap,
   },
   {
+    name: "Create New Students",
+    href: "/admin/administration/students/new",
+    icon: UserPlus2,
+  },
+  {
+    name: "Add Students to Class",
+    href: "/admin/administration/enrollments",
+    icon: UserPlus2,
+  },
+  {
     name: "Teachers",
     href: "/admin/administration/teachers",
     icon: UserCog,
   },
-
   {
-    name: "Grades",
+    name: "Subjects",
+    href: "/admin/administration/subjects/new",
+    icon: BookAIcon,
+  },
+  {
+    name: "Set Grading",
     href: "/admin/administration/grades",
     icon: AwardIcon,
   },
   {
-    name: "Results Entry",
+    name: "Behavioural qualities",
+    href: "/admin/administration/behaviour",
+    icon: Brain,
+  },
+  {
+    name: "Attendance / Behavioural Comments",
+    href: "/admin/administration/comments",
+    icon: PenBox,
+  },
+
+  {
+    name: "School Open Days",
+    href: "/admin/administration/attendance/days_school_opened",
+    icon: CalendarClock,
+  },
+
+  {
+    name: "Set Class Max scores",
+    href: "/admin/administration/classScores",
+    icon: FileBarChart,
+  },
+  {
+    name: "Upload Results",
     href: "/admin/administration/results",
     icon: FileBarChart,
   },
-
+  {
+    name: "Preview/Approve Results",
+    href: "/admin/administration/results/preview",
+    icon: FileOutput,
+  },
   {
     name: "View Results",
     href: "/admin/administration/results/view",
@@ -66,14 +123,49 @@ const navLinks = [
     href: "/admin/administration/results/customize",
     icon: BookAIcon,
   },
+  {
+    name: "Generate Results PDFs",
+    href: "/admin/administration/results/generate",
+    icon: FilePlus,
+  },
+  {
+    name: "Open/Close Results Portal",
+    href: "/admin/administration/resultsAccess",
+    icon: FileLock2Icon,
+  },
+
+  {
+    name: "Resumption Date",
+    href: "/admin/administration/resumption-dates",
+    icon: CalendarClock,
+  },
 
   {
     name: "Fees",
     href: "/admin/administration/fees",
     icon: Banknote,
   },
+  {
+    name: "Promotions",
+    href: "/admin/administration/promotions",
+    icon: ArrowUpCircle,
+  },
+  {
+    name: "Class Teacher Signature",
+    href: "/admin/administration/class_teacher_signature",
+    icon: PenBox,
+  },
+  {
+    name: "Header Teacher Signature",
+    href: "/admin/administration/head_teacher_signature",
+    icon: PenBox,
+  },
+  {
+    name: "School Logo",
+    href: "/admin/administration/schoolHeader",
+    icon: HousePlus,
+  },
 ];
-
 export default function Layout({
   children,
 }: Readonly<{
@@ -234,7 +326,7 @@ export default function Layout({
                 </button>
 
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800">
+                  <h2 className="text-md font-bold text-gray-800">
                     Admin Dashboard
                   </h2>
 

@@ -25,6 +25,7 @@ class ResultCustomization(models.Model):
         on_delete=models.CASCADE,
         related_name="result_customizations",
     )
+    school_class = models.ForeignKey("academics.Class", on_delete=models.CASCADE, blank=True, null=True)
 
     subject_average = models.BooleanField(default=True)
     class_average = models.BooleanField(default=True)
@@ -36,7 +37,6 @@ class ResultCustomization(models.Model):
     highest_lowest_scores = models.BooleanField(default=True)
     overall_grade = models.BooleanField(default=True)
     test_scores = models.BooleanField(default=True)
-    performance_chart = models.BooleanField(default=True)
     show_teacher_comment = models.BooleanField(default=True)
     show_principal_comment = models.BooleanField(default=True)
     show_behaviour = models.BooleanField(default=True)
@@ -51,7 +51,7 @@ class ResultCustomization(models.Model):
 
     class Meta:
         ordering = ["-updated_at"]
-        unique_together = ("session", "term")
+        unique_together = ("session", "term", "school_class")
         verbose_name = "Result Customization"
         verbose_name_plural = "Result Customizations"
 
@@ -259,10 +259,9 @@ class GradingScale(models.Model):
 
     class Meta:
         ordering = ["grading_type", "-upper_limit"]
-        
-# ==========================================
+
 # RESULT SUMMARY MODEL
-# ==========================================
+
 class ResultSummary(models.Model): 
     """
     Stores overall term computation for a student.
@@ -276,7 +275,7 @@ class ResultSummary(models.Model):
     )
     school_class = models.ForeignKey(
         "academics.Class",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="result_summaries"
     )
 
@@ -395,9 +394,9 @@ class SubjectSummary(models.Model):
             ]
         ),
     ]
-# ==========================================
+
 # TERM COMMENT MODEL
-# ==========================================
+
 class TermComment(models.Model):
     """
     Stores comments for each student per term.
@@ -409,15 +408,15 @@ class TermComment(models.Model):
     )
     school_class = models.ForeignKey(
         "academics.Class",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="term_comments"
     )
     term = models.ForeignKey(
-        "academics.Term", on_delete=models.PROTECT
+        "academics.Term", on_delete=models.CASCADE
     )
     session = models.ForeignKey(
         "academics.AcademicSession",
-        on_delete=models.PROTECT
+        on_delete=models.CASCADE
     )
     class_teacher_comment = models.TextField(blank=True)
     principal_comment = models.TextField(blank=True) 
@@ -431,6 +430,8 @@ class TermComment(models.Model):
             "term",
             "session"
         )
+        ordering = ["student__user"]
+        
     def __str__(self):
         return f"{self.student.user.full_name} comment for - {self.term}"
 
@@ -463,10 +464,10 @@ class MaxScores(models.Model):
 
 class ResumptionDate(models.Model):
     resumption_date = models.DateField(blank=True, null=True)
-    current_term = models.ForeignKey("academics.Term", on_delete=models.PROTECT, related_name="current_term",  null=True)
-    next_term = models.ForeignKey("academics.Term", on_delete=models.PROTECT, related_name="next_term",  null=True)
-    current_session = models.ForeignKey("academics.AcademicSession", on_delete=models.PROTECT, related_name="current_session",  null=True)
-    next_session = models.ForeignKey("academics.AcademicSession", on_delete=models.PROTECT, blank=True, null=True, related_name="next_session")
+    current_term = models.ForeignKey("academics.Term", on_delete=models.CASCADE, related_name="current_term",  null=True)
+    next_term = models.ForeignKey("academics.Term", on_delete=models.CASCADE, related_name="next_term",  null=True)
+    current_session = models.ForeignKey("academics.AcademicSession", on_delete=models.CASCADE, related_name="current_session",  null=True)
+    next_session = models.ForeignKey("academics.AcademicSession", on_delete=models.CASCADE, blank=True, null=True, related_name="next_session")
     
     class Meta:
         ordering = ["-resumption_date"]
@@ -561,7 +562,7 @@ class SchoolDays(models.Model):
         return f"{self.term.name} - {self.session.name}: {self.days_school_opened} days"
     
 class Attendance(models.Model):
-    school_class = models.ForeignKey("academics.Class", on_delete=models.PROTECT)
+    school_class = models.ForeignKey("academics.Class", on_delete=models.CASCADE)
     attendance = models.PositiveIntegerField(default=0)
     student = models.ForeignKey(
         "academics.Student",
@@ -636,7 +637,7 @@ class Behaviour(models.Model):
     attendance = models.CharField(max_length=5, choices=BEHAVIOUR_CHOICES, default="A")
     punctuality = models.CharField(max_length=5, choices=BEHAVIOUR_CHOICES, default="A")
     leadership = models.CharField(max_length=5, choices=BEHAVIOUR_CHOICES, default="A")
-    school_class = models.ForeignKey("academics.Class", on_delete=models.PROTECT)
+    school_class = models.ForeignKey("academics.Class", on_delete=models.CASCADE)
     student = models.ForeignKey("academics.Student", on_delete=models.PROTECT)
     term = models.ForeignKey("academics.Term", on_delete=models.PROTECT)
     session = models.ForeignKey("academics.AcademicSession", on_delete=models.PROTECT)

@@ -5,10 +5,7 @@ import { logout } from "@/app/lib/auth";
 import { useRoleGuard } from "@/app/lib/hooks/useRoleGuard";
 import { useEffect, useState } from "react";
 import {
-  ClassType,
-  StudentType,
-  TeacherType,
-  Term,
+ 
   UserType,
 } from "@/app/lib/types";
 import {
@@ -42,6 +39,8 @@ import UsersSection from "@/app/components/sections/UsersSection";
 import { useRouter } from "next/navigation";
 import AddSessionForm from "@/app/components/forms/AddSession";
 import SessionTermSwitcher from "@/app/components/forms/SessionTermSwitcher";
+import {toast} from "sonner"
+
 
 export default function AdminPage() {
   useRoleGuard(["admin"]);
@@ -56,6 +55,7 @@ export default function AdminPage() {
   // subjects
   const [subjectsCount, setSubjectsCount] = useState(0);
 const [teachersCount, setTeachersCount] = useState(0)
+const [resultsCount, setResultsCount] = useState(0)
 
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [toggleSessionModal, setToggleSessionModal] = useState(false);
@@ -71,8 +71,8 @@ const [teachersCount, setTeachersCount] = useState(0)
 
     
       setStudentsCount(data.count || 0);
-    } catch (error) {
-      console.error("Failed to fetch students:", error);
+    } catch (error:any) {
+      toast.error("Failed to fetch students:", error);
     }
   };
 
@@ -91,6 +91,20 @@ const [teachersCount, setTeachersCount] = useState(0)
     }
   };
 
+const fetchResults = async (url?: string) => {
+    try {
+      const data = url
+        ? await fetch(url, {
+            headers: apiHeaders(),
+          }).then((res) => res.json())
+        : await apiAction("results", "results");
+
+      setResultsCount(data.count || 0);
+    } catch (error) {
+      console.error("Failed to fetch results:", error);
+    }
+  };
+
   const fetchClasses = async (url?: string) => {
     try {
       const data = url
@@ -100,8 +114,8 @@ const [teachersCount, setTeachersCount] = useState(0)
         : await apiAction("academics", "classes");
 
       setClassesCount(data.count || 0);
-    } catch (error) {
-      console.error("Failed to fetch students:", error);
+    } catch (error:any) {
+      toast.error("Failed to fetch students:", error);
     }
   };
   const fetchUsers = async (url?: string) => {
@@ -147,10 +161,10 @@ const [teachersCount, setTeachersCount] = useState(0)
       const res = await createAction("academics", "sessions", payload, "POST");
 
       if (res) {
-        alert(`Session: {res.name} created successfully!`);
+        toast.success(`Session: {data.name} created successfully!`);
       }
     } catch (error: any) {
-        alert(`Error: ${error.name}`)
+        toast.error(`Error: ${error.name}`)
     }
   };
 
@@ -165,6 +179,7 @@ const [teachersCount, setTeachersCount] = useState(0)
           fetchClasses(`${BASE_URL}/academics/classes/`),
           fetchSubjects(`${BASE_URL}/academics/subjects/`),
           fetchUsers(`${BASE_URL}/accounts/users/`),
+          fetchResults(`${BASE_URL}/results/results/`),
         ]);
 
         //
@@ -487,6 +502,7 @@ const [teachersCount, setTeachersCount] = useState(0)
                 teachersCount={teachersCount}
                 subjectsCount={subjectsCount}
                 classesCount={classesCount}
+                resultsCount={resultsCount}
               />
               {/* Dynamic Section */}
               <div className="bg-transparent rounded-xl shadow p-6">

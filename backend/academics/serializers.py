@@ -568,6 +568,7 @@ class StudentEnrollmentSerializer(serializers.ModelSerializer):
         read_only=True,
         source="student.user.full_name"
     )
+    profile_picture = serializers.SerializerMethodField()
     admission_number = serializers.CharField(
         read_only=True,
         source="student.admission_number"
@@ -583,6 +584,7 @@ class StudentEnrollmentSerializer(serializers.ModelSerializer):
             "id",
             "student",
             "student_name",
+            "profile_picture",
             "is_current",
             "admission_number",
             "is_active",
@@ -592,6 +594,19 @@ class StudentEnrollmentSerializer(serializers.ModelSerializer):
             "school_class_id",
             "enrolled_at",
         ]
+        
+    def get_profile_picture(self, obj):
+        request = self.context.get("request")
+
+        picture = obj.student.user.profile_picture
+
+        if not picture:
+            return None
+
+        if request:
+            return request.build_absolute_uri(picture.url)
+
+        return picture.url
 
 class StudentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)

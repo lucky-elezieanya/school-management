@@ -1,5 +1,5 @@
 "use client";
-
+import {toast} from "sonner"
 import { useEffect, useState } from "react";
 import {
   apiAction,
@@ -10,12 +10,14 @@ import {
   handleUserDelete,
   updateAction,
 } from "@/app/lib/api";
+import { useAuth } from "@/app/lib/hooks/useAuth";
 
 type Props = {
   onSuccess?: () => void;
 };
 
 export default function ClassFeesForm({ onSuccess }: Props) {
+  const { currentTerm } = useAuth();
   const [classes, setClasses] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [terms, setTerms] = useState<any[]>([]);
@@ -23,13 +25,14 @@ export default function ClassFeesForm({ onSuccess }: Props) {
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [sessionId, setSessionId] = useState(String(currentTerm?.session.id))
 
   const [showModal, setShowModal] = useState(false);
 
   const [form, setForm] = useState({
     school_class_id: "",
-    session_id: "",
-    term_id: "",
+    session_id: currentTerm?.session.id.toString(),
+    term_id: currentTerm?.id.toString(),
     amount: "",
   });
 
@@ -79,8 +82,9 @@ export default function ClassFeesForm({ onSuccess }: Props) {
   };
 
   useEffect(() => {
+    fetchTerms(sessionId)
     loadData();
-  }, []);
+  }, [sessionId]);
 
   // =========================
   // HANDLE INPUT CHANGE
@@ -97,8 +101,9 @@ export default function ClassFeesForm({ onSuccess }: Props) {
 
     // 🔥 IF SESSION CHANGES → RESET TERM + LOAD TERMS
     if (name === "session_id") {
+        setSessionId(value)
       setForm((prev) => ({ ...prev, term_id: "" }));
-      fetchTerms(value);
+      fetchTerms(sessionId);
     }
   };
 
@@ -129,16 +134,11 @@ export default function ClassFeesForm({ onSuccess }: Props) {
           payload,
         );
         loadData();
-        onSuccess?.()
-        setTerms([])
-        setForm({
-          school_class_id: "",
-          session_id: "",
-          term_id: "",
-          amount: "",
-        });
+        onSuccess?.();
+        setTerms([]);
+        
         setShowModal(false);
-        alert(
+        toast.success(
           `Class fee for ${existingFees.school_class.name} updated successfully`,
         );
       } else {
@@ -155,15 +155,25 @@ export default function ClassFeesForm({ onSuccess }: Props) {
         setTerms([]);
         setShowModal(false);
 
-        onSuccess?.()
-        alert("Class fee created successfully")}
-      
+        onSuccess?.();
+        alert("Class fee created successfully");
+      }
     } catch (err) {
       console.log(err);
       alert("Failed to create fee");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFeeDelete = async (fee: any) => {
+    const res = await handleUserDelete(
+      "results",
+      "classfees",
+      fee.id,
+      "Class Fees",
+    );
+    if (res) loadData();
   };
 
   // =========================
@@ -241,14 +251,9 @@ export default function ClassFeesForm({ onSuccess }: Props) {
                         </button>
 
                         <button
-                          onClick={() =>
-                            handleUserDelete(
-                              "results",
-                              "classfees",
-                              fee.id,
-                              "Class Fees",
-                            )
-                          }
+                          onClick={() => {
+                            handleFeeDelete(fee);
+                          }}
                           className="px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 transition"
                         >
                           Delete

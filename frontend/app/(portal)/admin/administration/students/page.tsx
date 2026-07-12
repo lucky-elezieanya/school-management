@@ -120,29 +120,6 @@ export default function AdminStudentsPage() {
     loadStudents();
   }, [filterForm]);
 
-  // =========================
-  // DELETE STUDENT
-  // =========================
-  const handleDelete = async (id: number) => {
-    try {
-      const res = await handleUserDelete(
-        "academics",
-        "students",
-        id,
-        "Student",
-      );
-
-      if (res) {
-        setStudents((prev) => prev.filter((student) => student.id !== id));
-
-        setTotalStudents((prev) => prev - 1);
-      }
-
-      router.refresh();
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
   // =========================
   // SEARCH FILTER

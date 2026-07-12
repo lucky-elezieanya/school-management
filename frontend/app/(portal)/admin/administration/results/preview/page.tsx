@@ -1,15 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  CheckCircle2,
+  ClipboardCheck,
+  Eye,
+  GraduationCap,
+  Loader2,
+  School,
+  Send,
+  Users,
+} from "lucide-react";
 
 import { apiAction, apiHeaders, BASE_URL, createAction } from "@/app/lib/api";
 
+import { toast } from "sonner";
+
 import { useAuth } from "@/app/lib/hooks/useAuth";
+
 import { fetchClassEntryData } from "@/app/services/results";
+
+import { ClassType } from "@/app/lib/types";
 
 export default function ResultsPreview() {
   const { currentTerm } = useAuth();
-
+  const [currentClass, setCurrentClass] = useState<ClassType | null>(null);
   const [classes, setClasses] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
 
@@ -24,6 +40,33 @@ export default function ResultsPreview() {
   const [loadingResults, setLoadingResults] = useState(false);
 
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [allResultsSubmitted, setAllResultsSubmitted] = useState(false);
+  const approved = workflow?.status === "Approved";
+
+  const released = workflow?.status === "Released";
+
+  const selectedClassName = currentClass
+    ? `${currentClass.name} ${currentClass.arm?.code ?? ""}`
+    : "No Class Selected";
+
+  const loadAllResultsSubmitted = async () => {
+    if (!currentTerm) return;
+    const url = `${BASE_URL}/results/results/all-results-submitted/?term_id=${currentTerm?.id}`;
+    fetch(url, {
+      headers: apiHeaders(),
+    })
+      .then((resp) => resp.json())
+      .then((res) => {
+        setAllResultsSubmitted(res.all_results_submitted);
+      })
+      .catch((err) => {
+        console.error(err);
+      });
+  };
+
+  useEffect(() => {
+    loadAllResultsSubmitted();
+  }, [currentTerm]);
 
   useEffect(() => {
     loadClasses();
@@ -47,6 +90,7 @@ export default function ResultsPreview() {
       const res = await apiAction("academics", "classes");
 
       setClasses(res?.results || []);
+      setSelectedClass(res?.results[0].id);
     } catch (err) {
       console.error(err);
     }
@@ -61,6 +105,7 @@ export default function ResultsPreview() {
       });
       const res = await resp.json();
       setSubjects(res?.results || []);
+      setSelectedSubject(res?.results[0].id)
     } catch (err) {
       console.error(err);
     } finally {
@@ -113,7 +158,7 @@ export default function ResultsPreview() {
         session_id: currentTerm?.session.id,
       });
 
-      alert("Results approved successfully");
+      toast.success("Results approved successfully");
 
       loadWorkflow(selectedClass!);
     } catch (err) {
@@ -130,7 +175,7 @@ export default function ResultsPreview() {
         session_id: currentTerm?.session?.id,
       });
 
-      alert("All class results approved successfully");
+      toast.success("All class results approved successfully");
 
       if (selectedClass) {
         loadWorkflow(selectedClass);
@@ -148,7 +193,22 @@ export default function ResultsPreview() {
         session_id: currentTerm?.session.id,
       });
 
-      alert("Results released successfully");
+      toast.success("Results released successfully");
+
+      loadWorkflow(selectedClass!);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  const handleUnlockEdit = async () => {
+    try {
+      await createAction("results", "workflow/unlock", {
+        school_class_id: selectedClass,
+        term_id: currentTerm?.id,
+        session_id: currentTerm?.session.id,
+      });
+
+      toast.success("Results edit unlocked successfully");
 
       loadWorkflow(selectedClass!);
     } catch (err) {
@@ -159,12 +219,25 @@ export default function ResultsPreview() {
   const handleReleaseAll = async () => {
     try {
       await createAction("results", "workflow/release-all", {
-       
         term_id: currentTerm?.id,
         session_id: currentTerm?.session.id,
       });
 
-      alert("All results released successfully"); 
+      toast.success("All results released successfully");
+
+      loadWorkflow(selectedClass!);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  const handleUnlockEditAll = async () => {
+    try {
+      await createAction("results", "workflow/unlock-all", {
+        term_id: currentTerm?.id,
+        session_id: currentTerm?.session.id,
+      });
+
+      toast.success("All results edit unlocked successfully");
 
       loadWorkflow(selectedClass!);
     } catch (err) {
@@ -173,163 +246,404 @@ export default function ResultsPreview() {
   };
 
   return (
-    <div className="p-4 lg:p-6">
-      <div className="grid lg:grid-cols-4 gap-6">
-        {/* CLASSES */}
-        <div className="bg-white rounded-xl border p-4">
-          <h2 className="font-bold text-emerald-700 mb-4">Classes</h2>
+    <div className="min-h-screen bg-slate-100">
+      <div className="mx-auto max-w-7xl p-6 space-y-6">
+        {/* ====================================================== */}
+        {/* PAGE HEADER */}
+        {/* ====================================================== */}
+        <div className="rounded-2xl border bg-white p-7 shadow-sm ">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="md:w-1/2">
+              <h1 className="text-3xl font-bold text-slate-900">
+                Results Approval & Release
+              </h1>
 
-          <div className="space-y-2">
-            {classes.map((cls) => (
-              <button
-                key={cls.id}
-                onClick={() => {
-                  setSelectedClass(cls.id);
-                  setSelectedSubject(null);
-                  setResults([]);
-                }}
-                className={`w-full text-left px-4 py-3 rounded-lg border transition ${
-                  selectedClass === cls.id
-                    ? "bg-emerald-600 text-white"
-                    : "hover:bg-emerald-50"
-                }`}
-              >
-                {cls.name} {cls.arm.code}
-              </button>
-            ))}
-          </div>
-        </div>
+              <p className="mt-2 text-slate-500 max-w-2xl">
+                Preview submitted student results before approving and releasing
+                them to the student portal.
+              </p>
+            </div>
 
-        {/* SUBJECTS */}
-        <div className="bg-white rounded-xl border p-4">
-          <h2 className="font-bold text-emerald-700 mb-4">Subjects</h2>
+            <div className="flex flex-wrap gap-3">
+              <div className="rounded-xl border bg-slate-50 px-5 py-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500">
+                  Current Term
+                </p>
 
-          {loadingSubjects ? (
-            <div>Loading...</div>
-          ) : (
-            <div className="space-y-2">
-              {subjects.map((sub: any) => (
-                <button
-                  key={sub.id}
-                  onClick={() => setSelectedSubject(sub.id)}
-                  className={`w-full text-left px-4 py-3 rounded-lg border ${
-                    selectedSubject === sub.id
-                      ? "bg-emerald-600 text-white"
-                      : "hover:bg-emerald-50"
+                <p className="font-semibold text-slate-800">
+                  {currentTerm?.name}
+                </p>
+              </div>
+
+              <div className="rounded-xl border bg-slate-50 px-5 py-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500">
+                  Selected Class
+                </p>
+
+                <p className="font-semibold text-slate-800">
+                  {selectedClassName}
+                </p>
+              </div>
+
+              <div className="rounded-xl border bg-slate-50 px-5 py-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500">
+                  Status
+                </p>
+
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold
+                  ${
+                    released
+                      ? "bg-blue-100 text-blue-700"
+                      : approved
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {sub.subject?.name}
-                </button>
-              ))}
+                  {workflow?.status || "Pending"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>{" "}
+        {/* ====================================================== */}
+        {/* DASHBOARD CARDS */}
+        {/* ====================================================== */}
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Classes</p>
+
+                <p className="mt-2 text-3xl font-bold">{classes.length}</p>
+              </div>
+
+              <div className="rounded-xl bg-emerald-100 p-3">
+                <School className="h-7 w-7 text-emerald-700" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Subjects</p>
+
+                <p className="mt-2 text-3xl font-bold">{subjects.length}</p>
+              </div>
+
+              <div className="rounded-xl bg-indigo-100 p-3">
+                <GraduationCap className="h-7 w-7 text-indigo-700" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Students</p>
+
+                <p className="mt-2 text-3xl font-bold">{results.length}</p>
+              </div>
+
+              <div className="rounded-xl bg-orange-100 p-3">
+                <Users className="h-7 w-7 text-orange-700" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm border">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Status</p>
+
+                <p className="mt-2 text-lg font-bold">
+                  {workflow?.status || "Pending"}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-blue-100 p-3">
+                <ClipboardCheck className="h-7 w-7 text-blue-700" />
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* =========================================== */}
+        {/* ACTIONS */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+          <h2 className="font-bold text-emerald-700">Results Preview</h2>
+
+          {workflow && (
+            <div className="mt-2 md:mt-0">
+              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm">
+                {workflow.status}
+              </span>
             </div>
           )}
         </div>
-
-        {/* RESULTS */}
-        <div className="lg:col-span-2 bg-white rounded-xl border p-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
-            <h2 className="font-bold text-emerald-700">Results Preview</h2>
-
-            {workflow && (
-              <div className="mt-2 md:mt-0">
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm">
-                  {workflow.status}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* ACTION BUTTONS */}
-          <div className="flex gap-2 mb-4 flex-wrap">
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap gap-4">
             <button
               onClick={handleApprove}
               disabled={
                 workflow?.status === "Approved" ||
-                workflow?.status === "Released"
+                workflow?.status === "Released" ||
+                !allResultsSubmitted
               }
-              className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg"
+              className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-white transition hover:bg-emerald-700 disabled:bg-gray-300"
             >
-              Approve
+              <CheckCircle2 size={18} />
+              Approve Class
             </button>
 
-            {/* ✅ NEW APPROVE ALL BUTTON */}
             <button
               onClick={handleApproveAll}
               disabled={
                 workflow?.status === "Approved" ||
-                workflow?.status === "Released"
+                workflow?.status === "Released" ||
+                !allResultsSubmitted
               }
-              className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg font-semibold shadow-sm"
+              className="flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-white hover:bg-emerald-800 disabled:bg-gray-300"
             >
-              Approve All Results
+              <ClipboardCheck size={18} />
+              Approve All
             </button>
 
             <button
               onClick={handleRelease}
-              disabled={workflow?.status !== "Approved"}
-              className="bg-emerald-800 hover:bg-emerald-900 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg"
+              disabled={workflow?.status !== "Approved" || !allResultsSubmitted}
+              className="flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-white hover:bg-blue-800 disabled:bg-gray-300"
             >
-              Release
+              <Send size={18} />
+              Release Class
             </button>
 
             <button
               onClick={handleReleaseAll}
-              disabled={workflow?.status !== "Approved"}
-              className="bg-emerald-800 hover:bg-emerald-900 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg"
+              disabled={workflow?.status !== "Approved" || !allResultsSubmitted}
+              className="flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-white hover:bg-indigo-800 disabled:bg-gray-300"
             >
-              Release All Results
+              <Send size={18} />
+              Release All
+            </button>
+            <button
+              onClick={handleUnlockEdit}
+              className="flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-white hover:bg-indigo-800 disabled:bg-gray-300"
+            >
+              <Send size={18} />
+              Unlock Results Edit
+            </button>
+            <button
+              onClick={handleUnlockEditAll}
+              //   disabled={!allResultsSubmitted}
+              className="flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-white hover:bg-indigo-800 disabled:bg-gray-300"
+            >
+              <Send size={18} />
+              Unlock All Results Edit
             </button>
           </div>
+        </div>
+        {/* ====================================== */}
+        {/* MAIN CONTENT */}
+        {/* =================================== */}
+        <div className="grid grid-cols-12 gap-6 items-start">
+          {/* ==================== CLASSES ==================== */}
+          <div className="col-span-12 lg:col-span-2 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b bg-slate-50 px-5 py-4">
+              <h2 className="text-lg font-semibold text-slate-800">Classes</h2>
 
-          {loadingResults ? (
-            <div>Loading results...</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2">Student</th>
-                    <th>1st</th>
-                    <th>2nd</th>
-                    <th>Exam</th>
-                    <th>Total</th>
-                    <th>Grade</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {results.map((r: any) => (
-                    <tr key={r.result_id} className="border-b">
-                      <td className="py-2">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={r.profile_picture || "/avatar.png"}
-                            alt={r.student_name}
-                            className="w-10 h-10 rounded-full object-cover border shadow-sm"
-                          />
-
-                          <div className="flex flex-col">
-                            <span className="font-medium text-gray-800">
-                              {r.student_name}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {r.admission_number}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td>{r.first_test}</td>
-                      <td>{r.second_test}</td>
-                      <td>{r.exam_score}</td>
-                      <td>{r.total_score}</td>
-                      <td>{r.grade}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <p className="mt-1 text-sm text-slate-500">Select a class</p>
             </div>
-          )}
+
+            <div className="p-4 space-y-2 max-h-[650px] overflow-y-auto">
+              {classes.map((cls) => (
+                <button
+                  key={cls.id}
+                  onClick={() => {
+                    setSelectedClass(cls.id);
+                    setSelectedSubject(null);
+                    setCurrentClass(cls);
+                    setResults([]);
+                  }}
+                  className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+                    selectedClass === cls.id
+                      ? "border-emerald-600 bg-emerald-600 text-white shadow"
+                      : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50"
+                  }`}
+                >
+                  <p className="font-semibold">{cls.name}</p>
+
+                  <p
+                    className={`text-xs ${
+                      selectedClass === cls.id
+                        ? "text-emerald-100"
+                        : "text-slate-500"
+                    }`}
+                  >
+                    {cls.arm.code}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ==================== SUBJECTS ==================== */}
+          <div className="col-span-12 lg:col-span-3 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b bg-slate-50 px-5 py-4">
+              <h2 className="text-lg font-semibold text-slate-800">Subjects</h2>
+
+              <p className="mt-1 text-sm text-slate-500">Select a subject</p>
+            </div>
+
+            <div className="p-4 max-h-[650px] overflow-y-auto">
+              {loadingSubjects ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
+                </div>
+              ) : subjects.length > 0 ? (
+                <div className="space-y-2">
+                  {subjects.map((sub: any) => (
+                    <button
+                      key={sub.id}
+                      onClick={() => setSelectedSubject(sub.id)}
+                      className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+                        selectedSubject === sub.id
+                          ? "border-emerald-600 bg-emerald-600 text-white shadow"
+                          : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50"
+                      }`}
+                    >
+                      {sub.subject?.name}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-40 items-center justify-center text-center text-sm text-slate-500">
+                  Select a class to view its subjects.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ==================== RESULTS ==================== */}
+          <div className="col-span-12 lg:col-span-7 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b bg-slate-50 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-800">
+                    Results Preview
+                  </h2>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Student scores for the selected subject.
+                  </p>
+                </div>
+
+                {workflow && (
+                  <span
+                    className={`rounded-full px-3 py-1 text-sm font-medium ${
+                      workflow.status === "Released"
+                        ? "bg-blue-100 text-blue-700"
+                        : workflow.status === "Approved"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {workflow.status}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              {loadingResults ? (
+                <div className="flex justify-center py-20">
+                  <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+                </div>
+              ) : (
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-50">
+                    <tr className="border-b">
+                      <th className="px-5 py-3 text-left font-semibold text-slate-700">
+                        Student
+                      </th>
+
+                      <th className="px-3 py-3 text-center font-semibold">
+                        1st
+                      </th>
+
+                      <th className="px-3 py-3 text-center font-semibold">
+                        2nd
+                      </th>
+
+                      <th className="px-3 py-3 text-center font-semibold">
+                        Exam
+                      </th>
+
+                      <th className="px-3 py-3 text-center font-semibold">
+                        Total
+                      </th>
+
+                      <th className="px-3 py-3 text-center font-semibold">
+                        Grade
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {results.length > 0 ? (
+                      results.map((r: any) => (
+                        <tr
+                          key={r.result_id}
+                          className="border-b transition hover:bg-slate-50"
+                        >
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={r.profile_picture || "/avatar.png"}
+                                alt={r.student_name}
+                                className="h-10 w-10 rounded-full border object-cover"
+                              />
+
+                              <div>
+                                <p className="font-medium text-slate-800">
+                                  {r.student_name}
+                                </p>
+
+                                <p className="text-xs text-slate-500">
+                                  {r.admission_number}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="text-center">{r.first_test}</td>
+                          <td className="text-center">{r.second_test}</td>
+                          <td className="text-center">{r.exam_score}</td>
+
+                          <td className="text-center font-semibold">
+                            {r.total_score}
+                          </td>
+
+                          <td className="text-center font-semibold">
+                            {r.grade}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="py-20 text-center text-slate-500"
+                        >
+                          No results available.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

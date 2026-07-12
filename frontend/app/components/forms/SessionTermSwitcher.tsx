@@ -6,13 +6,11 @@ import { AcademicSession, Term } from "@/app/lib/types";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 
 export default function SessionTermSwitcher({
-	// setActiveView,
+
 	setToggleSessionModal,
 }: {
 	setToggleSessionModal: React.Dispatch<React.SetStateAction<boolean>>;
-	// setActiveView: React.Dispatch<
-	// 	React.SetStateAction<"create" | "toggle" | null>
-	// >;
+	
 }) {
 	const { setCurrentTerm } = useAuth();
 	const [sessions, setSessions] = useState<AcademicSession[]>([]);

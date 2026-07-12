@@ -22,8 +22,8 @@ class User(AbstractUser):
     @property
     def full_name(self):
         if self.middle_name:
-            return f"{self.first_name} {self.middle_name} {self.last_name}"
-        return f"{self.first_name} {self.last_name}"
+            return f"{self.last_name} {self.first_name} {self.middle_name} "
+        return f"{self.last_name} {self.first_name}"
     
     @property
     def age(self):
@@ -38,3 +38,6 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
+    
+    class Meta:
+        ordering = [ "last_name", "first_name", "middle_name",]

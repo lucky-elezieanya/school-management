@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiAction, BASE_URL, apiHeaders } from "@/app/lib/api";
-
+import { toast } from "sonner";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { ClassType, StudentType } from "@/app/lib/types";
 
@@ -23,7 +23,7 @@ export default function BulkAttendanceComponent() {
   const [students, setStudents] = useState<StudentType[]>([]);
   const [rows, setRows] = useState<Record<number, AttendanceRow>>({});
 
-  const [daysOpen, setDaysOpen] = useState<number>(0);
+  const [daysOpen, setDaysOpen] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -62,7 +62,9 @@ export default function BulkAttendanceComponent() {
 
     const data = await res.json();
 
-    setDaysOpen(data.results[0].days_school_opened || 0);
+    if (data.days_school_opened) {
+      setDaysOpen(data.results[0].days_school_opened || 0);
+    }
   };
 
   /* =========================
@@ -126,10 +128,10 @@ export default function BulkAttendanceComponent() {
     const num = Number(value);
 
     // frontend validation
-    if (num > daysOpen) {
-      setError(`Max allowed is ${daysOpen}`);
-      return;
-    }
+    // if (num > daysOpen) {
+    //   setError(`Max allowed is ${daysOpen}`);
+    //   return;
+    // }
 
     setError("");
 
@@ -170,12 +172,13 @@ export default function BulkAttendanceComponent() {
         },
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) throw new Error();
-
-      await res.json();
-
-      alert("Attendance saved successfully!");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      if (res.ok) {
+        toast.success("Attendance saved successfully!");
+        console.log(data);
+        
+      }
     } catch {
       setError("Bulk save failed");
     } finally {
@@ -236,13 +239,19 @@ export default function BulkAttendanceComponent() {
             <tbody>
               {students.map((s) => (
                 <tr key={s.id} className="border-t">
-                  <td className="p-3">{s.user.full_name}</td>
-
+                  <td className="p-3 flex gap-2 items-center">
+                    <img
+                      src={s.user.profile_picture || "/avatar.png"}
+                      alt=""
+                      className="object-cover w-12 h-12 rounded-full"
+                    />
+                    <span>{s.user.full_name}</span>
+                  </td>
                   <td className="p-3">
                     <input
                       type="number"
                       value={rows[s.id]?.attendance ?? ""}
-                      max={daysOpen}
+                      //   max={daysOpen}
                       onChange={(e) => handleChange(s.id, e.target.value)}
                       className="border p-2 rounded w-24"
                     />

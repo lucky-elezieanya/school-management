@@ -9,7 +9,7 @@ from rest_framework.response import Response
 import pandas as pd  
 from django.db import transaction   
 import traceback
-from django.db.models import Exists, OuterRef, Subquery
+from django.db.models import Count, Exists, OuterRef, Subquery
 from results.models import Behaviour 
 from django.contrib.auth import get_user_model   
 from .serializers import (
@@ -697,7 +697,66 @@ class ClassViewSet(viewsets.ModelViewSet):
         return Response({
             "subjects": serializer.data
         })
-        
+    
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        Returns all classes together with:
+        - student count
+        - class teacher
+        """
+
+        queryset = (
+            self.get_queryset()
+            .select_related(
+                "arm",
+                "class_teacher",
+                "class_teacher__user",
+            )
+            .annotate(
+                student_count=Count(
+                    "student_enrollments__student",
+                    distinct=True,
+                )
+            )
+            .order_by("name")
+        )
+
+        data = []
+
+        for school_class in queryset:
+            teacher = school_class.class_teacher
+
+            data.append(
+                {
+                    "id": school_class.id,
+                    "name": school_class.name,
+                    "arm": {
+                        "id": school_class.arm.id,
+                        "name": school_class.arm.name,
+                        "code": school_class.arm.code,
+                    },
+                    "description": school_class.description,
+                    "is_active": school_class.is_active,
+                    "student_count": school_class.student_count,
+                    "class_teacher": (
+                        {
+                            "id": teacher.id,
+                            "full_name": teacher.user.full_name,
+                            "username": teacher.user.username,
+                        }
+                        if teacher
+                        else None
+                    ),
+                }
+            )
+
+        return Response(
+            {
+                "count": len(data),
+                "results": data,
+            }
+        )    
     
     @action(detail=False, methods=["post"], url_path="upload")
     def upload(self, request, pk=None):
@@ -978,7 +1037,35 @@ class TeacherViewSet(viewsets.ModelViewSet):
                     return queryset.filter(pk=teacher.pk)
 
             return queryset.none()
-                                           
+       
+    @action(detail=False, methods=["get"], url_path="teacher")
+    def teacher(self, request):
+        user = request.user
+        user_id = request.query_params.get("user_id")
+
+        if not user_id:
+            return Response(
+                {"detail": "user_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if str(user.id) != user_id:
+            return Response(
+                {"detail": "Permission denied."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        teacher = self.get_queryset().filter(user_id=user.id).first()
+
+        if not teacher:
+            return Response(
+                {"detail": "Teacher not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = self.get_serializer(teacher)
+        return Response(serializer.data)
+                                      
 # ==============================
 # SUBJECT VIEWSET
 # ==============================

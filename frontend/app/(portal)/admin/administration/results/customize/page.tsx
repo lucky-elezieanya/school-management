@@ -5,6 +5,12 @@ import { Check, Loader2 } from "lucide-react";
 import { apiHeaders, BASE_URL } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { toast } from "sonner";
+import {
+  getClasses,
+  getSessions,
+  sessionTerms,
+} from "@/app/services/academics";
+import { AcademicSession, Term } from "@/app/lib/types";
 
 type CustomOption = {
   id: keyof ResultCustomization;
@@ -137,9 +143,6 @@ const ACTIONS: CustomOption[] = [
 export default function Customize() {
   const { currentTerm } = useAuth();
 
-  const termId = currentTerm?.id;
-  const sessionId = currentTerm?.session?.id;
-
   const defaultSettings = useMemo<ResultCustomization>(
     () => ({
       subject_average: true,
@@ -172,45 +175,116 @@ export default function Customize() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [selectedClass, setSelectedClass] = useState("");
+  const [loadingClasses, setLoadingClasses] = useState(true);
+
+  const [sessionId, setSessionId] = useState(currentTerm?.session?.id);
+  const [sessions, setSessions] = useState<AcademicSession[]>([]);
+  const [session, setSession] = useState({
+    id: currentTerm?.session.id,
+    name: currentTerm?.session?.name,
+    is_active: currentTerm?.session?.is_active,
+  });
+  const [termId, setTermId] = useState(currentTerm?.id);
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [term, setTerm] = useState({
+    id: currentTerm && currentTerm.id,
+    name: currentTerm && currentTerm.name,
+    is_active: currentTerm && currentTerm.is_active,
+  });
 
   useEffect(() => {
-    if (!termId || !sessionId) {
+    const fetchSessions = async () => {
+      const res = await getSessions();
+
+      if (res) {
+        setSessions(res.results);
+      }
+    };
+
+    fetchSessions();
+  }, []);
+
+  const fetchTerms = async (sessionId: number) => {
+    if (!sessionId) return;
+
+    setTerms([]);
+
+    const res = await sessionTerms(sessionId);
+
+    if (res) {
+      setTerms(res.terms);
+    }
+  };
+  useEffect(() => {
+    if (!sessionId) return;
+    fetchTerms(sessionId);
+  }, [sessionId]);
+
+  // =========================
+  // LOAD CLASSES (UNCHANGED)
+  // =========================
+  const loadClasses = async () => {
+    try {
+      setLoadingClasses(true);
+      const res = await getClasses();
+      setClasses(res?.results || res || []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
+  useEffect(() => {
+    loadClasses();
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId || !termId) {
       setLoading(false);
       return;
     }
 
     fetchSettings();
-  }, [termId, sessionId]);
+  }, [sessionId, termId, selectedClass]);
 
-  async function fetchSettings() {
-    try {
-      setLoading(true);
+async function fetchSettings() {
+  if (!sessionId || !termId) return;
 
-      const response = await fetch(
-        `${BASE_URL}/results/customize/?session=${sessionId}&term=${termId}`,
-        {
-          method: "GET",
-          headers: apiHeaders(),
-        },
-      );
+  try {
+    setLoading(true);
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch customization settings.");
-      }
+    const url = new URL(`${BASE_URL}/results/customize/`);
 
-      const data: ResultCustomizationResponse = await response.json();
+    url.searchParams.set("session", String(sessionId));
+    url.searchParams.set("term", String(termId));
 
-      const { session, term, updated_at, ...customization } = data;
-
-      setSettings(customization);
-      setOriginalSettings(customization);
-    } catch (err) {
-      console.error(err);
-      toast.error("Unable to load customization.");
-    } finally {
-      setLoading(false);
+    if (selectedClass) {
+      url.searchParams.set("school_class_id", String(selectedClass));
     }
+
+    const response = await fetch(url.toString(), {
+      headers: apiHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch customization.");
+    }
+
+    const data: ResultCustomizationResponse = await response.json();
+
+    const { session, term, updated_at, ...customization } = data;
+
+    setSettings(customization);
+    setOriginalSettings(customization);
+  } catch (error) {
+    console.error(error);
+    toast.error("Unable to load customization.");
+  } finally {
+    setLoading(false);
   }
+}
 
   function toggleSetting(key: keyof ResultCustomization) {
     setSettings((prev) => ({
@@ -225,17 +299,28 @@ export default function Customize() {
 
   async function saveSettings() {
     if (!termId || !sessionId) return;
-
+    let payload;
+    if (selectedClass) {
+      payload = {
+        session: sessionId,
+        term: termId,
+        school_class_id: selectedClass,
+        ...settings,
+      };
+    } else {
+      payload = {
+        session: sessionId,
+        term: termId,
+        ...settings,
+      };
+    }
     try {
       setSaving(true);
       const response = await fetch(`${BASE_URL}/results/customize/`, {
         method: "POST",
         headers: { ...apiHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session: sessionId,
-          term: termId,
-          ...settings,
-        }),
+
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -247,6 +332,7 @@ export default function Customize() {
 
       setOriginalSettings(customization);
       setSettings(customization);
+      fetchSettings()
 
       toast.success("Customization updated successfully.");
     } catch (error) {
@@ -256,6 +342,15 @@ export default function Customize() {
       setSaving(false);
     }
   }
+
+  // =========================
+  // CLASS SELECT (checkbox UI)
+  // =========================
+  const handleClassSelect = async (classId: string) => {
+    const newClass = selectedClass === classId ? "" : classId;
+
+    setSelectedClass(newClass);
+  };
 
   const hasChanges =
     JSON.stringify(settings) !== JSON.stringify(originalSettings);
@@ -279,8 +374,8 @@ export default function Customize() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto pb-10">
-      <div className="mx-5 mb-8">
+    <div className="max-w-5xl w-full mx-auto pb-10">
+      <div className="mx-5 mb-2">
         <h1 className="text-3xl font-bold text-gray-900">
           Customize Result Sheet
         </h1>
@@ -295,15 +390,136 @@ export default function Customize() {
           {currentTerm.name}
         </div>
       </div>
+      {/* =========================== session and term selection ============================= */}
+      <div className="grid grid-cols-1 gap-6 rounded-xl border border-emerald-100 bg-white p-5 shadow-sm md:grid-cols-2 md:p-6 lg:p-8">
+        {/* Session */}
+        <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+            Session
+          </p>
 
-      <div className="mx-5 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full">
-          <thead className="bg-gray-50">
+          <h2 className="mt-1 text-xl font-bold text-slate-900">
+            Select a Session
+          </h2>
+
+          {sessions.length > 0 ? (
+            <select
+              value={session?.id || ""}
+              onChange={(event) => {
+                const selectedSession = sessions.find(
+                  (s: AcademicSession) => s.id === Number(event.target.value),
+                );
+
+                if (selectedSession) {
+                  setSession(selectedSession);
+                  setSessionId(selectedSession.id);
+                }
+              }}
+              className="mt-4 h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">Select a Session</option>
+
+              {sessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} {s.is_active ? "(Active)" : ""}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">No sessions available</p>
+          )}
+
+          <p className="mt-4 text-sm text-slate-500">
+            {session
+              ? `${session.name} / ${term?.name ?? "No term selected"}`
+              : "Waiting for active session"}
+          </p>
+        </div>
+
+        {/* Term */}
+        <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+            Term
+          </p>
+
+          <h2 className="mt-1 text-xl font-bold text-slate-900">
+            Select a Term
+          </h2>
+
+          {terms.length > 0 ? (
+            <select
+              value={term?.id || ""}
+              onChange={(event) => {
+                const selectedTerm = terms.find(
+                  (t: Term) => t.id === Number(event.target.value),
+                );
+
+                if (selectedTerm) {
+                  setTerm(selectedTerm);
+                  setTermId(selectedTerm.id);
+                }
+              }}
+              className="mt-4 h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">Select a Term</option>
+
+              {terms.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.is_active ? "(Active)" : ""}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">No terms available</p>
+          )}
+
+          <p className="mt-4 text-sm text-slate-500">
+            {term
+              ? `${term.name} - ${session?.name ?? ""}`
+              : "No term selected"}
+          </p>
+        </div>
+      </div>
+      <div className="mx-5 overflow-hidden flex gap-4 rounded-xl border border-gray-200 bg-white shadow-sm w-full">
+        {/* ===================== CLASSES ===================== */}
+        <div className="bg-white border w-20 rounded-xl border-r-0 p-0 md:w-1/4">
+          <h2 className="font-semibold  bg-gray-50 py-4 px-2 w-full text-sm">
+            Class
+          </h2>
+
+          {loadingClasses && (
+            <p className="text-sm text-gray-500 mb-2">Loading classes...</p>
+          )}
+
+          <div className="space-y-2 text-sm text-center mt-4">
+            {classes.map((cls: any) => (
+              <label
+                key={cls.id}
+                className="flex flex-row gap-2 w-fit items-center gap-3 cursor-pointer p-2 rounded hover:bg-gray-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedClass === String(cls.id)}
+                  onChange={() => handleClassSelect(String(cls.id))}
+                  className="h-4 w-4 text-emerald-600"
+                />
+
+                <span className="text-sm">
+                  {cls.name} {cls.arm?.name}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/*========= CUSTOMIZATIONS ==============*/}
+        <table className="w-3/4">
+          <thead className="bg-gray-50 w-full">
             <tr>
-              <th className="px-2 py-4 text-left text-sm font-semibold text-gray-700">
+              <th className="px-1 py-4 text-center text-sm font-semibold text-gray-700">
                 #
               </th>
-              <th className="w-28 px-6 py-4 text-left text-sm font-semibold text-gray-700">
+              <th className=" px-6 py-4 text-center text-sm font-semibold text-gray-700">
                 Enable
               </th>
 
@@ -311,7 +527,7 @@ export default function Customize() {
                 Feature
               </th>
 
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+              <th className="px-2 py-4 text-center text-sm font-semibold text-gray-700">
                 Description
               </th>
             </tr>
@@ -321,10 +537,12 @@ export default function Customize() {
             {ACTIONS.map((action, index) => (
               <tr
                 key={action.id}
-                className="border-t border-gray-100 transition hover:bg-gray-50"
+                className="border-t border-gray-100 transition items-center hover:bg-gray-50"
               >
-                <td className="px-2 py-2 text-sm text-gray-500">{index + 1}</td>
-                <td className="px-6 py-5">
+                <td className="px-2 py-2 text-center justify-center fle text-sm text-gray-500">
+                  <span>{index + 1}</span>
+                </td>
+                <td className="px-2 py-6 text-center fle justify-center">
                   <input
                     type="checkbox"
                     checked={Boolean(settings[action.id])}

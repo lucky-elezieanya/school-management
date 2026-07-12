@@ -1,5 +1,7 @@
+import { ConfirmToast } from "../components/ConfirmToast";
 import { getAccessToken } from "./auth";
 import { getTokens, logout } from "./auth";
+import {toast} from "sonner"
 
 export const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "http://127.0.0.1:8000/api";
@@ -187,33 +189,34 @@ export const updateAction = async (
 	return response;
 };
 
+
 export const handleUserDelete = async (
-	route_base: string,
-	route_name: string,
-	id: number,
-	item_name?: string,
-) => {
-	const confirmDelete = confirm(
-		`Are you sure you want to delete this ${item_name ?? "item"}?`,
-	);
+    route_base: string,
+    route_name: string,
+    id: number,
+    item_name?: string,
+  ) => {
+    const confirmed = await ConfirmToast(
+      "Delete Item",
+      `Are you sure you want to delete this ${item_name ?? "item"}? This action cannot be undone.`,
+    );
+  
+    if (!confirmed) return false;
+  
+    const url = `${BASE_URL}/${route_base}/${route_name}/${id}/`;
+  
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: apiHeaders(),
+    });
+  
+    if (!res.ok) {
+      toast.error(`Could not delete ${item_name ?? "item"}. Please try again.`);
+    }
+  
+    return true;
+  };
 
-	if (!confirmDelete) return false;
-
-	const url = `${BASE_URL}/${route_base}/${route_name}/${id}/`;
-    const token = getAccessToken();
-	const res = await fetch(url, {
-		method: "DELETE",
-		headers: {
-			Authorization: `Bearer ${token}`,
-		},
-	});
-
-	if (!res.ok) {
-		throw new Error("Delete failed");
-	}
-
-	return true;
-};
 export const getActiveTermSession = async () => {
 	const res = await fetch(`${BASE_URL}/academics/terms/active/`, {
 		headers: apiHeaders()
@@ -224,7 +227,6 @@ export const getActiveTermSession = async () => {
 	}
 	return response;
 };
-
 export const fetchClasses = async () => {
 	const res = await fetch(`${BASE_URL}/academics/classes/`, {
 		headers: apiHeaders()

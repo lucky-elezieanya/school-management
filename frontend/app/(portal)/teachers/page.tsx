@@ -11,34 +11,19 @@ import {
   Users,
   ClipboardList,
   BarChart2,
-  Bell,
-  LogOut,
-  Menu,
   ChevronRight,
-  CheckCircle,
   AlertCircle,
   Loader2,
   Download,
-  FileText,
   Star,
   Activity,
   UserCheck,
   MessageSquare,
   PenLine,
-  ShieldAlert,
-  Save,
   X,
-  ChevronDown,
-  RefreshCw,
   BookPlus,
 } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-  SheetClose,
-  SheetTitle,
-} from "@/components/ui/sheet";
+
 import {
   Card,
   CardContent,
@@ -46,15 +31,11 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import ResultEntryTable from "@/app/components/sections/ResultsEntryTable";
 import {
   fetchSubjects,
   fetchStudents,
   getWorkFlowApprovedStatus,
 } from "@/app/services/results";
-import CommentsBox from "@/app/components/sections/teachers/CommentsBox";
-import BulkAttendanceComponent from "@/app/components/sections/AttendanceComponent";
-import BehaviourComponent from "@/app/components/sections/BehaviourComponent";
 import Link from "next/link";
 
 // ============================================================
@@ -258,10 +239,7 @@ export default function TeacherDashboardPage() {
   }, [viewResultsClass, viewSubject, currentTerm]);
 
   // ── Handlers ───────────────────────────────────────────────
-  const handleLogout = () => {
-    logout();
-    router.replace("/login");
-  };
+
 
   // ── Download results ──────────────────────────────────────
   const handleDownload = async (cls: ClassItem) => {

@@ -1,6 +1,6 @@
 from decimal import Decimal
 import os
-from academics.models import AcademicSession, Class, SchoolAsset, StudentEnrollment, Term
+from academics.models import  Class, SchoolAsset, Student, StudentEnrollment, Term
 from django.db import transaction
 from django.db.models import (
     Count, 
@@ -38,8 +38,6 @@ import os
 from django.conf import settings
 from django.core.files import File
 from pypdf import PdfWriter
-
-
 from django.core.files import File
 from pypdf import PdfWriter
 import os
@@ -53,6 +51,8 @@ from django.core.files import File
 from pypdf import PdfWriter
 logger = logging.getLogger(__name__)
 from collections import defaultdict
+
+from .utils.chart_svg import generate_chart
 
 def merge_class_result_pdfs(
     school_class,
@@ -222,98 +222,7 @@ def merge_class_result_pdfs(
 
     return merged
 
-def generate_chart(results):
-    """
-    results = [
-        {
-            "subject_code": "ENG",
-            "total_score": 75,
-            "subject_average": 64,
-        }
-    ]
-    """
 
-    subjects = [r["subject_code"] for r in results]
-    scores = [float(r["total_score"]) for r in results]
-    subject_averages = [
-        float(r["subject_average"] or 0)
-        for r in results
-    ]
-
-    x = np.arange(len(subjects)) * 1.4
-    width = 0.5
-
-    plt.figure(figsize=(14, 4))
-
-    plt.bar(
-        x,
-        scores,
-        width=width,
-        label="Student Scores",
-        zorder=3,
-        color="blue"
-    )
-
-    plt.bar(
-        x + width,
-        subject_averages,
-        width=width,
-        label="Subject Average",
-        zorder=3,
-        color="purple"
-    )
-
-    plt.grid(
-        True,
-        axis="y",
-        linestyle="-",
-        alpha=1,
-        zorder=0,
-    )
-
-    plt.grid(
-        True,
-        axis="x",
-        linestyle="-",
-        alpha=1,
-        zorder=0,
-    )
-
-    plt.xticks(
-        x + width / 2,
-        subjects,
-        rotation=45,
-        ha="right",
-    )
-
-    plt.ylabel("Subject Scores")
-    plt.ylim(0, 120)
-
-    plt.legend()
-    plt.tight_layout()
-
-    buffer = io.BytesIO()
-
-    plt.savefig(
-        buffer,
-        format="png",
-        bbox_inches="tight",
-    )
-
-    buffer.seek(0)
-
-    image_png = buffer.getvalue()
-
-    graphic = base64.b64encode(image_png)
-
-    buffer.close()
-    plt.close()
-
-    return (
-        f"data:image/png;base64,"
-        f"{graphic.decode('utf-8')}"
-    )
-    
 def format_position(position):
     n = int(position)
 
@@ -392,7 +301,18 @@ def get_student_results(
     # ==================================================
     # RESULT CUSTOMIZATION
     # ==================================================
-    customization = (
+    customization = None
+    class_customization = (
+        ResultCustomization.objects.filter(
+            term_id=term_id,
+            session_id=session_id,
+            school_class_id=school_class.id
+        ).first()
+    )
+    if class_customization:
+        customization = class_customization
+    else:
+        customization = (
         ResultCustomization.objects.filter(
             term_id=term_id,
             session_id=session_id,
@@ -406,7 +326,7 @@ def get_student_results(
             session_id=session_id,
         )
 
-    head_teacher_signature = HeadTeacherSignature.objects.first()
+    head_teacher_signature = HeadTeacherSignature.objects.filter(is_active=True).first()
     # RAW RESULTS 
     results_qs = (
         Result.objects
@@ -510,7 +430,12 @@ def get_student_results(
         .order_by("-created_at")
         .first()
     )
-
+    
+    profile_picture = None
+    
+    if hasattr(student, 'user') and student.user.profile_picture:
+        profile_picture = student.user.profile_picture.path
+        print(f"Student profile_picture path: {profile_picture}")
     # ==================================================
     # RESULTS BUILD
     # ==================================================
@@ -531,15 +456,15 @@ def get_student_results(
         )
 
         first_term_total = subject_terms.get(
-            terms.get("First Term")
+            terms.get("first term")
         )
 
         second_term_total = subject_terms.get(
-            terms.get("Second Term")
+            terms.get("second term")
         )
 
         third_term_total = subject_terms.get(
-            terms.get("Third Term")
+            terms.get("third term")
         )
 
         scores = [
@@ -629,7 +554,7 @@ def get_student_results(
         if head_teacher_signature and head_teacher_signature.signature
         else None
     ),
-
+    
     "default_header_path": os.path.join(
         settings.BASE_DIR,
         "static",
@@ -659,6 +584,7 @@ def get_student_results(
         "overall_average_score": summary.average_score if summary else 0,
         "overall_class_average": summary.class_average if summary else 0,
         "class_position": format_position(summary.position) if summary else None,
+        "profile_picture": profile_picture,
 
         "total_subjects": summary.total_subjects if summary else len(results),
 
@@ -864,7 +790,6 @@ def generate_result_summary_for_class(
             )
 
         return len(aggregates)
-
 
 def generate_subject_summaries_for_class(
     school_class_id,

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClassType } from "@/app/lib/types";
 import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 
 export default function NewteacherPage() {
 	const router = useRouter();
@@ -65,13 +66,14 @@ export default function NewteacherPage() {
 
 			if (res) {
 				console.log(res);
-				alert("Teacher created successfully");
+				toast.success("Teacher created successfully");
 				router.push("/admin/administration/teachers");
 			}
 		} catch (error) {
+			toast.error("Failed to create teacher");
 			console.log(error);
 		} finally {
-			setLoading(false);
+			setLoading(false); 
 		}
 	};
 

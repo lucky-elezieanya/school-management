@@ -34,7 +34,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { apiAction } from "@/app/lib/api";
+import { apiAction, apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
 import { TeacherType } from "@/app/lib/types";
 
 const navLinks: {
@@ -70,19 +70,13 @@ const navLinks: {
 
   {
     id: "behaviour",
-    name: "Behaviour",
+    name: "Behaviour Qualities",
     icon: <Star size={18} />,
     href: "/teachers/behaviour",
   },
   {
-    id: "attendance",
-    name: "Attendance",
-    icon: <Activity size={18} />,
-    href: "/teachers/attendance",
-  },
-  {
     id: "comments",
-    name: "Enter Term Comments",
+    name: "Attendance/Behavioural Comments",
     icon: <MessageSquare size={18} />,
     href: "/teachers/comments",
   },
@@ -97,7 +91,7 @@ const navLinks: {
     name: "View Results",
     icon: <BarChart2 size={18} />,
     href: "/teachers/view-results",
-  }
+  },
 ];
 
 export default function TeacherLayout({
@@ -122,11 +116,14 @@ export default function TeacherLayout({
   }, [authLoading, user, router]);
 
   useEffect(() => {
+    if (!user) return;
     const getTeacher = async () => {
       try {
-        const res = await apiAction("academics", "teachers");
+        const url = `${BASE_URL}/academics/teachers/teacher/?user_id=${user.id}`;
+        const resp = await fetch(url, { headers: apiHeaders() });
+        const res = await handleResponse(resp);
         if (res) {
-          setTeacher(res.results[0]);
+          setTeacher(res);
         }
       } catch (error) {
         setTeacher(null);
@@ -134,7 +131,7 @@ export default function TeacherLayout({
       }
     };
     getTeacher();
-  }, []);
+  }, [user]);
   // ================================
   // LOADING UI (STYLED)
   // ================================
@@ -298,84 +295,106 @@ export default function TeacherLayout({
       {/* ===============SIDEBAR  ==================== */}
 
       {/* ── DESKTOP SIDEBAR ── */}
-      <div className="sidebar lg:col-span-2 mr-2 ">
-        <aside className="w-72 bg-white border-r pb-5  border-slate-100 hidden md:flex flex-col h-screen sticky top-0 justify-between shrink-0 shadow-sm p-5">
-          <div>
-            <div className="flex items-center gap-2.5 mb-8">
-              <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-black text-slate-800 text-xl tracking-tight">
-                Teacher Portal
-              </span>
+      <div className="sidebar hidden lg:block lg:col-span-2">
+        <aside className="sticky top-0 flex h-screen w-72 flex-col border-r border-slate-100 bg-white p-5 shadow-sm select-none">
+          {/* Header */}
+          <div className="flex items-center gap-2.5 mb-8 shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600">
+              <BookOpen className="h-5 w-5 text-white" />
             </div>
-            {/* Teacher info card */}
-            <Link
-              href={
-                teacher?.id ? `/teachers/profile/${teacher.id}` : "/teachers"
-              }
-              className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100/60 p-5 rounded-2xl mb-7"
+
+            <span className="text-xl font-black tracking-tight text-slate-800">
+              Teacher Portal
+            </span>
+          </div>
+
+          {/* Profile Card */}
+          <Link
+            href={teacher?.id ? `/teachers/profile/${teacher.id}` : "/teachers"}
+            className="mb-6 shrink-0 rounded-2xl border border-emerald-100/60 bg-gradient-to-br from-emerald-50 to-teal-50 p-5"
+          >
+            {user?.profile_picture ? (
+              <img
+                src={user.profile_picture}
+                alt="Profile"
+                className="mb-2.5 h-12 w-12 rounded-full border-2 border-white object-cover shadow"
+              />
+            ) : (
+              <div className="mb-2.5 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-lg font-extrabold text-white">
+                {user?.first_name?.[0]}
+                {user?.last_name?.[0]}
+              </div>
+            )}
+
+            <h4 className="text-sm font-extrabold leading-snug text-slate-800">
+              {user?.full_name}
+            </h4>
+
+            <p className="mt-0.5 text-xs text-slate-500">Class Teacher</p>
+
+            {currentTerm && (
+              <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-600/10 px-2.5 py-1.5 text-xs font-bold text-emerald-700">
+                <ClipboardList size={12} />
+                <span>
+                  {currentTerm.name} — {currentTerm.session?.name}
+                </span>
+              </div>
+            )}
+          </Link>
+
+          {/* Scrollable Menu */}
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <nav
+              className="
+        h-full
+        overflow-y-auto
+        overflow-x-hidden
+        pr-2
+        scrollbar-thin
+      "
             >
-              {user?.profile_picture ? (
-                <img
-                  src={user.profile_picture}
-                  alt="Profile"
-                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow mb-2.5"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center text-white font-extrabold text-lg mb-2.5">
-                  {user?.first_name?.[0]}
-                  {user?.last_name?.[0]}
-                </div>
-              )}
-              <h4 className="font-extrabold text-slate-800 text-sm leading-snug">
-                {user?.full_name}
-              </h4>
-              <p className="text-xs text-slate-500 mt-0.5">Class Teacher</p>
-              {currentTerm && (
-                <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600/10 text-emerald-700 rounded-lg text-xs font-bold">
-                  <ClipboardList size={12} />
-                  <span>
-                    {currentTerm.name} — {currentTerm.session?.name}
-                  </span>
-                </div>
-              )}
-            </Link>
-            <nav className="space-y-1 overflow-x-hidden overflow-y-auto h-[40vh]">
-              {navLinks.map((item) => (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-semibold text-sm transition-all duration-200 ${
-                    activeTab === item.id
-                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/15 scale-[1.02]"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  {item.icon}
-                  <span>{item.name}</span>
-                  {activeTab === item.id && (
-                    <ChevronRight size={14} className="ml-auto" />
-                  )}
-                </Link>
-              ))}
+              <div className="space-y-1 pb-4">
+                {navLinks.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
+                      activeTab === item.id
+                        ? "scale-[1.02] bg-emerald-600 text-white shadow-lg shadow-emerald-600/15"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    {item.icon}
+
+                    <span>{item.name}</span>
+
+                    {activeTab === item.id && (
+                      <ChevronRight size={14} className="ml-auto" />
+                    )}
+                  </Link>
+                ))}
+              </div>
             </nav>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2.5 py-3 rounded-2xl border border-red-50 text-red-500 hover:bg-red-50 hover:border-red-100 transition font-bold text-sm"
-          >
-            <LogOut size={16} />
-            <span>Logout</span>
-          </button>
+
+          {/* Footer */}
+          <div className="pt-4 shrink-0">
+            <button
+              onClick={handleLogout}
+              className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-red-50 py-3 text-sm font-bold text-red-500 transition hover:border-red-100 hover:bg-red-50"
+            >
+              <LogOut size={16} />
+              <span>Logout</span>
+            </button>
+          </div>
         </aside>
       </div>
       <div className="main w-full lg:col-span-10 flex flex-col gap-1 px-2">
         {/* ============= MAIN CONTENT============= */}
 
-        <main className="flex flex-col px-10 relative w-full z-10 bg-transparent  overflow-hidden">
-          <header className="sticky md:flex w-full mx-4 hidden z-10  bg-white border-b border-gray-200 px- md:px-2 py-4 flex items-center justify-between">
+        <main className="relative z-10 flex w-full flex-col bg-transparent px-4 md:px-6 lg:px-8">
+          <header className="sticky top-0 z-20 hidden w-full items-center justify-between border-b border-gray-200 bg-white py-4 md:flex">
             {/* LEFT SIDE */}
             <div className="flex items-center gap-4">
               <div>

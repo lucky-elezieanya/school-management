@@ -2,7 +2,7 @@
 
 import { request, BASE_URL, apiHeaders } from "../lib/api";
 
-export function getOrdinal(position:any) {
+export function getOrdinal(position: any) {
   const n = Number(position);
 
   if (n % 100 >= 11 && n % 100 <= 13) {
@@ -94,22 +94,22 @@ export const fetchSubjects = (classId: number, termId: number) =>
 export const fetchStudents = (classId: number) =>
   request(`/academics/classes/${classId}/students/`);
 
-export const fetchClassEntryData = (
+export const fetchClassEntryData = async (
   classId: number,
   subjectId: number,
   term: number,
-) =>
-  request(
-    `/results/results/subject-results/?term=${term}&class_id=${classId}&class_subject_id=${subjectId}`,
-  );
-
+) => {
+  const url = `${BASE_URL}/results/results/subject-results/?term=${term}&class_id=${classId}&class_subject_id=${subjectId}`;
+  const res = await fetch(url, { headers: apiHeaders() });
+  return handleResponse(res);
+};
 export const submitBulkResults = (payload: any) =>
   request("/results/results/bulk-create/", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 
-export const fetchGrades = () => request("/results/grades/");
+export const fetchGrades = () => request("/results/grading-scales/");
 
 export const fetchMaxScores = (classId: number) =>
   request(`/results/maxscores/?school_class=${classId}`);

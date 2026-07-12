@@ -1,4 +1,5 @@
 {% load static %}
+
 <style>
   @page {
     size: A4;
@@ -186,8 +187,9 @@
     ===================================== */
 
   .comment-box {
-    margin-top: 10px;
+    
     margin-right: 20px;
+   
   }
 
   .comment-title {
@@ -199,10 +201,11 @@
   }
 
   .comment {
-    margin-top: 4px;
+  
     font-style: italic;
     font-size: 11px;
     color: #222;
+    margin-bottom: 5px;
   }
 
   .wrapper {
@@ -218,8 +221,9 @@
 
   .signature img {
     max-height: 60px;
-    max-width: 70px;
+    max-width: 120px;
     object-fit: contain;
+    margin-top: 10px
   }
 
   hr {
@@ -331,8 +335,8 @@
       </td>
 
       <td rowspan="7" class="passport-cell">
-        {% if student.user.profile_picture %}
-        <img src="{{ student.user.profile_picture }}" class="passport" />
+        {% if profile_picture %}
+        <img src="{{ profile_picture }}" class="passport" /> 
         {% else %}
         <img src="{{ default_avatar_path }}" class="passport" />
         {% endif %}
@@ -344,32 +348,19 @@
     <tr>
       <td colspan="2">
         <strong>Class:</strong>
-        {{ school_class.description|upper }}
+        {% if school_class.description %} {{ school_class.description|upper }}
+        {% else %} {{school_class.name|upper}} {{school_class.arm.name|upper}}
+        {% endif %}
       </td>
 
       <td>
         <strong>Session:</strong>
         {{ session.name }}
       </td>
-    </tr>
-
-    <tr>
       <td>
         <strong>Term:</strong>
         {{ term.name }}
       </td>
-
-      {% if customization.class_position %}
-      <td>
-        <strong>Position:</strong>
-        {{ class_position }}
-      </td>
-      {% endif %} {% if customization.class_size %}
-      <td>
-        <strong>Class Pop:</strong>
-        {{ class_size }}
-      </td>
-      {% endif %}
     </tr>
 
     <tr>
@@ -377,7 +368,20 @@
         <strong>Total:</strong>
         {{ overall_total_score }}/{{ total_obtainable_score }}
       </td>
+      {% if customization.class_position %}
+      <td>
+        <strong>Position:</strong>
+        {{ class_position }}
+      </td>
+      {% endif %} {% if customization.class_size %}
+      <td colspan="2">
+        <strong>Class Population:</strong>
+        {{ class_size }}
+      </td>
+      {% endif %}
+    </tr>
 
+    <tr>
       <td>
         <strong>Average:</strong>
         {{ overall_average_score }}
@@ -388,6 +392,19 @@
         <strong>Class Avg:</strong>
         {{ overall_class_average }}
       </td>
+      {% endif %} {% if customization.overall_grade %}
+
+      <td colspan="2">
+        <strong>Overall Grade:</strong>
+
+        <span style="font-size: 14px; font-weight: bold">
+          <strong> {{ overall_grade }}</strong>
+        </span>
+
+        {% if overall_remark %} &nbsp;&nbsp;
+        <strong> {{ overall_remark|upper }}</strong> {% endif %}
+      </td>
+
       {% endif %}
     </tr>
 
@@ -404,14 +421,14 @@
       </td>
       {% endif %}
 
-      <td>
+      <td colspan="2">
         <strong>Subjects:</strong>
         {{ total_subjects }}
       </td>
     </tr>
 
     <tr>
-      <td>
+      <td colspan="2">
         <strong>Attendance:</strong>
         {{ attendance }}
       </td>
@@ -423,7 +440,7 @@
     </tr>
 
     <tr>
-      <td>
+      <td colspan="2">
         <strong>Resumption:</strong>
         {{ resumption_date }}
       </td>
@@ -433,24 +450,6 @@
         ₦{{ next_fees }}
       </td>
     </tr>
-
-    {% if customization.overall_grade %}
-    <tr>
-      <td colspan="6">
-        <strong>Overall Grade:</strong>
-
-        <span style="font-size: 14px; font-weight: bold">
-          {{ overall_grade }}
-        </span>
-
-        {% if overall_remark %} &nbsp;&nbsp;
-
-        <strong>Remark:</strong>
-
-        {{ overall_remark }} {% endif %}
-      </td>
-    </tr>
-    {% endif %}
   </table>
 
   <!-- RESULTS -->
@@ -526,12 +525,10 @@
     </tbody>
   </table>
   <!-- CHART -->
-  {% if customization.performance_chart %}
+  {% if customization.show_performance_chart %}
 
   <div class="chart-box">
-    {% if chart_image %}
-    <img src="{{ chart_image }}" />
-    {% endif %}
+    {% if chart_image %} {{ chart_image|safe }} {% endif %}
   </div>
   {% endif %}
 
@@ -558,6 +555,7 @@
     {% endif %}
     <div></div>
     {% if customization.show_teacher_comment or customization.show_principal_comment %}
+
     <div class="comment-box">
       {% if customization.show_teacher_comment %}
       <div class="wrapper">
@@ -566,7 +564,6 @@
           <div class="comment">{{ teacher_comment }}</div>
         </div>
 
-        {}
         <div class="signature">
           {% if teacher_signature_path %}
           <img

@@ -15,13 +15,9 @@ from academics.serializers import (
     ClassSubjectSerializer
 )
 from django.db import transaction
-
 from .utils.signature import process_signature
-
 from rest_framework import serializers
-
 from .models import ResultCustomization
-
 
 class ResultCustomizationSerializer(serializers.ModelSerializer):
     session = AcademicSessionSerializer(read_only=True)
@@ -36,6 +32,15 @@ class ResultCustomizationSerializer(serializers.ModelSerializer):
         source="term",
         write_only=True
     )
+    school_class = ClassSerializer(read_only=True)
+    school_class_id = serializers.PrimaryKeyRelatedField(
+        write_only=True,
+        required=False,
+        
+        source="school_class",
+        queryset=Class.objects.all()
+    )
+    
     class Meta:
         model = ResultCustomization
         fields = [
@@ -44,6 +49,8 @@ class ResultCustomizationSerializer(serializers.ModelSerializer):
             "session_id",           
             "term",
             "term_id",
+            "school_class",
+            "school_class_id",
             "subject_average",
             "class_average",
             "subject_position",
@@ -79,14 +86,26 @@ class ResultPDFSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class SchoolDaysSerializer(serializers.ModelSerializer):
-    
+    session = AcademicSessionSerializer(read_only=True)
+    session_id = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicSession.objects.all(),
+        source="session",
+        write_only=True
+    )
     term = TermSerializer(read_only=True)
+    term_id = serializers.PrimaryKeyRelatedField(
+        queryset=Term.objects.all(),
+        source="term",
+        write_only=True
+    )
     class Meta:
         model = SchoolDays
         fields = [
             "id",
             "session",
+            "session_id",
             "term",
+            "term_id",
             "days_school_opened"
                   ]
 
@@ -220,7 +239,8 @@ class AttendanceSerializer(serializers.ModelSerializer):
     session = AcademicSessionSerializer(read_only=True)
     session_id = serializers.PrimaryKeyRelatedField(
         queryset=AcademicSession.objects.all(),
-        source="session"
+        source="session",
+        write_only=True
     )
 
     class_name = serializers.CharField(
@@ -264,27 +284,43 @@ class AttendanceSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def validate(self, data):
-        student = data.get("student")
-        term = data.get("term")
-        session = data.get("session")
+    def validate(self, attrs):
+        student = attrs.get(
+            "student",
+            self.instance.student if self.instance else None,
+        )
+
+        school_class = attrs.get(
+            "school_class",
+            self.instance.school_class if self.instance else None,
+        )
+
+        term = attrs.get(
+            "term",
+            self.instance.term if self.instance else None,
+        )
+
+        session = attrs.get(
+            "session",
+            self.instance.session if self.instance else None,
+        )
 
         qs = Attendance.objects.filter(
             student=student,
+            school_class=school_class,
             term=term,
             session=session,
         )
 
         if self.instance:
-            qs = qs.exclude(id=self.instance.id)
+            qs = qs.exclude(pk=self.instance.pk)
 
         if qs.exists():
             raise serializers.ValidationError(
-                "Attendance already exists for this student in this term and session."
+                "Attendance already exists for this student."
             )
 
-        return data
-    
+        return attrs  
 class MaxScoresSerializer(serializers.ModelSerializer):
     school_class = ClassSerializer(read_only=True)
     school_class_id = serializers.PrimaryKeyRelatedField(

@@ -20,7 +20,6 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiAction } from "@/app/lib/api";
 import { StudentType } from "@/app/lib/types";
-import StudentResultPreview from "@/app/components/StudentResultPreview";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 
 export default function Student() {

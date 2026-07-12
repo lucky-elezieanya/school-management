@@ -1,9 +1,9 @@
 "use client";
 
-import { apiHeaders, BASE_URL } from "@/app/lib/api";
+import { apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
-import { useEffect, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   XCircle,
@@ -14,16 +14,40 @@ import {
   Activity,
   Terminal,
 } from "lucide-react";
+import { getSessions, sessionTerms } from "@/app/services/academics";
+import { AcademicSession, ClassType, Term } from "@/app/lib/types";
 
 type Status = "idle" | "queued" | "processing" | "done" | "failed";
 
 export default function GenerateResultsPage() {
   const { currentTerm } = useAuth();
-
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<Status>("idle");
   const [taskId, setTaskId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [sessionId, setSessionId] = useState(currentTerm?.session?.id);
+  const [sessions, setSessions] = useState<AcademicSession[]>([]);
+  const [session, setSession] = useState({
+    id: currentTerm?.session.id,
+    name: currentTerm?.session?.name,
+    is_active: currentTerm?.session?.is_active,
+  });
+  const [termId, setTermId] = useState(currentTerm?.id);
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [term, setTerm] = useState({
+    id: currentTerm && currentTerm.id,
+    name: currentTerm && currentTerm.name,
+    is_active: currentTerm && currentTerm.is_active,
+  });
 
+  const [query, setQuery] = useState("");
+  const [loadingClasses, setLoadingClasses] = useState(true);
+
+  const [classes, setClasses] = useState<ClassType[]>([]);
+  const [selectedClass, setSelectedClass] = useState<ClassType | null>(null);
+  const [error, setError] = useState("");
   const [checks, setChecks] = useState({
     behaviours: false,
     attendance: false,
@@ -33,58 +57,153 @@ export default function GenerateResultsPage() {
     comments: false,
     grades: false,
     class_teacher_signatures: false,
-    head_teacher_signature: false
+    head_teacher_signature: false,
   });
+
+  useEffect(() => {
+    if (!sessionId) return;
+    fetchTerms(sessionId);
+  }, [sessionId]);
 
   // --------------------------------------------------
   // PRECHECK
   // --------------------------------------------------
-  useEffect(() => {
-    if (!currentTerm) return;
+  const fetchChecks = async () => {
+    try {
+      const params = new URLSearchParams({
+        term_id: String(termId),
+        session_id: String(sessionId),
+      });
 
-    const fetchChecks = async () => {
-      try {
-        const res = await fetch(
-          `${BASE_URL}/results/result-pdfs/precheck/?term_id=${currentTerm.id}&session_id=${currentTerm.session.id}`,
-          {
-            headers: apiHeaders(),
-          },
-        );
-
-        const data = await res.json();
-
-        if (res.ok) {
-          setChecks({
-            behaviours: data.behaviours,
-            attendance: data.attendance,
-            schoolAssets: data.school_assets,
-            classFees: data.class_fees,
-            resumption: data.resumption_date,
-            comments: data.comments,
-            grades: data.grades,
-            class_teacher_signatures: data.class_teacher_signatures,
-            head_teacher_signature: data.head_teacher_signature
-          });
-        }
-      } catch (err) {
-        console.error(err);
+      // Only include class_id when a class is selected
+      if (selectedClass?.id) {
+        params.set("class_id", String(selectedClass.id));
       }
-    };
+
+      const res = await fetch(
+        `${BASE_URL}/results/result-pdfs/precheck/?${params.toString()}`,
+        {
+          headers: apiHeaders(),
+        },
+      );
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setChecks({
+          behaviours: data.behaviours,
+          attendance: data.attendance,
+          schoolAssets: data.school_assets,
+          classFees: data.class_fees,
+          resumption: data.resumption_date,
+          comments: data.comments,
+          grades: data.grades,
+          class_teacher_signatures: data.class_teacher_signatures,
+          head_teacher_signature: data.head_teacher_signature,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (!sessionId || !termId) return;
 
     fetchChecks();
-  }, [currentTerm]);
+  }, [sessionId, termId, selectedClass]);
 
   const allReady =
     checks.behaviours &&
     checks.attendance &&
     checks.schoolAssets &&
     checks.classFees &&
-    checks.resumption && 
-    checks.comments && 
+    checks.resumption &&
+    checks.comments &&
     checks.grades &&
-    checks.class_teacher_signatures && 
+    checks.class_teacher_signatures &&
     checks.head_teacher_signature;
 
+  //   sessions
+  useEffect(() => {
+    const fetchSessions = async () => {
+      const res = await getSessions();
+
+      if (res) {
+        setSessions(res.results);
+      }
+    };
+
+    fetchSessions();
+  }, []);
+  // terms
+  const fetchTerms = async (sessionId: number) => {
+    if (!sessionId) return;
+
+    setTerms([]);
+
+    const res = await sessionTerms(sessionId);
+
+    if (res) {
+      setTerms(res.terms);
+    }
+  };
+
+  useEffect(() => {
+    if (!classes.length) return;
+
+    const classId = searchParams.get("class_id");
+
+    if (!classId) return;
+
+    const found = classes.find((c) => c.id === Number(classId));
+
+    if (found) {
+      setSelectedClass(found);
+    }
+  }, [classes, searchParams]);
+
+  useEffect(() => {
+    const loadClasses = async () => {
+      try {
+        setLoadingClasses(true);
+        const res = await fetch(`${BASE_URL}/academics/classes/`, {
+          headers: apiHeaders(),
+        });
+        const data = await handleResponse(res);
+        setClasses(data?.results || data || []);
+      } catch (err: any) {
+        setError(err?.message || "Unable to load classes.");
+      } finally {
+        setLoadingClasses(false);
+      }
+    };
+
+    loadClasses();
+  }, []);
+
+  const filteredClasses = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    if (!search) return classes;
+
+    return classes.filter((schoolClass) => {
+      const classLabel = `${schoolClass.name} ${schoolClass.arm?.code || ""} ${schoolClass.arm?.name || ""}`;
+      return classLabel.toLowerCase().includes(search);
+    });
+  }, [classes, query]);
+
+  const handleClassSelect = (schoolClass: ClassType | null) => {
+    setSelectedClass(schoolClass);
+    setError("");
+
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (schoolClass) {
+      params.set("class_id", String(schoolClass.id));
+    } else {
+      params.delete("class_id");
+    }
+  };
   // --------------------------------------------------
   // GENERATE
   // --------------------------------------------------
@@ -93,10 +212,19 @@ export default function GenerateResultsPage() {
     setLogs((p) => [...p, "🚀 Starting PDF generation..."]);
 
     try {
-      const payload = {
-        term_id: currentTerm?.id,
-        session_id: currentTerm?.session.id,
-      };
+      let payload;
+      if (!selectedClass) {
+        payload = {
+          term_id: termId,
+          session_id: sessionId,
+        };
+      } else {
+        payload = payload = {
+          term_id: termId,
+          session_id: sessionId,
+          class_id: selectedClass.id,
+        };
+      }
       const res = await fetch(`${BASE_URL}/results/result-pdfs/generate/`, {
         method: "POST",
         headers: { ...apiHeaders(), "Content-Type": "application/json" },
@@ -159,6 +287,181 @@ export default function GenerateResultsPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
+        {/* Select Session & Term */}
+        <div className="grid grid-cols-1 gap-6 rounded-xl border border-emerald-100 bg-white p-5 shadow-sm md:grid-cols-2 md:p-6 lg:p-8">
+          {/* Session */}
+          <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+              Session
+            </p>
+
+            <h2 className="mt-1 text-xl font-bold text-slate-900">
+              Select a Session
+            </h2>
+
+            {sessions.length > 0 ? (
+              <select
+                value={session?.id || ""}
+                onChange={(event) => {
+                  const selectedSession = sessions.find(
+                    (s: AcademicSession) => s.id === Number(event.target.value),
+                  );
+
+                  if (selectedSession) {
+                    setSession(selectedSession);
+                    setSessionId(selectedSession.id);
+                  }
+                }}
+                className="mt-4 h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Select a Session</option>
+
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.is_active ? "(Active)" : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">
+                No sessions available
+              </p>
+            )}
+
+            <p className="mt-4 text-sm text-slate-500">
+              {session
+                ? `${session.name} / ${term?.name ?? "No term selected"}`
+                : "Waiting for active session"}
+            </p>
+          </div>
+
+          {/* Term */}
+          <div className="flex w-full flex-col rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+              Term
+            </p>
+
+            <h2 className="mt-1 text-xl font-bold text-slate-900">
+              Select a Term
+            </h2>
+
+            {terms.length > 0 ? (
+              <select
+                value={term?.id || ""}
+                onChange={(event) => {
+                  const selectedTerm = terms.find(
+                    (t: Term) => t.id === Number(event.target.value),
+                  );
+
+                  if (selectedTerm) {
+                    setTerm(selectedTerm);
+                    setTermId(selectedTerm.id);
+                  }
+                }}
+                className="mt-4 h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">Select a Term</option>
+
+                {terms.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.is_active ? "(Active)" : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">No terms available</p>
+            )}
+
+            <p className="mt-4 text-sm text-slate-500">
+              {term
+                ? `${term.name} - ${session?.name ?? ""}`
+                : "No term selected"}
+            </p>
+          </div>
+        </div>
+        {/* Class Selection */}
+        <div className="rounded-xl border border-blue-100 bg-white p-5 shadow-sm md:p-6">
+          <div className="mb-5">
+            <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
+              Class
+            </p>
+
+            <h2 className="mt-1 text-xl font-bold text-slate-900">
+              Select a Class
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Choose the class whose result PDFs should be generated.
+            </p>
+          </div>
+
+          {/* Search */}
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search class..."
+            className="mb-4 h-11 w-full rounded-lg border border-slate-300 px-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+
+          {/* Loading */}
+          {loadingClasses ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+              {error}
+            </div>
+          ) : filteredClasses.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+              No matching classes found.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {filteredClasses.map((schoolClass) => {
+                const active = selectedClass?.id === schoolClass.id;
+
+                return (
+                  <button
+                    key={schoolClass.id}
+                    type="button"
+                    onClick={() => handleClassSelect(schoolClass)}
+                    className={`rounded-xl border p-4 text-left transition-all ${
+                      active
+                        ? "border-blue-600 bg-blue-600 text-white shadow-md"
+                        : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+                    }`}
+                  >
+                    <div className="font-semibold">{schoolClass.name}</div>
+
+                    {schoolClass.arm && (
+                      <div
+                        className={`mt-1 text-xs ${
+                          active ? "text-blue-100" : "text-slate-500"
+                        }`}
+                      >
+                        {schoolClass.arm.name}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Selected Class */}
+          {selectedClass && (
+            <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm text-blue-700">Selected Class</p>
+
+              <h3 className="mt-1 font-semibold text-slate-800">
+                {selectedClass.name}
+                {selectedClass.arm && ` ${selectedClass.arm.code}`}
+              </h3>
+            </div>
+          )}
+        </div>
         {/* HEADER */}
         <div className="bg-white p-5 rounded-xl shadow-sm">
           <div className="flex items-center gap-2">
@@ -184,9 +487,14 @@ export default function GenerateResultsPage() {
           <Check label="Resumption Date" ok={checks.resumption} />
           <Check label="Term Comment" ok={checks.comments} />
           <Check label="Grades" ok={checks.grades} />
-          <Check label="Class Teacher Signatures" ok={checks.class_teacher_signatures} />
-          <Check label="Head Teacher Signatures" ok={checks.head_teacher_signature} />
-
+          <Check
+            label="Class Teacher Signatures"
+            ok={checks.class_teacher_signatures}
+          />
+          <Check
+            label="Head Teacher Signatures"
+            ok={checks.head_teacher_signature}
+          />
 
           {!allReady && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-50 text-yellow-700 text-sm mt-3">
@@ -228,7 +536,7 @@ export default function GenerateResultsPage() {
           </div>
 
           <div className="max-h-60 overflow-y-auto text-xs space-y-1">
-            {logs.map((l, i) => (
+            {logs.slice(-5).map((l, i) => (
               <div key={i} className="opacity-90">
                 {l}
               </div>

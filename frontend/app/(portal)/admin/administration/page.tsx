@@ -40,7 +40,12 @@ export default function AdministrationPage() {
       icon: GraduationCap,
     },
     {
-      name: "Enroll Students",
+      name: "Create New Students",
+      href: "/admin/administration/students/new",
+      icon: UserPlus2,
+    },
+    {
+      name: "Add Students to Class",
       href: "/admin/administration/enrollments",
       icon: UserPlus2,
     },
@@ -55,7 +60,7 @@ export default function AdministrationPage() {
       icon: BookAIcon,
     },
     {
-      name: "Grades",
+      name: "Set Grading",
       href: "/admin/administration/grades",
       icon: AwardIcon,
     },
@@ -65,27 +70,23 @@ export default function AdministrationPage() {
       icon: Brain,
     },
     {
-      name: "Student Attendance",
-      href: "/admin/administration/attendance",
-      icon: UserCheck2,
+      name: "Attendance / Behavioural Comments",
+      href: "/admin/administration/comments",
+      icon: PenBox,
     },
     {
       name: "School Open Days",
       href: "/admin/administration/attendance/days_school_opened",
       icon: CalendarClock,
     },
+
     {
-      name: "Term Comments",
-      href: "/admin/administration/comments",
-      icon: PenBox,
-    },
-    {
-      name: "Set Max scores",
+      name: "Set Class Max scores",
       href: "/admin/administration/classScores",
       icon: FileBarChart,
     },
     {
-      name: "Results Entry",
+      name: "Upload Results",
       href: "/admin/administration/results",
       icon: FileBarChart,
     },
@@ -110,15 +111,11 @@ export default function AdministrationPage() {
       icon: FilePlus,
     },
     {
-      name: "Results Access",
+      name: "Open/Close Results Portal",
       href: "/admin/administration/resultsAccess",
       icon: FileLock2Icon,
     },
-    {
-      name: "Compute Results",
-      href: "/admin/administration/compute",
-      icon: Calculator,
-    },
+
     {
       name: "Resumption Date",
       href: "/admin/administration/resumption-dates",

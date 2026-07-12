@@ -15,11 +15,11 @@ export default function CommentsPage() {
 				{/* HEADER */}
 				<div className="mb-8">
 					<h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-						Term Comments
+						Attendance and Behavioural Comments
 					</h1>
 
 					<p className="mt-2 text-gray-600">
-						Enter class teacher and principal comments for students
+						Enter attendance, class teacher and principal comments for students
 						at the end of each term.
 					</p>
 				</div>

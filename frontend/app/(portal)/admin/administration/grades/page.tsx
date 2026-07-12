@@ -260,7 +260,7 @@ export default function GradesPage() {
               <tbody>
                 {grades.map((grade) => (
                   <tr
-                    key={grade.id}
+                    key={`${grade.grading_type}-${grade.id}`}
                     className="border-t hover:bg-gray-50 transition"
                   >
                     {/* GRADE */}

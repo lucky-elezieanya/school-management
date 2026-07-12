@@ -215,6 +215,38 @@ class Class(models.Model):
         
         return f"{self.name} - {self.arm}"
         
+
+# ==========================================
+# CLASS SUBJECT MODEL
+# ==========================================
+class ClassSubject(models.Model):
+    """
+    Assigns a subject to a class.
+    Example:
+    Mathematics assigned to JSS1A 
+    """
+
+    school_class = models.ForeignKey(
+        Class,
+        on_delete=models.CASCADE,
+        related_name="class_subjects"
+    )
+    
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.CASCADE,
+        related_name="class_subjects"
+    )
+    term = models.ForeignKey(Term, on_delete=models.CASCADE, related_name="term_subjects")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["school_class", "subject", "term"]
+        unique_together = ("school_class", "subject", "term")
+
+    def __str__(self):
+        return f"{self.school_class} - {self.subject}"
+
 # ==========================================
 # STUDENT MODEL
 # ==========================================
@@ -226,7 +258,7 @@ class Student(models.Model):
 
     user = models.OneToOneField(
         User,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="student_profile",
         null=True,
         blank=True,
@@ -287,7 +319,7 @@ class Student(models.Model):
     )
 
     class Meta:
-        ordering = ["admission_number"]
+        ordering = ["user"]
         indexes = [
             models.Index(fields=["admission_number"]),
             models.Index(fields=["parent_phone"]),
@@ -319,36 +351,6 @@ class Student(models.Model):
         """
         enrollment = self.current_enrollment
         return enrollment.school_class if enrollment else None
-# ==========================================
-# CLASS SUBJECT MODEL
-# ==========================================
-class ClassSubject(models.Model):
-    """
-    Assigns a subject to a class.
-    Example:
-    Mathematics assigned to JSS1A 
-    """
-
-    school_class = models.ForeignKey(
-        Class,
-        on_delete=models.CASCADE,
-        related_name="class_subjects"
-    )
-    
-    subject = models.ForeignKey(
-        Subject,
-        on_delete=models.CASCADE,
-        related_name="class_subjects"
-    )
-    term = models.ForeignKey(Term, on_delete=models.CASCADE, related_name="term_subjects")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["school_class", "subject", "term"]
-        unique_together = ("school_class", "subject", "term")
-
-    def __str__(self):
-        return f"{self.school_class} - {self.subject}"
 
 class ClassSubjectTeacher(models.Model):
 
@@ -360,13 +362,13 @@ class ClassSubjectTeacher(models.Model):
 
     teacher = models.ForeignKey(
         Teacher,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="subject_assignments",
     )
 
     session = models.ForeignKey(
         AcademicSession,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
     )
 
     class Meta:
@@ -387,19 +389,19 @@ class StudentEnrollment(models.Model):
 
     student = models.ForeignKey(
         Student,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="enrollments",
     )
 
     session = models.ForeignKey(
         AcademicSession,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="student_enrollments",
     )
 
     school_class = models.ForeignKey(
         Class,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="student_enrollments",
     )
 

@@ -32,6 +32,7 @@ class ResultCustomizationAdmin(admin.ModelAdmin):
         
         "session",
         "term",
+        "school_class",
         "updated_at",
         "subject_average",
         "subject_position",
