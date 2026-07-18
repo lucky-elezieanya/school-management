@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import (Attendance, Behaviour, ClassFees, GradingScale, MaxScores, Result, ResultPDF, ResultSummary, ResultWorkflow, SchoolDays, TermComment, SubjectResultStatus, ResumptionDate,  ActivateResultPortal, SubjectSummary, ClassTeacherSignature,
+from .models import (Attendance, Behaviour, ClassFees, GradingScale, MaxScores, Result, ResultPDF, ResultSummary, ResultWorkflow, SchoolDays, StudentResultSnapshot, TermComment, SubjectResultStatus, ResumptionDate,  ActivateResultPortal, SubjectSummary, ClassTeacherSignature,
     HeadTeacherSignature,)
 from academics.models import (Student, 
                               Class, 
@@ -18,6 +18,26 @@ from django.db import transaction
 from .utils.signature import process_signature
 from rest_framework import serializers
 from .models import ResultCustomization
+
+
+class StudentResultSnapshotSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = StudentResultSnapshot
+
+        fields = (
+            "id",
+            "student",
+            "school_class",
+            "session",
+            "term",
+            "status",
+            "data",
+            "version",
+            "computed_at",
+        )
+
+        read_only_fields = fields
 
 class ResultCustomizationSerializer(serializers.ModelSerializer):
     session = AcademicSessionSerializer(read_only=True)

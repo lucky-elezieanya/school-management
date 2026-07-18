@@ -9,8 +9,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .permissions import IsAdminUser, IsTeacherOrAdmin
 from rest_framework import viewsets, status
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import ( Attendance, Behaviour, ClassFees, ClassResultPDF, ClassTeacherSignature, GradingScale, HeadTeacherSignature, MaxScores, Result, ResultCustomization, SchoolDays,  SubjectResultStatus, TermComment, ResultSummary, ResumptionDate, ActivateResultPortal, ResultWorkflow, SubjectSummary, ResultPDF)
-from .serializers import (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassTeacherSignatureSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultPDFSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
+from .models import ( Attendance, Behaviour, ClassFees, ClassResultPDF, ClassTeacherSignature, GradingScale, HeadTeacherSignature, MaxScores, Result, ResultCustomization, SchoolDays, StudentResultSnapshot,  SubjectResultStatus, TermComment, ResultSummary, ResumptionDate, ActivateResultPortal, ResultWorkflow, SubjectSummary, ResultPDF)
+from .serializers import (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassTeacherSignatureSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultPDFSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, StudentResultSnapshotSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
 
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -33,6 +33,23 @@ from django.http import FileResponse, HttpResponse
 from django.template.loader import render_to_string
 
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
+
+class StudentResultSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
+
+    serializer_class = StudentResultSnapshotSerializer
+
+    permission_classes = [IsAuthenticated]
+
+    queryset = (
+        StudentResultSnapshot.objects
+        .select_related(
+            "student__user",
+            "school_class",
+            "session",
+            "term",
+        )
+        .order_by("-computed_at")
+    )
 
 class ResultCustomizationViewSet(viewsets.ModelViewSet):
     serializer_class = ResultCustomizationSerializer

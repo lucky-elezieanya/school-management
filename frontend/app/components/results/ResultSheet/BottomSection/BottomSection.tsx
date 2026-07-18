@@ -9,12 +9,12 @@ interface BottomSectionProps {
 }
 
 export default function BottomSection({ snapshot }: BottomSectionProps) {
-  const { customization, behaviour, comments, chart } = snapshot;
+  const { customization, behaviour} = snapshot;
 
   return (
     <section className="mt-3 space-y-3">
-      {customization.showPerformanceChart && chart && (
-        <PerformanceChart chart={chart} />
+      {customization.showPerformanceChart && (
+        <PerformanceChart subjects={snapshot.subjects} />
       )}
 
       <div

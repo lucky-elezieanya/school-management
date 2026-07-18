@@ -272,5 +272,5 @@ if not DEBUG:
     )
     X_FRAME_OPTIONS = "DENY"
   
-    
+SCHOOL_NAME="Cozzi Schools"  
 APPEND_SLASH=False

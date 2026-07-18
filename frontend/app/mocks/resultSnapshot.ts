@@ -158,113 +158,6 @@ export const snapshot: StudentResultSnapshot = {
     defaultAvatar: "/avatar.png",
   },
 
-  chart: {
-    data: [
-      {
-        subject: "Mathematics",
-        subjectCode: "MTH",
-        student: 85,
-        average: 73,
-      },
-      {
-        subject: "English Language",
-        subjectCode: "ENG",
-        student: 78,
-        average: 70,
-      },
-      {
-        subject: "Physics",
-        subjectCode: "PHY",
-        student: 81,
-        average: 69,
-      },
-      {
-        subject: "Chemistry",
-        subjectCode: "CHM",
-        student: 76,
-        average: 67,
-      },
-      {
-        subject: "Biology",
-        subjectCode: "BIO",
-        student: 83,
-        average: 72,
-      },
-      {
-        subject: "Economics",
-        subjectCode: "ECO",
-        student: 74,
-        average: 68,
-      },
-      {
-        subject: "Civic Education",
-        subjectCode: "CVE",
-        student: 88,
-        average: 74,
-      },
-      {
-        subject: "ICT",
-        subjectCode: "ICT",
-        student: 91,
-        average: 78,
-      },
-      {
-        subject: "Further Mathematics",
-        subjectCode: "FMTH",
-        student: 80,
-        average: 71,
-      },
-      {
-        subject: "Government",
-        subjectCode: "GOV",
-        student: 78,
-        average: 69,
-      },
-      {
-        subject: "Literature in English",
-        subjectCode: "LIT",
-        student: 82,
-        average: 72,
-      },
-      {
-        subject: "Commerce",
-        subjectCode: "COM",
-        student: 76,
-        average: 68,
-      },
-      {
-        subject: "Geography",
-        subjectCode: "GEO",
-        student: 83,
-        average: 73,
-      },
-      {
-        subject: "Agricultural Science",
-        subjectCode: "AGR",
-        student: 79,
-        average: 70,
-      },
-      {
-        subject: "Financial Accounting",
-        subjectCode: "ACC",
-        student: 86,
-        average: 75,
-      },
-      {
-        subject: "Christian Religious Studies",
-        subjectCode: "CRS",
-        student: 82,
-        average: 72,
-      },
-      {
-        subject: "Data Processing",
-        subjectCode: "DTP",
-        student: 88,
-        average: 76,
-      },
-    ],
-  },
-
   customization: {
     showTeacherComment: true,
     showPrincipalComment: true,
@@ -291,6 +184,7 @@ export const snapshot: StudentResultSnapshot = {
   subjects: [
     {
       subjectId: 1,
+      subjectCode: "MTH",
       subjectName: "Mathematics",
       firstTest: 18,
       secondTest: 19,
@@ -308,6 +202,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 2,
+      subjectCode: "ENG",
       subjectName: "English Language",
       firstTest: 16,
       secondTest: 17,
@@ -325,6 +220,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 3,
+      subjectCode: "PHY",
       subjectName: "Physics",
       firstTest: 17,
       secondTest: 18,
@@ -342,6 +238,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 4,
+      subjectCode: "CHM",
       subjectName: "Chemistry",
       firstTest: 16,
       secondTest: 16,
@@ -359,6 +256,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 5,
+      subjectCode: "BIO",
       subjectName: "Biology",
       firstTest: 18,
       secondTest: 18,
@@ -376,6 +274,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 6,
+      subjectCode: "ECO",
       subjectName: "Economics",
       firstTest: 15,
       secondTest: 16,
@@ -393,6 +292,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 7,
+      subjectCode: "CVE",
       subjectName: "Civic Education",
       firstTest: 19,
       secondTest: 20,
@@ -410,6 +310,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 8,
+      subjectCode: "ICT",
       subjectName: "ICT",
       firstTest: 20,
       secondTest: 20,
@@ -427,6 +328,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 9,
+      subjectCode: "FMTH",
       subjectName: "Further Mathematics",
       firstTest: 17,
       secondTest: 18,
@@ -444,6 +346,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 10,
+      subjectCode: "GOV",
       subjectName: "Government",
       firstTest: 17,
       secondTest: 17,
@@ -461,6 +364,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 11,
+      subjectCode: "LIT",
       subjectName: "Literature in English",
       firstTest: 18,
       secondTest: 18,
@@ -478,6 +382,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 12,
+      subjectCode: "COM",
       subjectName: "Commerce",
       firstTest: 16,
       secondTest: 17,
@@ -495,6 +400,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 13,
+      subjectCode: "GEO",
       subjectName: "Geography",
       firstTest: 18,
       secondTest: 19,
@@ -512,6 +418,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 14,
+      subjectCode: "AGR",
       subjectName: "Agricultural Science",
       firstTest: 17,
       secondTest: 17,
@@ -529,6 +436,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 15,
+      subjectCode: "ACC",
       subjectName: "Financial Accounting",
       firstTest: 19,
       secondTest: 19,
@@ -546,6 +454,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 16,
+      subjectCode: "CRS",
       subjectName: "Christian Religious Studies",
       firstTest: 18,
       secondTest: 18,
@@ -563,6 +472,7 @@ export const snapshot: StudentResultSnapshot = {
     },
     {
       subjectId: 17,
+      subjectCode: "DTP",
       subjectName: "Data Processing",
       firstTest: 20,
       secondTest: 19,
@@ -578,5 +488,5 @@ export const snapshot: StudentResultSnapshot = {
       grade: "A",
       remark: "Outstanding",
     },
-  ],
+  ]
 };

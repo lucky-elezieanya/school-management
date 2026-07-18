@@ -8,6 +8,99 @@ from django.core.validators import MinValueValidator
 from django.db.models import Q
 import uuid
 
+class StudentResultSnapshot(models.Model):
+    """
+    Stores the fully-computed result snapshot for a student.
+    This snapshot is the single source of truth for:
+        • Result Preview
+        • PDF Generation
+        • Parent Portal
+        • Mobile App
+    """
+
+    STATUS_PENDING = "pending"
+    STATUS_READY = "ready"
+    STATUS_FAILED = "failed"
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "Pending"),
+        (STATUS_READY, "Ready"),
+        (STATUS_FAILED, "Failed"),
+    )
+
+    student = models.ForeignKey(
+        "academics.Student",
+        on_delete=models.CASCADE,
+        related_name="result_snapshots",
+    )
+
+    school_class = models.ForeignKey(
+        "academics.Class",
+        on_delete=models.CASCADE,
+        related_name="result_snapshots",
+    )
+
+    session = models.ForeignKey(
+        "academics.AcademicSession",
+        on_delete=models.CASCADE,
+        related_name="result_snapshots",
+    )
+
+    term = models.ForeignKey(
+        "academics.Term",
+        on_delete=models.CASCADE,
+        related_name="result_snapshots",
+    )
+
+    data = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+
+    version = models.PositiveIntegerField(
+        default=1,
+    )
+
+    computed_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        unique_together = (
+            "student",
+            "session",
+            "term",
+        )
+
+        ordering = (
+            "-computed_at",
+        )
+
+        indexes = [
+            models.Index(fields=["student"]),
+            models.Index(fields=["school_class"]),
+            models.Index(fields=["session", "term"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.student.user.full_name} | "
+            f"{self.term.name} | "
+            f"{self.session.name}"
+        )
+        
 class ResultCustomization(models.Model):
     """
     Controls which fields are displayed on generated result sheets.

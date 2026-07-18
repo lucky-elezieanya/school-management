@@ -7,6 +7,7 @@ from .models import (
     Result,
     ResultSummary,
     SchoolDays,
+    StudentResultSnapshot,
     TermComment,
     SubjectResultStatus,
     MaxScores,
@@ -25,6 +26,41 @@ from .models import (
     ResultCustomization
 )
 
+@admin.register(StudentResultSnapshot)
+class StudentResultSnapshotAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "student",
+        "school_class",
+        "term",
+        "session",
+        "status",
+        "version",
+        "computed_at",
+    )
+
+    list_filter = (
+        "status",
+        "session",
+        "term",
+        "school_class",
+    )
+
+    search_fields = (
+        "student__user__first_name",
+        "student__user__last_name",
+        "student__admission_number",
+    )
+
+    readonly_fields = (
+        "computed_at",
+        "created_at",
+        "version",
+    )
+
+    ordering = (
+        "-computed_at",
+    )
 
 @admin.register(ResultCustomization)
 class ResultCustomizationAdmin(admin.ModelAdmin):

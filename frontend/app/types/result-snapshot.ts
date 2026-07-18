@@ -116,9 +116,7 @@ export interface SubjectResult {
   cumulativeAverage?: number;
 }
 
-/* ===========================================================
-    ATTENDANCE
-=========================================================== */
+/* ======== ATTENDANCE =================== */
 
 export interface AttendanceSnapshot {
   attendance: number;
@@ -126,17 +124,13 @@ export interface AttendanceSnapshot {
   daysSchoolOpened: number;
 }
 
-/* ===========================================================
-    FEES
-=========================================================== */
+/* ======== FEES ============== */
 
 export interface FeesSnapshot {
   nextFees: number;
 }
 
-/* ===========================================================
-    BEHAVIOUR
-=========================================================== */
+/* ======= BEHAVIOUR ================= */
 
 export interface BehaviourItem {
   item: string;
@@ -148,9 +142,7 @@ export interface BehaviourSnapshot {
   items: BehaviourItem[];
 }
 
-/* ===========================================================
-    COMMENTS
-=========================================================== */
+/* ========  COMMENTS ========================== */
 
 export interface CommentSnapshot {
   text: string;
@@ -164,33 +156,7 @@ export interface CommentsSnapshot {
   principal: CommentSnapshot;
 }
 
-/* ===========================================================
-    CHART
-=========================================================== */
-
-export interface ChartDataPoint {
-  subject: string;
-
-  student: number;
-
-  average: number;
-}
-
-export interface ChartData {
-  subject: string; // Full name
-  subjectCode: string; // Chart label
-  student: number;
-  average: number;
-}
-
-export interface ChartSnapshot {
-  data: ChartData[];
-}
-
-
-/* ===========================================================
-    ASSETS
-=========================================================== */
+/* ======== ASSETS ========== */
 
 export interface AssetsSnapshot {
   logo?: string;
@@ -204,9 +170,7 @@ export interface AssetsSnapshot {
   defaultAvatar: string;
 }
 
-/* ===========================================================
-    ROOT SNAPSHOT
-=========================================================== */
+/* ======== ROOT SNAPSHOT =============== */
 
 export interface StudentResultSnapshot {
   student: StudentSnapshot;
@@ -224,8 +188,6 @@ export interface StudentResultSnapshot {
   comments: CommentsSnapshot;
 
   assets: AssetsSnapshot;
-
-  chart?: ChartSnapshot;
 
   customization: ResultCustomization;
 
