@@ -172,3 +172,22 @@ body::before {
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
+
+@media print {
+    @page {
+      size: A4;
+      margin: 8mm;
+    }
+  
+    html,
+    body {
+      background: white;
+      margin: 0;
+      padding: 0;
+    }
+  
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }

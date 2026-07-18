@@ -288,7 +288,8 @@ class StudentViewSet(viewsets.ModelViewSet):
             "partial_update",
             "destroy",
         ]:
-            return [IsAdminUser()]
+            # return [IsAdminUser()]
+            return [IsTeacherOrAdmin()]
 
         return [IsAuthenticated()]
 

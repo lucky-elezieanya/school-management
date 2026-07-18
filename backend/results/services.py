@@ -1,6 +1,6 @@
 from decimal import Decimal
 import os
-from academics.models import  Class, SchoolAsset, Student, StudentEnrollment, Term
+from academics.models import  Class, SchoolAsset, StudentEnrollment, Term
 from django.db import transaction
 from django.db.models import (
     Count, 
@@ -10,6 +10,8 @@ from django.db.models import (
     )
 
 from django.conf import settings
+
+from .utils.helpers import weasyprint_src
 from .models import (
     Attendance,
     Behaviour,
@@ -30,29 +32,20 @@ from .models import (
     ResultPDF, 
     ClassResultPDF
 )
-import io
-import base64
-import numpy as np
-import matplotlib.pyplot as plt
-import os
-from django.conf import settings
-from django.core.files import File
-from pypdf import PdfWriter
-from django.core.files import File
-from pypdf import PdfWriter
-import os
 
+from django.conf import settings
+from pypdf import PdfWriter
 import logging
-import os
 import traceback
+from io import BytesIO
+from django.core.files.base import ContentFile
 
-from django.conf import settings
-from django.core.files import File
-from pypdf import PdfWriter
-logger = logging.getLogger(__name__)
 from collections import defaultdict
-
 from .utils.chart_svg import generate_chart
+from django.core.files.storage import default_storage
+
+
+logger = logging.getLogger(__name__)
 
 def merge_class_result_pdfs(
     school_class,
@@ -61,140 +54,74 @@ def merge_class_result_pdfs(
 ):
     """
     Merge all generated student PDFs for one class.
+    Compatible with local storage, Backblaze B2, S3, R2, etc.
     """
-    try:
 
-        pdfs = (
-            ResultPDF.objects.filter(
-                student__enrollments__school_class_id=school_class.id,
-                student__enrollments__session_id=session.id,
-                term=term,
-                session=session,
-                status="DONE",
-                file__isnull=False,
-            )
-            .select_related("student")
-            .distinct()
-            .order_by("student__admission_number")
-        )
-
-    except Exception:
-        print("\nERROR BUILDING QUERYSET")
-        traceback.print_exc()
-        raise
-
-    if not pdfs.exists():
-        print("NO PDFS FOUND FOR THIS CLASS")
-        return None
-
-    try:
-        merged, created = ClassResultPDF.objects.get_or_create(
-            school_class=school_class,
+    pdfs = (
+        ResultPDF.objects.filter(
+            student__enrollments__school_class=school_class,
+            student__enrollments__session=session,
             term=term,
             session=session,
+            status="DONE",
+            file__isnull=False,
         )
-
-        print(
-            f"ClassResultPDF {'CREATED' if created else 'FOUND'}"
-        )
-
-    except Exception:
-        print("\nERROR CREATING ClassResultPDF")
-        traceback.print_exc()
-        raise
-
-    try:
-        merged.status = "PROCESSING"
-        merged.save(update_fields=["status"])
-
-    except Exception:
-        print("\nERROR SETTING PROCESSING STATUS")
-        traceback.print_exc()
-        raise
-
-    output_dir = os.path.join(
-        settings.MEDIA_ROOT,
-        "results",
-        "class_pdfs",
+        .select_related("student")
+        .distinct()
+        .order_by("student__admission_number")
     )
 
-    os.makedirs(output_dir, exist_ok=True)
+    if not pdfs.exists():
+        return None
 
-    filename = (
-        f"{school_class.name}_"
-        f"{school_class.arm.code if school_class.arm else ''}_"
-        f"{term.name}_"
-        f"{session.name}.pdf"
-    ).replace(" ", "_").replace("/", "-").replace("\\", "-")
-
-    output_path = os.path.join(
-        output_dir,
-        filename,
+    merged, _ = ClassResultPDF.objects.get_or_create(
+        school_class=school_class,
+        term=term,
+        session=session,
     )
+
+    merged.status = "PROCESSING"
+    merged.save(update_fields=["status"])
 
     writer = PdfWriter()
 
     try:
-        print("\nSTARTING MERGE")
 
         for pdf in pdfs:
 
-            print("-" * 60)
-
-            try:
-                path = pdf.file.path
-            except Exception:
-                print("Cannot obtain file.path")
-                traceback.print_exc()
-                continue
-
-            exists = os.path.exists(path)
-
-            print("Exists:", exists)
-
-            if not exists:
+            if not pdf.file:
                 continue
 
             try:
-                writer.append(path)
-                print("APPENDED SUCCESSFULLY")
+                with default_storage.open(pdf.file.name, "rb") as f:
+                    writer.append(f)
 
             except Exception:
-                print("FAILED TO APPEND PDF")
                 traceback.print_exc()
+                continue
 
-        print("Total merged pages:", len(writer.pages))
+        output = BytesIO()
 
-        with open(output_path, "wb") as f:
-            writer.write(f)
-
-        print("Merged PDF WRITTEN")
-
-    except Exception:
-        print("\nERROR DURING MERGING")
-        traceback.print_exc()
-
-        merged.status = "FAILED"
-        merged.save(update_fields=["status"])
-
-        raise
-
-    finally:
+        writer.write(output)
         writer.close()
 
-    try:
+        output.seek(0)
+
+        filename = (
+            f"{school_class.name}_"
+            f"{school_class.arm.code if school_class.arm else ''}_"
+            f"{term.name}_"
+            f"{session.name}.pdf"
+        ).replace(" ", "_").replace("/", "-")
 
         if merged.file:
-            print("Deleting previous merged file")
             merged.file.delete(save=False)
 
-        with open(output_path, "rb") as f:
-
-            merged.file.save(
-                filename,
-                File(f),
-                save=False,
-            )
+        merged.file.save(
+            filename,
+            ContentFile(output.read()),
+            save=False,
+        )
 
         merged.status = "DONE"
 
@@ -205,22 +132,185 @@ def merge_class_result_pdfs(
             ]
         )
 
-        print("MERGED FILE SAVED SUCCESSFULLY")
+        return merged
 
     except Exception:
-        print("\nERROR SAVING MERGED FILE")
+
         traceback.print_exc()
 
         merged.status = "FAILED"
+
         merged.save(update_fields=["status"])
 
         raise
 
-    print("=" * 80)
-    print("MERGE COMPLETE")
-    print("=" * 80)
+# def merge_class_result_pdfs(
+#     school_class,
+#     term,
+#     session,
+# ):
+#     """
+#     Merge all generated student PDFs for one class.
+#     """
+#     try:
 
-    return merged
+#         pdfs = (
+#             ResultPDF.objects.filter(
+#                 student__enrollments__school_class_id=school_class.id,
+#                 student__enrollments__session_id=session.id,
+#                 term=term,
+#                 session=session,
+#                 status="DONE",
+#                 file__isnull=False,
+#             )
+#             .select_related("student")
+#             .distinct()
+#             .order_by("student__admission_number")
+#         )
+
+#     except Exception:
+#         print("\nERROR BUILDING QUERYSET")
+#         traceback.print_exc()
+#         raise
+
+#     if not pdfs.exists():
+#         print("NO PDFS FOUND FOR THIS CLASS")
+#         return None
+
+#     try:
+#         merged, created = ClassResultPDF.objects.get_or_create(
+#             school_class=school_class,
+#             term=term,
+#             session=session,
+#         )
+
+#         print(
+#             f"ClassResultPDF {'CREATED' if created else 'FOUND'}"
+#         )
+
+#     except Exception:
+#         print("\nERROR CREATING ClassResultPDF")
+#         traceback.print_exc()
+#         raise
+
+#     try:
+#         merged.status = "PROCESSING"
+#         merged.save(update_fields=["status"])
+
+#     except Exception:
+#         print("\nERROR SETTING PROCESSING STATUS")
+#         traceback.print_exc()
+#         raise
+
+#     output_dir = os.path.join(
+#         settings.MEDIA_ROOT,
+#         "results",
+#         "class_pdfs",
+#     )
+
+#     os.makedirs(output_dir, exist_ok=True)
+
+#     filename = (
+#         f"{school_class.name}_"
+#         f"{school_class.arm.code if school_class.arm else ''}_"
+#         f"{term.name}_"
+#         f"{session.name}.pdf"
+#     ).replace(" ", "_").replace("/", "-").replace("\\", "-")
+
+#     output_path = os.path.join(
+#         output_dir,
+#         filename,
+#     )
+
+#     writer = PdfWriter()
+
+#     try:
+#         print("\nSTARTING MERGE")
+
+#         for pdf in pdfs:
+
+#             print("-" * 60)
+
+#             try:
+#                 path = pdf.file.path
+#             except Exception:
+#                 print("Cannot obtain file.path")
+#                 traceback.print_exc()
+#                 continue
+
+#             exists = os.path.exists(path)
+
+#             print("Exists:", exists)
+
+#             if not exists:
+#                 continue
+
+#             try:
+#                 writer.append(path)
+#                 print("APPENDED SUCCESSFULLY")
+
+#             except Exception:
+#                 print("FAILED TO APPEND PDF")
+#                 traceback.print_exc()
+
+#         print("Total merged pages:", len(writer.pages))
+
+#         with open(output_path, "wb") as f:
+#             writer.write(f)
+
+#         print("Merged PDF WRITTEN")
+
+#     except Exception:
+#         print("\nERROR DURING MERGING")
+#         traceback.print_exc()
+
+#         merged.status = "FAILED"
+#         merged.save(update_fields=["status"])
+
+#         raise
+
+#     finally:
+#         writer.close()
+
+#     try:
+
+#         if merged.file:
+#             print("Deleting previous merged file")
+#             merged.file.delete(save=False)
+
+#         with open(output_path, "rb") as f:
+
+#             merged.file.save(
+#                 filename,
+#                 File(f),
+#                 save=False,
+#             )
+
+#         merged.status = "DONE"
+
+#         merged.save(
+#             update_fields=[
+#                 "file",
+#                 "status",
+#             ]
+#         )
+
+#         print("MERGED FILE SAVED SUCCESSFULLY")
+
+#     except Exception:
+#         print("\nERROR SAVING MERGED FILE")
+#         traceback.print_exc()
+
+#         merged.status = "FAILED"
+#         merged.save(update_fields=["status"])
+
+#         raise
+
+#     print("=" * 80)
+#     print("MERGE COMPLETE")
+#     print("=" * 80)
+
+#     return merged
 
 
 def format_position(position):
@@ -434,7 +524,7 @@ def get_student_results(
     profile_picture = None
     
     if hasattr(student, 'user') and student.user.profile_picture:
-        profile_picture = student.user.profile_picture.path
+        profile_picture = weasyprint_src(student.user.profile_picture)
         print(f"Student profile_picture path: {profile_picture}")
     # ==================================================
     # RESULTS BUILD
@@ -534,23 +624,23 @@ def get_student_results(
     return {
 
     "header_path": (
-        active_header.image.path
+        weasyprint_src(active_header.image)
         if active_header and active_header.image
         else None
     ),
 
     "logo_path": (
-        active_logo.image.path
+        weasyprint_src(active_logo.image)
         if active_logo and active_logo.image
         else None
     ),
     "teacher_signature_path": (
-        teacher_signature.signature.path
+        weasyprint_src(teacher_signature.signature)
         if teacher_signature and teacher_signature.signature
         else None
     ),
     "head_teacher_signature_path": (
-        head_teacher_signature.signature.path
+        weasyprint_src(head_teacher_signature.signature)
         if head_teacher_signature and head_teacher_signature.signature
         else None
     ),

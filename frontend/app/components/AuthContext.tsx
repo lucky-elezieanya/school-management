@@ -1,52 +1,56 @@
 "use client";
-
-import { jwtDecode } from "jwt-decode";
-import { createContext, useState, ReactNode, useEffect } from "react";
-
+import { toast } from "sonner";
+import { createContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { jwtDecode } from "jwt-decode";
 
 import { BASE_URL, getActiveTermSession } from "../lib/api";
 
 import {
   getTokens,
-  isTokenExpired,
+  setTokens,
   logout,
   refreshAccessToken,
-  setTokens,
+  isTokenExpired,
   decodeToken,
 } from "../lib/auth";
 
-import { JwtPayload } from "../lib/types";
+import { JwtPayload, UserType } from "../lib/types";
+import {
+  fetchCurrentTerm,
+  fetchCurrentUser,
+  initializeSession,
+  login,
+} from "../lib/authService";
 
 type TermSession = {
   id: number;
   name: string;
   is_active: boolean;
   session: {
-    name: string;
     id: number;
+    name: string;
     is_active: boolean;
   };
+};
+
+type AuthTokens = {
+  access: string;
+  refresh: string;
 };
 
 type AuthContextType = {
   loginUser: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
 
   loading: boolean;
-  error: string | null;
-  logo: string | null;
-
-  user: any;
-
-  authToken: {
-    access: string;
-    refresh: string;
-  };
-
   authLoading: boolean;
 
-  currentTerm: TermSession | null;
+  error: string | null;
 
+  user: UserType | null;
+  authToken: AuthTokens;
+
+  currentTerm: TermSession | null;
   setCurrentTerm: React.Dispatch<React.SetStateAction<TermSession | null>>;
 
   termMessage: string;
@@ -59,10 +63,9 @@ export default AuthContext;
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
 
-  const [user, setUser] = useState<any>(null);
-  const [logo, setLogo] = useState<any>(null);
+  const [user, setUser] = useState<UserType | null>(null);
 
-  const [authToken, setAuthToken] = useState({
+  const [authToken, setAuthToken] = useState<AuthTokens>({
     access: "",
     refresh: "",
   });
@@ -71,64 +74,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const [authLoading, setAuthLoading] = useState(true);
 
-  const [termSession, setTermSession] = useState<TermSession | null>(null);
-
-  const [termMessage, setTermMessage] = useState("");
-  const [userId, setUserId] = useState<number | null>(null);
-
   const [error, setError] = useState<string | null>(null);
 
-  /* =========================
-	   FETCH USER
-	========================= */
+  const [currentTerm, setCurrentTerm] = useState<TermSession | null>(null);
 
-  const fetchUser = async (userId: number, accessToken: string) => {
-    try {
-      const res = await fetch(`${BASE_URL}/accounts/users/${userId}/`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+  const [termMessage, setTermMessage] = useState("");
 
-      const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data?.detail || "Failed to fetch user");
-      }
-
-      setUser(data);
-
-      return data;
-    } catch (error) {
-      console.log(error);
-      return null;
-    }
-  };
-
-  /* =========================
-	   ACTIVE TERM
-	========================= */
-
-  const activeTerm = async () => {
-    try {
-      const res = await getActiveTermSession();
-
-      if (!res) {
-        setTermMessage("No term has been configured yet.");
-        return;
-      }
-
-      setTermSession(res);
-
-      setTermMessage("");
-    } catch {
-      setTermMessage("Unable to load session.");
-    }
-  };
-
-  /* =========================
-	   LOGIN
-	========================= */
+  /* =============LOGIN============== */
 
   const loginUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -139,74 +92,85 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const form = e.currentTarget;
 
-      const response = await fetch(`${BASE_URL}/accounts/token/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username: (form.elements.namedItem("username") as HTMLInputElement)
-            .value,
-          password: (form.elements.namedItem("password") as HTMLInputElement)
-            .value,
-        }),
-      });
+      const username = (form.elements.namedItem("username") as HTMLInputElement)
+        .value;
 
-      const data = await response.json();
+      const password = (form.elements.namedItem("password") as HTMLInputElement)
+        .value;
 
-      if (!response.ok) {
-        throw new Error(data?.detail || "Invalid credentials");
-      }
-      setTokens(data);
-      setAuthToken(data);
+      const { tokens, decoded } = await login(username, password);
 
-      const decoded: JwtPayload = jwtDecode(data.access);
+      setAuthToken(tokens);
 
-      await activeTerm();
-      setUserId(decoded.user_id);
-      await fetchUser(decoded.user_id, data.access);
+      const user = await fetchCurrentUser(decoded.user_id);
 
-      switch (decoded.role) {
-        case "admin":
-          router.replace("/admin");
-          break;
+      setUser(user);
 
-        case "teacher":
-          router.replace("/teachers");
-          break;
+      const term = await fetchCurrentTerm();
 
-        case "student":
-          router.replace("/students");
-          break;
+      setCurrentTerm(term);
 
-        default:
-          router.replace("/");
-      }
+      router.replace(
+        decoded.role === "admin"
+          ? "/admin"
+          : decoded.role === "teacher"
+            ? "/teachers"
+            : "/students",
+      );
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+  /* =====================================================
+   INITIALIZE AUTH
+===================================================== */
 
-  /* =========================
-	   INITIALIZE AUTH
-	========================= */
   const initializeAuth = async () => {
     try {
       setAuthLoading(true);
 
-      const tokens = getTokens();
+      const session = await initializeSession();
 
-      if (!tokens?.access) {
+      if (!session) {
         setUser(null);
-        setAuthLoading(false);
         return;
       }
 
-      let accessToken = tokens.access;
+      setUser(session.user);
 
-      if (isTokenExpired(accessToken)) {
+      setAuthToken(session.tokens);
+
+      const term = await fetchCurrentTerm();
+
+      setCurrentTerm(term);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+  /* ================== INITIALIZE AUTH ========================= */
+
+  useEffect(() => {
+    initializeAuth();
+  }, []);
+
+  /* ================= AUTO REFRESH ACCESS TOKEN ========== */
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const tokens = getTokens();
+
+      if (!tokens?.access) return;
+
+      const decoded = decodeToken<JwtPayload>(tokens.access);
+
+      if (!decoded?.exp) return;
+
+      const expiresIn = decoded.exp * 1000 - Date.now();
+
+      // Refresh 5 minutes before expiry
+      if (expiresIn <= 5 * 60 * 1000) {
         const newAccess = await refreshAccessToken();
 
         if (!newAccess) {
@@ -215,99 +179,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
-        accessToken = newAccess;
-      }
-
-      setAuthToken({
-        ...tokens,
-        access: accessToken,
-      });
-
-      const decoded = decodeToken<JwtPayload>(accessToken);
-
-      if (!decoded) {
-        logout();
-        setUser(null);
-        return;
-      }
-
-      const userData = await fetchUser(decoded.user_id, accessToken);
-
-      if (!userData) {
-        logout();
-        setUser(null);
-        return;
-      }
-      setUser(userData);
-      await activeTerm();
-    } catch (err) {
-      console.error("Auth init error:", err);
-      logout();
-      setUser(null);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-  /* =========================
-	   AUTO REFRESH TOKEN
-	========================= */
-
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const tokens = getTokens();
-
-      if (!tokens?.access) return;
-
-      const decoded: any = decodeToken(tokens.access);
-
-      if (!decoded?.exp) return;
-
-      const expiryTime = decoded.exp * 1000;
-
-      const timeLeft = expiryTime - Date.now();
-
-      /*
-					Refresh 5 mins before expiry
-				*/
-      if (timeLeft < 5 * 60 * 1000) {
-        const newAccess = await refreshAccessToken();
-
-        if (!newAccess) {
-          logout();
-          return;
-        }
-
         setAuthToken((prev) => ({
           ...prev,
           access: newAccess,
         }));
+
+        // Refresh user information with the new token
+        await fetchCurrentUser(decoded.user_id);
       }
     }, 60000);
 
     return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (!userId || !authToken) return;
-    fetchUser(userId, authToken.access);
-  }, [authToken, userId]);
-
-  /* ============ INIT =========== */
-
-  useEffect(() => {
-    initializeAuth();
-  }, []);
+  }, [authToken]);
 
   const contextData: AuthContextType = {
     loginUser,
     loading,
     error,
-    logo,
-    user,
+
+    user: user,
     authToken,
     authLoading,
-    currentTerm: termSession,
-    setCurrentTerm: setTermSession,
+    currentTerm: currentTerm,
+    setCurrentTerm: setCurrentTerm,
     termMessage,
   };
 

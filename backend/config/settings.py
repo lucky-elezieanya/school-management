@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+import os
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # CORE SECURITY
 # ======================================================
 SECRET_KEY = config("SECRET_KEY")
-DEBUG = config("DEBUG", cast=bool, default=False)
+DEBUG = config("DEBUG", cast=bool, default=True)
 
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS",
@@ -33,21 +34,23 @@ CORS_ALLOWED_ORIGINS = config(
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
+    "corsheaders",
+ 
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    
 
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
-    "corsheaders",
     "django_filters",
 
     "accounts",
     "academics",
     "results",
-
+    'storages',
     # Celery 
     "django_celery_beat"
 ]
@@ -58,7 +61,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.common.CommonMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -71,6 +74,24 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 
 
+#======= STORAGES CONFIGURATION ============#
+
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "storages.backends.s3.S3Storage"
+            if not DEBUG
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": (
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if not DEBUG
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        ),
+    },
+}
 # ======================================================
 # DATABASE
 # ======================================================
@@ -86,15 +107,22 @@ DATABASES = {
     }
 }
 
+AWS_ACCESS_KEY_ID = config("B2_KEY_ID")
+AWS_SECRET_ACCESS_KEY = config("B2_APPLICATION_KEY")
+AWS_STORAGE_BUCKET_NAME = config("B2_BUCKET_NAME")
+AWS_S3_REGION_NAME = config("B2_REGION")
+AWS_S3_ENDPOINT_URL = (
+    f"https://s3.{AWS_S3_REGION_NAME}.backblazeb2.com"
+)
 
+AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_DEFAULT_ACL = None
 
-# DATABASES = {
-#     'default': dj_database_url.config(
-#         default=config('DATABASE_URL'),
-#         conn_max_age=600,
-#         conn_health_checks=True
-#     )
-# }
+AWS_QUERYSTRING_AUTH = True
+AWS_QUERYSTRING_EXPIRE = 3600  # 1 hour
+
+AWS_S3_FILE_OVERWRITE = True
+AWS_S3_VERIFY = True
 
 # ======================================================
 # CELERY 
@@ -121,7 +149,6 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
 CELERY_TASK_ALWAYS_EAGER = False
 
-# 🔥 IMPORTANT (fixes weird backend issues)
 CELERY_RESULT_EXPIRES = 60 * 60 * 24  # 1 day
 
 # # Password validation
@@ -207,28 +234,43 @@ TIME_ZONE = "Africa/Lagos"
 USE_I18N = True
 USE_TZ = True
 
-
 # ======================================================
 # STATIC / MEDIA
 # ======================================================
-
-MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
-
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+if DEBUG:
+    MEDIA_URL = "/media/"
+    MEDIA_ROOT = BASE_DIR / "media"
+else:
+    pass
 # ======================================================
 # AUTH
 # ======================================================
 AUTH_USER_MODEL = "accounts.User"
 
+IS_PRODUCTION = config("IS_PRODUCTION", cast=bool, default=False)
+
+# if IS_PRODUCTION:
+#     SESSION_COOKIE_SECURE = True
+#     CSRF_COOKIE_SECURE = True
+#     SECURE_SSL_REDIRECT = True
+#     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_SSL_REDIRECT = True
+        # Only enable this on a real HTTPS server
+    SECURE_SSL_REDIRECT = config(
+        "SECURE_SSL_REDIRECT",
+        cast=bool,
+        default=False,
+    )
     X_FRAME_OPTIONS = "DENY"
+  
     
 APPEND_SLASH=False

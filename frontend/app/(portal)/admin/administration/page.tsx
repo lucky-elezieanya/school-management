@@ -123,7 +123,7 @@ export default function AdministrationPage() {
     },
 
     {
-      name: "Fees",
+      name: "Set Next Term Fees",
       href: "/admin/administration/fees",
       icon: Banknote,
     },

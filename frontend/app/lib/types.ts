@@ -60,6 +60,7 @@ export type UserType = {
   full_name: string;
   role: string;
   email?: string | "";
+  age: number;
 };
 
 export type StudentType = {
@@ -74,18 +75,26 @@ export type StudentType = {
   parent_email: string;
   parent_address: string;
   is_active: boolean;
-  user: {
-    id: number;
-    first_name: string;
-    last_name: string;
-    username: string;
-    profile_picture?: string | "/avatar.png";
-    gender: string;
-    middle_name: string;
-    date_of_birth: string;
-    age: number;
-    full_name: string;
-  };
+  user: UserType;
+};
+
+export type TeacherSummary = {
+  id: number;
+
+  profile_picture?: string;
+  qualification: string;
+  address: string;
+  phone_number: string;
+  date_employed: string;
+  user: UserType;
+};
+
+export type AssignedClass = {
+  id: number;
+  name: string;
+  arm: ArmsType;
+  description: string;
+  class_teacher: TeacherSummary;
 };
 
 export type TeacherType = {
@@ -94,27 +103,10 @@ export type TeacherType = {
   address: string;
   phone_number: string;
   date_employed: string;
-  assigned_classes?: {
-    id: number;
-    name: string;
-    arm: ArmsType;
-    description: string;
-    class_teacher: TeacherType;
-  }[];
-  user: {
-    id: number;
-    first_name: string;
-    last_name: string;
-    username: string;
-    profile_picture?: string | "/avatar.png";
-    gender: string;
-    middle_name: string;
-    date_of_birth: string;
-    full_name: string;
-    email: string;
-    age: number;
-  };
+  assigned_classes?: AssignedClass[];
+  user: UserType;
 };
+
 export type TeacherFormDataType = {
   qualification: string;
   address: string;

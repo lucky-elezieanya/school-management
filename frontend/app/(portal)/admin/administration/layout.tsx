@@ -141,7 +141,7 @@ const navLinks = [
   },
 
   {
-    name: "Fees",
+    name: "Set Term Fees",
     href: "/admin/administration/fees",
     icon: Banknote,
   },

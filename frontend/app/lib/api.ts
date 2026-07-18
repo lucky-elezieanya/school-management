@@ -5,8 +5,6 @@ import {toast} from "sonner"
 
 export const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL || "http://127.0.0.1:8000/api";
-// const token = getAccessToken();
-
 
 export const handleResponse = async (res: Response) => {
 	let data: any = null;
@@ -227,6 +225,14 @@ export const getActiveTermSession = async () => {
 	}
 	return response;
 };
+export const getUser = async (userId:number) => {
+	const res = await fetch(`${BASE_URL}/accounts/users/${userId}/`, {
+		headers: apiHeaders()
+	});
+	return handleResponse(res);
+};
+
+
 export const fetchClasses = async () => {
 	const res = await fetch(`${BASE_URL}/academics/classes/`, {
 		headers: apiHeaders()

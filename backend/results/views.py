@@ -1,6 +1,6 @@
 from decimal import Decimal
 import os
-import io
+import csv
 from django.http import FileResponse
 from django.db.models import Q
 from django.utils import timezone
@@ -26,17 +26,12 @@ from dataclasses import asdict
 from celery.result import AsyncResult
 from rest_framework.decorators import api_view
 
-from .tasks import compute_all_results_for_Class_task, compute_all_results_task, generate_result_pdfs_for_class_task, generate_result_pdfs_task, recompute_all_results_task
+from .tasks import compute_all_results_for_class_task, compute_all_results_task, generate_result_pdfs_for_class_task, generate_result_pdfs_task, recompute_all_results_task
 from .services import get_student_results, update_result_workflow, merge_class_result_pdfs
-
-import csv
-import base64
-import matplotlib.pyplot as plt
 
 from django.http import FileResponse, HttpResponse
 from django.template.loader import render_to_string
 
-import numpy as np
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
 
 class ResultCustomizationViewSet(viewsets.ModelViewSet):
@@ -257,16 +252,22 @@ class ResultComputationViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        task = compute_all_results_task.delay(
-            term_id=term_id,
-            session_id=session_id,
+        task = queue_task(
+            compute_all_results_task,
+            term_id,
+            session_id,
+            task_name="Compute All Results",
         )
 
         return Response(
-            {"task_id": task.id, "status": "queued"},
+            {
+                "task_id": task["id"],
+                "status": "queued",
+            },
             status=status.HTTP_202_ACCEPTED,
         )
 
+    
     @action(detail=False, methods=["post"], url_path="recompute")
     def recompute(self, request):
         term_id = request.data.get("term_id")
@@ -622,7 +623,6 @@ class GradingScaleViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
         
-
 class ResultPDFViewSet(viewsets.ViewSet):
     queryset = ResultPDF.objects.all()
     serializer_class = ResultPDFSerializer
@@ -1397,13 +1397,13 @@ class ResultViewSet(viewsets.ModelViewSet):
         # -----------------------------
         update_result_workflow(school_class, term, session)
         workflow = ResultWorkflow.objects.get(school_class=school_class)
-        if workflow.all_results_submitted:           
-            compute_all_results_for_Class_task.delay(
-                term_id=term.id,
-                session_id=session.id,
-                class_id=school_class.id,
+        if workflow.all_results_submitted:
+            compute_all_results_for_class_task.delay(
+                term_id=term_id,
+                session_id=session_id,
+                class_id=workflow.school_class.id
             )
-          
+      
         return Response(
             {
                 "message": "Results processed successfully",
@@ -1461,7 +1461,9 @@ class ResultViewSet(viewsets.ModelViewSet):
                     {"detail": "Teacher profile not found."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-
+            isStaff = False
+            if request.user.is_staff:
+                isStaff = True
             allowed = Class.objects.filter(
                 id=school_class_id,
                 class_teacher=teacher,
@@ -1883,76 +1885,6 @@ class ResultViewSet(viewsets.ModelViewSet):
             filename=merged.file.name.split("/")[-1],
             content_type="application/pdf",
         )
-
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path="report-card",
-    )
-    def report_card(self, request):
-        student_id = request.query_params.get("student")
-        term_id = request.query_params.get("term")
-        session_id = request.query_params.get("session")
-
-        if not all([student_id, term_id, session_id]):
-            return Response(
-                {
-                    "detail": "student, term and session are required."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            student = Student.objects.select_related("user").get(pk=student_id)
-            term = Term.objects.get(pk=term_id)
-            session = AcademicSession.objects.get(pk=session_id)
-
-            enrollment = (
-                student.enrollments.filter(session=session)
-                .select_related("school_class", "school_class__arm")
-                .first()
-            )
-
-            if not enrollment:
-                return Response(
-                    {
-                        "detail": "Student is not enrolled for this session."
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-            report = get_student_report_data(
-                request=request,
-                student=student,
-                school_class=enrollment.school_class,
-                term=term,
-                session=session,
-            )
-
-            # return Response(report)
-            serializer = ReportSerializer(
-                data=asdict(report)
-            )
-
-            serializer.is_valid(raise_exception=True)
-
-            return Response(serializer.validated_data)
-
-        except Student.DoesNotExist:
-            return Response(
-                {"detail": "Student not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        except Term.DoesNotExist:
-            return Response(
-                {"detail": "Term not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        except AcademicSession.DoesNotExist:
-            return Response(
-                {"detail": "Session not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
 
 class TermCommentViewSet(viewsets.ModelViewSet):
     queryset = TermComment.objects.select_related("student", "student__user", "term", "session", "school_class")

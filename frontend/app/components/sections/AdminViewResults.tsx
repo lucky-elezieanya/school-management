@@ -113,7 +113,7 @@ export default function AdminViewResults() {
   const [resultExist, setResultExist] = useState(false);
 
   const checkResultSheetExists = async () => {
-    const url = `${BASE_URL}/results/results/results-sheets-exist/?school_class_id=${Number(selectedClass?.id)}?term_id=${termId}`;
+    const url = `${BASE_URL}/results/results/results-sheets-exist/?school_class_id=${selectedClass?.id}&term_id=${termId}`;
     const res = await fetch(url, {
       headers: apiHeaders(),
     });
@@ -166,6 +166,8 @@ export default function AdminViewResults() {
         });
         const data = await handleResponse(res);
         setClasses(data?.results || data || []);
+        setSelectedClass(data?.results[0]);
+        loadBroadsheet(data?.results[0])
       } catch (err: any) {
         setError(err?.message || "Unable to load classes.");
       } finally {

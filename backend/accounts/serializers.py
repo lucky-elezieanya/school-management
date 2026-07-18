@@ -5,10 +5,9 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 User = get_user_model()
 
-# from .models import User
-
 
 class UserSerializer(serializers.ModelSerializer):
+    # profile_picture = serializers.SerializerMethodField()
 
     password = serializers.CharField(
         write_only=True,
@@ -32,9 +31,22 @@ class UserSerializer(serializers.ModelSerializer):
             "age",
             "profile_picture",
         ]
-
         read_only_fields = ["id"]
 
+    # def get_profile_picture(self, obj):
+    #     if not obj.profile_picture:
+    #         return None
+
+    #     try:
+    #         request = self.context.get("request")
+
+    #         if request:
+    #             return request.build_absolute_uri(obj.profile_picture.url)
+
+    #         return obj.profile_picture.url
+    #     except Exception:
+    #         return None
+        
     # CREATE USER
     # =====================================
 
@@ -81,6 +93,7 @@ class UserSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+    
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 # Custom serializer to include additional user info in the token payload 
 

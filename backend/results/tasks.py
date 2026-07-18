@@ -1,12 +1,12 @@
 import logging
-
+from io import BytesIO
+from django.core.files.base import ContentFile
 from celery import shared_task
 from django.template.loader import render_to_string
 from django.conf import settings
 from weasyprint import HTML
 import os
 from django.db import transaction
-
 from .models import ClassResultPDF, ResultPDF
 from celery.exceptions import MaxRetriesExceededError
 from .celery_utils import ProgressTask
@@ -125,24 +125,47 @@ def generate_result_pdfs_task(self, term_id, session_id):
                 f"_result_{session.name}_{term.name}.pdf"
             )
 
-            file_path = os.path.join(
-                settings.MEDIA_ROOT,
-                "results",
-                "pdfs",
-                file_name,
-            )
+            # file_path = os.path.join(
+            #     settings.MEDIA_ROOT,
+            #     "results",
+            #     "pdfs",
+            #     file_name,
+            # )
 
-            os.makedirs(
-                os.path.dirname(file_path),
-                exist_ok=True,
-            )
+            # os.makedirs(
+            #     os.path.dirname(file_path),
+            #     exist_ok=True,
+            # )
+
+            # HTML(
+            #     string=html_string,
+            #     base_url=settings.BASE_DIR,
+            # ).write_pdf(file_path)
+
+            # pdf_obj.file = f"results/pdfs/{file_name}"
+            # pdf_obj.status = "DONE"
+
+            # pdf_obj.save(
+            #     update_fields=[
+            #         "file",
+            #         "status",
+            #     ]
+            # )
+            buffer = BytesIO()
 
             HTML(
                 string=html_string,
                 base_url=settings.BASE_DIR,
-            ).write_pdf(file_path)
+            ).write_pdf(buffer)
 
-            pdf_obj.file = f"results/pdfs/{file_name}"
+            buffer.seek(0)
+
+            pdf_obj.file.save(
+                f"results/pdfs/{file_name}",
+                ContentFile(buffer.read()),
+                save=False,
+            )
+
             pdf_obj.status = "DONE"
 
             pdf_obj.save(
@@ -151,7 +174,6 @@ def generate_result_pdfs_task(self, term_id, session_id):
                     "status",
                 ]
             )
-
             generated += 1
 
             try:
@@ -306,14 +328,33 @@ def generate_result_pdfs_for_class_task(self, term_id, session_id, class_id):
 
             # Build and generate file path structure safely
             file_name = f"{student.admission_number}_result_{session.name}_{term.name}.pdf"
-            file_path = os.path.join(settings.MEDIA_ROOT, "results", "pdfs", file_name)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            # file_path = os.path.join(settings.MEDIA_ROOT, "results", "pdfs", file_name)
+            # os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-            HTML(string=html_string, base_url=settings.BASE_DIR).write_pdf(file_path)
+            # HTML(string=html_string, base_url=settings.BASE_DIR).write_pdf(file_path)
 
-            # Save the final file back to storage
-            pdf_obj.file = f"results/pdfs/{file_name}"
+            # # Save the final file back to storage
+            # pdf_obj.file = f"results/pdfs/{file_name}"
+            # pdf_obj.status = "DONE"
+            # pdf_obj.save(update_fields=["file", "status"])
+            
+            buffer = BytesIO()
+
+            HTML(
+                string=html_string,
+                base_url=settings.BASE_DIR,
+            ).write_pdf(buffer)
+
+            buffer.seek(0)
+
+            pdf_obj.file.save(
+                f"results/pdfs/{file_name}",
+                ContentFile(buffer.read()),
+                save=False,
+            )
+
             pdf_obj.status = "DONE"
+
             pdf_obj.save(update_fields=["file", "status"])
             
             generated += 1
@@ -444,7 +485,7 @@ def compute_all_results_task(self, term_id, session_id):
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
-def compute_all_results_for_Class_task(self, term_id, session_id, class_id):
+def compute_all_results_for_class_task(self, term_id, session_id, class_id):
     # 1. Fetch the specific class directly
     try:
         school_class = Class.objects.get(id=class_id)

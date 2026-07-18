@@ -8,8 +8,6 @@ from django.core.validators import MinValueValidator
 from django.db.models import Q
 import uuid
 
-from django.db import models
-
 class ResultCustomization(models.Model):
     """
     Controls which fields are displayed on generated result sheets.
