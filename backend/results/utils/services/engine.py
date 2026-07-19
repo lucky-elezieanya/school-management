@@ -1,14 +1,15 @@
 from django.db import transaction
 
 from academics.models import StudentEnrollment
+from ..helpers import make_json_safe
 
-from ..models import StudentResultSnapshot
+from ...models import StudentResultSnapshot
 
 from .context import ResultSnapshotContext
 
 from .snapshot_builder import StudentSnapshotBuilder
 
-from ..services import (
+from ...services import (
     generate_subject_summaries_for_class,
     generate_result_summary_for_class,
 )
@@ -66,7 +67,7 @@ class ResultEngine:
 
                     StudentResultSnapshot(
 
-                        student=student,
+                        student_id=student.id,
 
                         school_class=self.school_class,
 
@@ -146,8 +147,10 @@ class ResultEngine:
 
             snapshot = StudentSnapshotBuilder(
                 context=context,
-                enrollment=enrollment,
+                student_id=enrollment.student_id,
             ).build()
+            
+            snapshot = make_json_safe(snapshot)
 
             snapshots.append(
                 {

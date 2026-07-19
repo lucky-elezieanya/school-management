@@ -329,7 +329,7 @@ export default function ResultEntryTable({
 
                     <td className="p-2 sp-3 border text-gray-800">
                       <Link
-                        href={`${user.role === "admin" ? `/admin/administration/students/${s.id}` : `/teachers/students/${s.id}`}`}
+                        href={`${user?.role === "admin" ? `/admin/administration/students/${s.id}` : `/teachers/students/${s.id}`}`}
                         className="flex items-center gap-2 sm:gap-3"
                       >
                         <img

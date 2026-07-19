@@ -6,6 +6,8 @@ from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 
+from .utils.services.engine import ResultEngine
+
 from .permissions import IsAdminUser, IsTeacherOrAdmin
 from rest_framework import viewsets, status
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -1415,11 +1417,11 @@ class ResultViewSet(viewsets.ModelViewSet):
         update_result_workflow(school_class, term, session)
         workflow = ResultWorkflow.objects.get(school_class=school_class)
         if workflow.all_results_submitted:
-            compute_all_results_for_class_task.delay(
-                term_id=term_id,
-                session_id=session_id,
-                class_id=workflow.school_class.id
-            )
+            ResultEngine(
+                school_class,
+                session,
+                term,
+            ).compute()
       
         return Response(
             {

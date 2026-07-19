@@ -7,19 +7,20 @@ from .calculations import (
 )
 
 def build_subjects(
-   
-    context
+    results,
+    context,
 ):
-    results = context.results
+    """
+    Build the subjects section of the student snapshot.
 
-    subject_summaries = context.subject_summaries
+    This function performs NO database queries.
+    It assumes every required object has already been
+    preloaded into ResultSnapshotContext.
+    """
 
-    term_history = context.term_history
-
-    terms = context.terms
     subjects = []
 
-    term_ids = [term.id for term in terms]
+    term_ids = [term.id for term in context.terms]
 
     first_term = term_ids[0] if len(term_ids) > 0 else None
     second_term = term_ids[1] if len(term_ids) > 1 else None
@@ -27,106 +28,69 @@ def build_subjects(
 
     for result in results:
 
-        summary = subject_summaries.get(
-            result.class_subject_id
-        )
+        summary = getattr(result, "summary", None)
 
-        history = term_history.get(
-
+        history = context.term_history.get(
             (
                 result.student_id,
                 result.class_subject_id,
             ),
-
             {},
-
         )
 
         first_term_total = history.get(first_term)
-
         second_term_total = history.get(second_term)
-
         third_term_total = history.get(third_term)
 
         cumulative_average = calculate_cumulative_average(
-
             [
-
                 first_term_total,
-
                 second_term_total,
-
                 third_term_total,
-
             ]
-
         )
 
+        subject = result.class_subject.subject
+
         subjects.append(
-
             {
+                "subjectId": subject.id,
+                "subjectName": subject.name,
+                "subjectCode": subject.code or "",
 
-                "subjectId":
-                    result.class_subject.subject.id,
+                "firstTest": result.first_test,
+                "secondTest": result.second_test,
+                "examScore": result.exam_score,
 
-                "subjectName":
-                    result.class_subject.subject.name,
+                "totalScore": result.total_score,
 
-                "subjectCode":
-                    result.class_subject.subject.code,
+                "grade": result.grade,
+                "remark": result.remark,
 
-                "firstTest":
-                    result.first_test,
-
-                "secondTest":
-                    result.second_test,
-
-                "examScore":
-                    result.exam_score,
-
-                "totalScore":
-                    result.total_score,
-
-                "grade":
-                    result.grade,
-
-                "remark":
-                    result.remark,
-
-                "subjectAverage":
-
+                "subjectAverage": (
                     summary.subject_average
                     if summary
-                    else None,
+                    else None
+                ),
 
-                "subjectPosition":
-
-                    format_position(
-                        summary.subject_position
-                    )
+                "subjectPosition": (
+                    format_position(summary.subject_position)
                     if summary
-                    else None,
+                    else None
+                ),
 
-                "subjectScore":
-
+                "subjectScore": (
                     summary.score
                     if summary
-                    else None,
+                    else None
+                ),
 
-                "firstTermTotal":
-                    first_term_total,
+                "firstTermTotal": first_term_total,
+                "secondTermTotal": second_term_total,
+                "thirdTermTotal": third_term_total,
 
-                "secondTermTotal":
-                    second_term_total,
-
-                "thirdTermTotal":
-                    third_term_total,
-
-                "cumulativeAverage":
-                    cumulative_average,
-
+                "cumulativeAverage": cumulative_average,
             }
-
         )
 
     return subjects
@@ -136,6 +100,7 @@ def build_summary(
     class_statistics,
     grading_scales,
     resumption_date,
+    enrollments
 ):
 
     if summary:
@@ -167,7 +132,7 @@ def build_summary(
                 format_position(summary.position),
 
             "classSize":
-                summary.class_size,
+                len(enrollments),
 
             "totalSubjects":
                 total_subjects,
@@ -225,7 +190,7 @@ def build_summary(
 
     }
 
-def build_student(student: Student):
+def build_student(student):
     return {
         "id": student.id,
         "fullName": student.user.full_name,
@@ -288,18 +253,30 @@ def build_fees(class_fee):
     }
     
 def build_behaviour(behaviours):
-    return {
-        "items": [
-            {
-                "item":
-                    b.behaviour.name,
-                "grade":
-                    b.grade,
-            }
-            for b in behaviours
-        ]
+    # Map the fields you want to extract from the Behaviour model
+    fields = [
+        "skills",
+        "politeness",
+        "neatness",
+        "self_control",
+        "relationship",
+        "attendance",
+        "punctuality",
+        "leadership",
+    ]
 
-    }
+    items = []
+    for b in behaviours:
+        for field in fields:
+            items.append(
+                {
+                    # Converts 'self_control' to 'Self Control' for a cleaner UI label
+                    "item": field.replace("_", " ").title(),
+                    "grade": getattr(b, field),
+                }
+            )
+
+    return {"items": items}
 
 def build_comments(
     teacher_comment,
@@ -331,31 +308,13 @@ def build_comments(
     }
 
 def build_assets(settings):
-
     return {
-
-        "logo":
-
-            settings.logo.url
-            if settings.logo
-            else None,
-
-        "header":
-
-            settings.header.url
-            if settings.header
-            else None,
-
-        "defaultLogo":
-            settings.default_logo.url,
-
-        "defaultHeader":
-            settings.default_header.url,
-
-        "defaultAvatar":
-            settings.default_avatar.url,
+        "logo": settings.get("logo"),
+        "header": settings.get("header"),
+        "defaultLogo": settings.get("default_logo"),
+        "defaultHeader": settings.get("default_header"),
+        "defaultAvatar": settings.get("default_avatar"),
     }
-
 def build_customization(customization):
 
     return {

@@ -1,17 +1,19 @@
 from collections import defaultdict
-
+from django.conf import settings
 from academics.models import (
     StudentEnrollment,
-    Attendance,
-    Behaviour,
- 
-    ClassFees,
-    ResultCustomization,
-    SchoolAssets,
-    ResumptionDate,
+    SchoolAsset,
+    Term,
 )
 
-from .models import (
+from ...models import (
+    ClassFees,
+    ClassTeacherSignature,
+    HeadTeacherSignature,
+    ResultCustomization,
+    Attendance,
+    Behaviour,
+    ResumptionDate,
     Result,
     ResultSummary,
     SubjectSummary,
@@ -46,7 +48,8 @@ class ResultSnapshotContext:
     def load(self):
 
             self.load_enrollments()
-
+            self.load_terms()
+            self.load_signatures()
             self.load_results()
 
             self.load_result_summaries()
@@ -66,6 +69,15 @@ class ResultSnapshotContext:
 
             self.attach_subject_summaries()
 
+    def load_terms(self):
+        self.terms = Term.objects.filter(session=self.session)
+     
+        
+    def load_signatures(self): 
+        class_teacher_signature = ClassTeacherSignature.objects.filter(school_class=self.school_class, is_active=True).first()
+        head_teacher_signature = HeadTeacherSignature.objects.filter(is_active=True).first()
+        self.teacher_signature=class_teacher_signature.signature.url
+        self.principal_signature = head_teacher_signature.signature.url
 
     def load_term_history(self):
 
@@ -125,7 +137,7 @@ class ResultSnapshotContext:
             .filter(
                 school_class=self.school_class,
                 session=self.session,
-                is_active=True,
+                is_current=True,
             )
             .select_related(
                 "student",
@@ -139,6 +151,7 @@ class ResultSnapshotContext:
             enrollment.student_id: enrollment
             for enrollment in enrollments
         }
+        
     def load_results(self):
 
         results = (
@@ -149,7 +162,7 @@ class ResultSnapshotContext:
                 term=self.term,
             )
             .select_related(
-                "grade",
+                
                 "student",
                 "class_subject",
                 "class_subject__subject",
@@ -237,9 +250,11 @@ class ResultSnapshotContext:
             ).first()
         )
 
-        self.assets = (
-            SchoolAssets.objects.first()
-        )
+        logo = SchoolAsset.objects.filter(asset_type="logo", is_active=True).first()
+        header = SchoolAsset.objects.filter(asset_type="header", is_active=True).first()
+        default_header = settings.DEFAULT_HEADER
+        default_avatar = settings.DEFAULT_AVATAR
+        self.assets = ({"logo": logo.image.url, "header": header.image.url, "default_header": default_header, "default_avatar": default_avatar})
 
         self.school_days = (
             SchoolDays.objects.filter(
@@ -249,8 +264,8 @@ class ResultSnapshotContext:
 
         self.resumption_date = (
             ResumptionDate.objects.filter(
-                session=self.session,
-                term=self.term,
+                current_session=self.session,
+                current_term=self.term,
             ).first()
         )
         

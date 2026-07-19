@@ -273,4 +273,7 @@ if not DEBUG:
     X_FRAME_OPTIONS = "DENY"
   
 SCHOOL_NAME="Cozzi Schools"  
+DEFAULT_AVATAR = f"{STATIC_URL}images/avatar.png"
+DEFAULT_HEADER = f"{STATIC_URL}images/cozzi-header.png"
+DEFAULT_LOGO = f"{STATIC_URL}images/logo.jpg"
 APPEND_SLASH=False

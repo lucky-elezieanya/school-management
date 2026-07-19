@@ -68,13 +68,14 @@ class StudentSnapshotBuilder:
 
             "summary": build_summary(
 
-                summary=c.summary,
+                summary=summary,
 
                 class_statistics=c.class_statistics,
 
                 grading_scales=c.overall_grading,
 
                 resumption_date=c.resumption_date,
+                enrollments=c.enrollments
 
             ),
 
@@ -88,7 +89,11 @@ class StudentSnapshotBuilder:
             ),
 
             "subjects": build_subjects(
-                c
+
+                results=results,
+
+                context=c,
+
             ),
 
             "behaviour": build_behaviour(
@@ -96,7 +101,10 @@ class StudentSnapshotBuilder:
             ),
 
             "comments": build_comments(
-                comments,
+                    teacher_comment=comments.class_teacher_comment,
+                    principal_comment=comments.principal_comment,
+                    teacher_signature=c.teacher_signature,
+                    principal_signature=c.principal_signature,
             ),
 
             "assets": build_assets(

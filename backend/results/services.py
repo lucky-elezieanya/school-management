@@ -806,7 +806,7 @@ def generate_result_summary_for_class(
             )
 
         class_average = (
-            sum(r["total_score"] for r in aggregates)
+            sum(r["average_score"] for r in aggregates)
             / len(aggregates)
         )
 
