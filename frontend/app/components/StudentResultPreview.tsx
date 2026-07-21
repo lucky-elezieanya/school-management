@@ -109,7 +109,7 @@ export default function StudentResultPreview({
           <button
             onClick={() =>
               router.push(
-                `${user.role === "admin" ? `/admin/administration/students/${studentId}` : user.role === "teacher"?
+                `${user?.role === "admin" ? `/admin/administration/students/${studentId}` : user?.role === "teacher"?
                  `/teachers/students/${studentId}`: `/students`}`,
               )
             }

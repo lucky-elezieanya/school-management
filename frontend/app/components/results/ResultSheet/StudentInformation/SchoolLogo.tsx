@@ -22,7 +22,8 @@ export default function SchoolLogo({ logo, fallback }: Props) {
         alt="School Logo"
         width={70}
         height={80}
-        className="object-contain"
+        crossOrigin="anonymous"
+        className="object-contain w-auto h-auto"
       />
     </div>
   );

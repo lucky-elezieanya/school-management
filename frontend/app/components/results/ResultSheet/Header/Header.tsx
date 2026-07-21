@@ -10,14 +10,15 @@ export default function Header({ image }: HeaderProps) {
       className="
                 flex
                 justify-center
-                border
-                border-[#555]
+                border-[0.5px]
+                border-gray-400
+                rounded-md
                 mb-[2px]
                 bg-white
             "
     >
       <Image
-        src={image || "/images/cozzi-header.png"}
+        src={image || "/cozzi-header.png"}
         alt="School Header"
         width={1000}
         height={160}

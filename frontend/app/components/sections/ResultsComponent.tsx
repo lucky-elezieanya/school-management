@@ -7,6 +7,7 @@ import SubjectsPanel from "@/app/components/sections/SubjectsPanel";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { getWorkFlowApprovedStatus } from "@/app/services/results";
 import { useEffect, useState } from "react";
+import ResultBroadsheet from "./Broadsheet/ResultBroadsheet";
 
 export default function ResultsComponent() {
   const [selectedClass, setSelectedClass] = useState<any>(null);
@@ -24,7 +25,6 @@ export default function ResultsComponent() {
       const res = await getWorkFlowApprovedStatus(school_class, term, session);
       if (res?.results?.length) {
         setApprovedStatus(res.results[0].status);
-       
       } else {
         setApprovedStatus("");
       }
@@ -42,7 +42,6 @@ export default function ResultsComponent() {
         currentTerm?.id,
         currentTerm?.session.id,
       );
-
   }, [selectedClass]);
 
   return (
@@ -118,6 +117,13 @@ export default function ResultsComponent() {
           </div>
         )}
       </div>
+      {selectedClass && currentTerm && (
+        <ResultBroadsheet
+          schoolClass={selectedClass.id}
+          session={currentTerm?.session.id}
+          term={currentTerm?.id}
+        />
+      )}
     </div>
   );
 }

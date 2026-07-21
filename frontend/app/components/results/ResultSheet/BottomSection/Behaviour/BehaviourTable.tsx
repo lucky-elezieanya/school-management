@@ -9,8 +9,7 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
     <table
       className="
         w-full
-        border
-        border-[#555]
+        border-[0.5px] border-gray-400
         border-collapse
         text-[10px]
       "
@@ -19,12 +18,13 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
         <tr>
           <th
             className="
-              border
-              border-[#555]
-              bg-[#efefef]
+             text-[11px]
+              border-[0.5px] border-gray-400
+              bg-blue-400 font-bold
+              text-[#fff]
+              font-bold
               py-[2px]
               px-1
-              font-bold
             "
           >
             S/N
@@ -32,9 +32,12 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
 
           <th
             className="
-              border
-              border-[#555]
-              bg-[#efefef]
+            text-[11px]
+            border-[0.5px] border-gray-400
+              
+              bg-blue-400 font-bold
+              text-[#fff]
+              font-bold
               py-[2px]
               px-1
               font-bold
@@ -45,12 +48,13 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
 
           <th
             className="
-              border
-              border-[#555]
-              bg-[#efefef]
+            border-[0.5px] border-gray-400
+              bg-blue-400 font-bold
+              text-[#fff]
+              font-bold
               py-[2px]
               px-1
-              font-bold
+              font-bold text-[11px]
             "
           >
             Grade
@@ -59,13 +63,13 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
       </thead>
 
       <tbody>
-        {behaviour.items.map((item:any, index:number) => (
+        {behaviour.items.map((item: any, index: number) => (
           <tr key={item.item}>
             <td
               className="
-                border
-                border-[#555]
+              border-[0.5px] border-gray-400
                 text-center
+                text-[11px]
                 py-[2px]
               "
             >
@@ -74,10 +78,9 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
 
             <td
               className="
-                border
-                border-[#555]
+              border-[0.5px] border-gray-400
                 px-2
-                py-[2px]
+                py-[2px] text-[11px]
               "
             >
               {item.item}
@@ -85,10 +88,9 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
 
             <td
               className="
-                border
-                border-[#555]
+              border-[0.5px] border-gray-400
                 text-center
-                py-[2px]
+                py-[2px] text-[11px]
                 font-semibold
               "
             >

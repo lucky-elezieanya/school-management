@@ -16,7 +16,7 @@ export default function CommentCard({
       <div className="flex-1">
         <h3
           className="
-            text-[13px]
+            text-[14px]
             italic
             font-bold
             text-[#0070c0]
@@ -28,9 +28,9 @@ export default function CommentCard({
 
         <p
           className="
-            text-[11px]
+            text-[12px]
             italic
-            text-[#222]
+            text-[#333]
             leading-5
             min-h-[40px]
           "

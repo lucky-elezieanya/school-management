@@ -23,6 +23,7 @@ export default function CommentPanel({ snapshot }: CommentPanelProps) {
         justify-between
         h-full
         pr-4
+        text-[11px]
       "
     >
       {showTeacher && (

@@ -6,23 +6,25 @@ import StudentInformation from "./StudentInformation/StudentInformation";
 import Watermark from "./Watermark/Watermark";
 import BottomSection from "./BottomSection/BottomSection";
 
+
 interface Props {
   snapshot: StudentResultSnapshot;
 }
 
 export default function ResultSheet({ snapshot }: Props) {
+
   return (
     <div
       className="
         relative
-        w-[210mm]
-        min-h-[297mm]
+
         bg-white
-        border
-        border-[#555]
+        border-[0.5px]
+        border-gray-300
+        rounded-md
         overflow-hidden
         text-[#220080]
-        p-[8mm]
+        p-[10px]
       "
     >
       {/* Watermark */}

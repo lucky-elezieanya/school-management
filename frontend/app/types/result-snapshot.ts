@@ -170,6 +170,12 @@ export interface AssetsSnapshot {
   defaultAvatar: string;
 }
 
+/* ======== CHARTS ========== */
+
+export interface ChartsSnapshot {
+  performance: string;
+}
+
 /* ======== ROOT SNAPSHOT =============== */
 
 export interface StudentResultSnapshot {
@@ -188,6 +194,8 @@ export interface StudentResultSnapshot {
   comments: CommentsSnapshot;
 
   assets: AssetsSnapshot;
+
+  charts: ChartsSnapshot;
 
   customization: ResultCustomization;
 

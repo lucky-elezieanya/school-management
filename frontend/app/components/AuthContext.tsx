@@ -1,17 +1,12 @@
 "use client";
 import { toast } from "sonner";
-import { createContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useEffect, useState, ReactNode, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { jwtDecode } from "jwt-decode";
-
-import { BASE_URL, getActiveTermSession } from "../lib/api";
 
 import {
   getTokens,
-  setTokens,
   logout,
   refreshAccessToken,
-  isTokenExpired,
   decodeToken,
 } from "../lib/auth";
 
@@ -54,6 +49,8 @@ type AuthContextType = {
   setCurrentTerm: React.Dispatch<React.SetStateAction<TermSession | null>>;
 
   termMessage: string;
+  pdfDOMRef: React.RefObject<HTMLElement | null>;
+  setPdfDOMElement: (node: HTMLElement | null) => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -80,6 +77,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const [termMessage, setTermMessage] = useState("");
 
+  const pdfDOMRef = useRef<HTMLElement | null>(null);
+
+  // Define a reactive callback that sub-components use to mount/unmount elements
+  const setPdfDOMElement = (node: HTMLElement | null) => {
+    pdfDOMRef.current = node;
+  };
 
   /* =============LOGIN============== */
 
@@ -203,6 +206,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     currentTerm: currentTerm,
     setCurrentTerm: setCurrentTerm,
     termMessage,
+    pdfDOMRef,
+    setPdfDOMElement,
   };
 
   return (

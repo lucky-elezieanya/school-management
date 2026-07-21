@@ -8,17 +8,16 @@ interface ResultsTableProps {
   snapshot: StudentResultSnapshot;
 }
 
-export default function ResultsTable({
-  snapshot,
-}: ResultsTableProps) {
+export default function ResultsTable({ snapshot }: ResultsTableProps) {
   const columns = getColumns(snapshot);
 
   return (
     <table
       className="
         w-full
-        border
-        border-[#555]
+        border-[0.5px]
+        border-gray-400
+        
         border-collapse
         text-[9px]
         text-[#0b0c63]

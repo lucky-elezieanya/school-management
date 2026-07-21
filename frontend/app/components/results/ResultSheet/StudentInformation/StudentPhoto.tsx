@@ -18,24 +18,27 @@ export default function StudentPhoto({ image, gender, fallback }: Props) {
         w-[90px]
       "
     >
-      <Image
+      <img
         src={image || fallback}
         alt="Student"
-        width={70}
+        width={80}
         height={80}
         className="
-          rounded
+          rounded-full
           object-cover
-          w-[70px]
+          w-[80px]
           h-[80px]
         "
       />
 
       <span
         className="
-          mt-1
-          text-[10px]
+          mt-2
+          text-[12px]
           font-semibold
+         
+          uppercase
+          italic
         "
       >
         {gender}

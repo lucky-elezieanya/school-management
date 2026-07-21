@@ -9,12 +9,12 @@ interface BottomSectionProps {
 }
 
 export default function BottomSection({ snapshot }: BottomSectionProps) {
-  const { customization, behaviour} = snapshot;
+  const { customization, behaviour } = snapshot;
 
   return (
-    <section className="mt-3 space-y-3">
+    <section className="mt-1 space-y-3">
       {customization.showPerformanceChart && (
-        <PerformanceChart subjects={snapshot.subjects} />
+        <PerformanceChart svg={snapshot.charts.performance} />
       )}
 
       <div
@@ -22,6 +22,7 @@ export default function BottomSection({ snapshot }: BottomSectionProps) {
           grid
           grid-cols-[1fr_24px_2fr]
           items-start
+          border-[0.5px] border-gray-400 
         "
       >
         {customization.showBehaviour ? (

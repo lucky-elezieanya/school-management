@@ -264,7 +264,7 @@ export default function AdminViewResults() {
 
     router.push(
       `${
-        user.role === "admin"
+        user?.role === "admin"
           ? "/admin/administration/results/class-preview"
           : "/teachers/class-preview"
       }?class_id=${selectedClass.id}&term_id=${termId}&session_id=${sessionId}`,
@@ -277,7 +277,7 @@ export default function AdminViewResults() {
         <div className="flex flex-col gap-4 rounded-lg border border-emerald-100 bg-white p-4 shadow-sm sm:p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-              {user.role === "admin" && "Administration"}
+              {user?.role === "admin" && "Administration"}
             </p>
             <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">
               View Results
@@ -585,7 +585,7 @@ export default function AdminViewResults() {
                           <td className="stick left-0 z-10 border-b border-r border-slate-200 bg-inherit px-3 py-3 font-semibold text-slate-900 flex flex-row gap-2">
                             <Link
                               className="flex flex-row gap-1 text-blue-600"
-                              href={`${user.role === "admin" ? `/admin/administration/students/${row.student_id}` : `/teachers/students/${row.student_id}`}`}
+                              href={`${user?.role === "admin" ? `/admin/administration/students/${row.student_id}` : `/teachers/students/${row.student_id}`}`}
                             >
                               <div className="relative w-10 h-10 rounded-full overflow-hidden border-4 border-emerald-100 shadow-md">
                                 <img
