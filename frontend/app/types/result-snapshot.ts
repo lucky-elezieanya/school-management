@@ -179,6 +179,7 @@ export interface ChartsSnapshot {
 /* ======== ROOT SNAPSHOT =============== */
 
 export interface StudentResultSnapshot {
+  id: number;
   student: StudentSnapshot;
 
   school: SchoolSnapshot;

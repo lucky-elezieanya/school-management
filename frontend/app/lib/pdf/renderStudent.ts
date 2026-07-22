@@ -1,4 +1,4 @@
-import { getBrowser } from "../../pdf/browser";
+import { getBrowser } from "../../../src/pdf/browser";
 
 export async function renderStudentPdf(snapshotId: string): Promise<Buffer> {
   const browser = await getBrowser();

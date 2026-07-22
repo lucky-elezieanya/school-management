@@ -1,6 +1,5 @@
-import ResultSheet from "@/app/components/results/ResultSheet";
+import ResultSheet from "@/src/components/ResultSheet";
 import { getSnapshot } from "@/app/lib/pdf/resultSnapshot";
-
 
 export default async function Page({
   params,
@@ -11,10 +10,5 @@ export default async function Page({
 
   const snapshot = await getSnapshot(snapshotId);
 
-  return (
-    <ResultSheet
-      snapshot={snapshot}
-    
-    />
-  );
+  return <ResultSheet snapshot={snapshot} />;
 }

@@ -5,7 +5,7 @@ import { renderPdf } from "./renderPdf";
 
 export async function generateStudentPdf(
   snapshot: StudentResultSnapshot,
-): Promise<Buffer> {
+): Promise<Uint8Array> {
   const browser = await getBrowser();
 
   return renderPdf(browser, snapshot);

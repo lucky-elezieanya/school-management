@@ -1,18 +1,15 @@
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
-
 import Header from "./Header/Header";
 import ResultsTable from "./ResultsTable/ResultsTable";
 import StudentInformation from "./StudentInformation/StudentInformation";
 import Watermark from "./Watermark/Watermark";
 import BottomSection from "./BottomSection/BottomSection";
 
-
 interface Props {
   snapshot: StudentResultSnapshot;
 }
 
 export default function ResultSheet({ snapshot }: Props) {
-
   return (
     <div
       className="

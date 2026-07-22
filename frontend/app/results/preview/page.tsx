@@ -1,4 +1,4 @@
-import ResultSheet from "@/app/components/results/ResultSheet/ResultSheet";
+import ResultSheet from "@/src/components/ResultSheet/ResultSheet";
 import { snapshot } from "@/app/mocks/resultSnapshot";
 
 export default function PreviewPage() {

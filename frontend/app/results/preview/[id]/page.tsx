@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import {  PdfPreview } from "@/app/components/results/pdf";
 import { apiHeaders, BASE_URL } from "@/app/lib/api";
+import { PdfPreview } from "@/src/components/results/pdf";
 
 
 

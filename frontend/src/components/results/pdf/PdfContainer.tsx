@@ -2,7 +2,7 @@
 
 import { forwardRef } from "react";
 
-import ResultSheet from "../ResultSheet";
+import ResultSheet from "../../../../src/components/ResultSheet";
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 
 interface Props {
