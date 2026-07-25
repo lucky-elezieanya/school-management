@@ -1,3 +1,5 @@
+from ...utils.chart_svg import generate_chart
+
 from .snapshot_sections import (
     build_student,
     build_school,
@@ -53,11 +55,17 @@ class StudentSnapshotBuilder:
         comments = c.comments.get(
             self.student_id,
         )
+        
+        subjects = build_subjects(
+                results=results,
+                context=c,
+            )
 
         snapshot = {
 
             "student": build_student(
                 student,
+          c.absolute_url
             ),
 
             "school": build_school(
@@ -88,14 +96,10 @@ class StudentSnapshotBuilder:
                 c.class_fee,
             ),
 
-            "subjects": build_subjects(
-
-                results=results,
-
-                context=c,
-
-            ),
-
+            "subjects": subjects,
+            "charts": {
+            "performance": generate_chart(subjects),
+                },
             "behaviour": build_behaviour(
                 behaviours,
             ),

@@ -6,6 +6,83 @@ import { useAuth } from "@/app/lib/hooks/useAuth";
 import { getClasses } from "@/app/services/academics";
 import { toast } from "sonner";
 
+type BehaviourGrades = "A" | "B" | "C" | "D" | "E";
+
+type BehaviourRecord = {
+  id?: number;
+
+  student: number;
+
+  school_class: number;
+
+  term: number;
+
+  session: number;
+
+  skills: BehaviourGrades;
+  politeness: BehaviourGrades;
+  neatness: BehaviourGrades;
+  self_control: BehaviourGrades;
+  relationship: BehaviourGrades;
+  attendance: BehaviourGrades;
+  punctuality: BehaviourGrades;
+  leadership: BehaviourGrades;
+};
+
+const behaviourItems = [
+  {
+    key: "relationship",
+    label: "R",
+    full: "Relationship",
+  },
+  {
+    key: "skills",
+    label: "SK",
+    full: "Skills",
+  },
+  {
+    key: "politeness",
+    label: "P",
+    full: "Politeness",
+  },
+  {
+    key: "neatness",
+    label: "N",
+    full: "Neatness",
+  },
+  {
+    key: "self_control",
+    label: "SC",
+    full: "Self Control",
+  },
+  {
+    key: "attendance",
+    label: "AT",
+    full: "Attendance",
+  },
+  {
+    key: "punctuality",
+    label: "PU",
+    full: "Punctuality",
+  },
+  {
+    key: "leadership",
+    label: "L",
+    full: "Leadership",
+  },
+] as const;
+
+const behaviourLegend = [
+  "R = Relationship",
+  "SK = Skills",
+  "P = Politeness",
+  "N = Neatness",
+  "SC = Self Control",
+  "AT = Attendance",
+  "PU = Punctuality",
+  "L = Leadership",
+];
+
 export default function TermCommentEntryPage() {
   const { currentTerm } = useAuth();
 
@@ -19,8 +96,13 @@ export default function TermCommentEntryPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    loadClasses();
-  }, []);
+      loadClasses();
+    }, []);
+    
+    useEffect(() => {
+      if (!selectedClass) return
+    loadStudents(Number(selectedClass));
+  }, [selectedClass]);
 
   // =====================================================
   // LOAD CLASSES
@@ -42,79 +124,170 @@ export default function TermCommentEntryPage() {
 
   // =====================================================
   // LOAD STUDENTS + EXISTING COMMENTS
-  // =====================================================
   const loadStudents = async (classId: number) => {
     if (!currentTerm) return;
-
+  
     try {
       setLoadingStudents(true);
-
-      const [studentRes, commentRes, attendanceRes] = await Promise.all([
+  
+      const [
+        studentRes,
+        commentRes,
+        attendanceRes,
+        behaviourRes,
+      ] = await Promise.all([
         fetch(
           `${BASE_URL}/academics/enrollments/?school_class=${classId}&session=${currentTerm.session.id}`,
-          { headers: apiHeaders() },
+          {
+            headers: apiHeaders(),
+          },
         ),
-
+  
         fetch(
           `${BASE_URL}/results/term-comments/?school_class=${classId}&term=${currentTerm.id}&session=${currentTerm.session.id}`,
-          { headers: apiHeaders() },
+          {
+            headers: apiHeaders(),
+          },
         ),
-
+  
         fetch(
           `${BASE_URL}/results/attendance/?school_class=${classId}&term=${currentTerm.id}&session=${currentTerm.session.id}`,
-          { headers: apiHeaders() },
+          {
+            headers: apiHeaders(),
+          },
+        ),
+  
+        fetch(
+          `${BASE_URL}/results/behaviour/?school_class=${classId}&term=${currentTerm.id}&session=${currentTerm.session.id}`,
+          {
+            headers: apiHeaders(),
+          },
         ),
       ]);
-
+  
       const studentJson = await studentRes.json();
       const commentJson = await commentRes.json();
       const attendanceJson = await attendanceRes.json();
-
+      const behaviourJson = await behaviourRes.json();
+  
       const studentList = studentJson.results || studentJson || [];
       const commentList = commentJson.results || commentJson || [];
       const attendanceList = attendanceJson.results || attendanceJson || [];
+      const behaviourList = behaviourJson.results || behaviourJson || [];
+  
+      // ==========================================
+      // Attendance Map
+      // ==========================================
+  
       const attendanceMap: Record<number, any> = {};
-
-      attendanceList.forEach((item: any) => {
-        attendanceMap[item.student.id] = item;
+  
+      attendanceList.forEach((attendance: any) => {
+        const studentId =
+          typeof attendance.student === "object"
+            ? attendance.student.id
+            : attendance.student;
+  
+        attendanceMap[studentId] = attendance;
       });
-
+  
+      // ==========================================
+      // Comment Map
+      // ==========================================
+  
       const commentMap: Record<number, any> = {};
-
+  
       commentList.forEach((comment: any) => {
-        // Handle both nested object and plain id
         const studentId =
           typeof comment.student === "object"
             ? comment.student.id
             : comment.student;
-
+  
         commentMap[studentId] = comment;
       });
+  
+      // ==========================================
+      // Behaviour Map
+      // ==========================================
+  
+      const behaviourMap: Record<number, BehaviourRecord> = {};
 
+      behaviourList.forEach((behaviour: any) => {
+        const studentId =
+          typeof behaviour.student === "object"
+            ? behaviour.student.id
+            : behaviour.student;
+
+        behaviourMap[studentId] = {
+          student: studentId,
+
+          school_class:
+            typeof behaviour.school_class === "object"
+              ? behaviour.school_class.id
+              : behaviour.school_class,
+
+          term:
+            typeof behaviour.term === "object"
+              ? behaviour.term.id
+              : behaviour.term,
+
+          session:
+            typeof behaviour.session === "object"
+              ? behaviour.session.id
+              : behaviour.session,
+
+          skills: behaviour.skills,
+          politeness: behaviour.politeness,
+          neatness: behaviour.neatness,
+          self_control: behaviour.self_control,
+          relationship: behaviour.relationship,
+          attendance: behaviour.attendance,
+          punctuality: behaviour.punctuality,
+          leadership: behaviour.leadership,
+        };
+      });
+
+      // ==========================================
+      // Merge Student Data
+      // ==========================================
+  
       const merged = studentList.map((student: any) => {
-        // enrollment serializer returns student id here
         const studentId =
           typeof student.student === "object"
             ? student.student.id
             : student.student;
-
-        const existing = commentMap[studentId];
-        const attendance = attendanceMap[student.student];
+  
+        const existingComment = commentMap[studentId];
+        const existingAttendance = attendanceMap[studentId];
+        const existingBehaviour = behaviourMap[studentId];
 
         return {
           ...student,
 
-          existing: Boolean(existing),
-          attendance: attendance?.attendance ?? 0,
+          attendance: existingAttendance?.attendance ?? 0,
 
-          comment_id: existing?.id ?? null,
+          class_teacher_comment: existingComment?.class_teacher_comment ?? "",
 
-          class_teacher_comment: existing?.class_teacher_comment ?? "",
+          principal_comment: existingComment?.principal_comment ?? "",
 
-          principal_comment: existing?.principal_comment ?? "",
+          behaviour: existingBehaviour ?? {
+            student: studentId,
+            school_class: classId,
+            term: currentTerm.id,
+            session: currentTerm.session.id,
+
+            skills: "A",
+            politeness: "A",
+            neatness: "A",
+            self_control: "A",
+            relationship: "A",
+            attendance: "A",
+            punctuality: "A",
+            leadership: "A",
+          },
         };
       });
-
+      console.log("Behaviour Map:", behaviourMap);
+      console.log("Behaviour Keys:", Object.keys(behaviourMap));
       setStudents(merged);
     } catch (err) {
       console.error(err);
@@ -150,10 +323,12 @@ export default function TermCommentEntryPage() {
       ),
     );
   };
+
   // =====================================================
   // SAVE
   // =====================================================
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.SubmitEvent) => {
+    e.preventDefault();
     if (!selectedClass || !currentTerm) return;
 
     try {
@@ -188,32 +363,69 @@ export default function TermCommentEntryPage() {
           principal_comment: student.principal_comment,
         })),
       };
+   
+      const behaviourPayload = {
+        term_id: currentTerm.id,
+        session_id: currentTerm.session.id,
+        school_class_id: Number(selectedClass),
 
-      const [attendanceResponse, commentResponse] = await Promise.all([
-        fetch(`${BASE_URL}/results/attendance/bulk_upsert/`, {
-          method: "POST",
-          headers: {
-            ...apiHeaders(),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(attendancePayload),
-        }),
+        records: students.map((student) => ({
+          student:
+            typeof student.student === "object"
+              ? student.student.id
+              : student.student,
 
-        fetch(`${BASE_URL}/results/term-comments/bulk-save/`, {
-          method: "POST",
-          headers: {
-            ...apiHeaders(),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(commentPayload),
-        }),
-      ]);
+          skills: student.behaviour.skills,
+          politeness: student.behaviour.politeness,
+          neatness: student.behaviour.neatness,
+          self_control: student.behaviour.self_control,
+          relationship: student.behaviour.relationship,
+          attendance: student.behaviour.attendance,
+          punctuality: student.behaviour.punctuality,
+          leadership: student.behaviour.leadership,
+        })),
+      };
 
-      if (!attendanceResponse.ok || !commentResponse.ok) {
-        throw new Error("Unable to save records.");
+      const [attendanceResponse, commentResponse, behaviourResponse] =
+        await Promise.all([
+          fetch(`${BASE_URL}/results/attendance/bulk_upsert/`, {
+            method: "POST",
+            headers: {
+              ...apiHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(attendancePayload),
+          }),
+
+          fetch(`${BASE_URL}/results/term-comments/bulk-save/`, {
+            method: "POST",
+            headers: {
+              ...apiHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(commentPayload),
+          }),
+          fetch(`${BASE_URL}/results/behaviour/bulk-upsert/`, {
+            method: "POST",
+
+            headers: {
+              ...apiHeaders(),
+              "Content-Type": "application/json",
+            },
+
+            body: JSON.stringify(behaviourPayload),
+          }),
+        ]);
+
+      if (
+        !attendanceResponse.ok ||
+        !commentResponse.ok ||
+        !behaviourResponse.ok
+      ) {
+        toast.error("Unable to save records.");
       }
 
-      toast.success("Attendance and comments saved successfully.");
+      toast.success("Attendance, comments and behaviour saved successfully.");
     } catch (err: any) {
       toast.error(err.message || "Unable to save.");
     } finally {
@@ -305,6 +517,15 @@ export default function TermCommentEntryPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
+              <div className="mb-4 rounded-lg border bg-gray-50 p-3">
+                <h3 className="mb-2 font-semibold text-sm">Behaviour Keys</h3>
+
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
+                  {behaviourLegend.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+              </div>
               <table className="w-full min-w-[600px] table-fixed">
                 <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr>
@@ -319,6 +540,9 @@ export default function TermCommentEntryPage() {
                     <th className="px-3 py-2 text-left text-sm font-semibold text-slate-700">
                       Comments
                     </th>
+                    <th className="px-3 py-2 text-left text-sm font-semibold text-slate-700">
+                      Behaviour
+                    </th>
                   </tr>
                 </thead>
 
@@ -326,11 +550,11 @@ export default function TermCommentEntryPage() {
                   {students.map((student: any) => (
                     <tr
                       key={student.student}
-                      className="border-t hover:bg-slate-50 transition"
+                      className="border-t align-top transition hover:bg-slate-50"
                     >
                       {/* STUDENT */}
-                      <td className="px-3 py-2 align-top">
-                        <div className="flex items-start gap-2">
+                      <td className="px-3 py-4">
+                        <div className="flex items-start gap-3">
                           <img
                             src={student.profile_picture || "/avatar.png"}
                             alt={student.student_name}
@@ -347,7 +571,7 @@ export default function TermCommentEntryPage() {
                             </p>
 
                             {student.existing && (
-                              <span className="mt-1 inline-block rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                              <span className="mt-1 inline-flex rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
                                 Existing
                               </span>
                             )}
@@ -356,7 +580,7 @@ export default function TermCommentEntryPage() {
                       </td>
 
                       {/* ATTENDANCE */}
-                      <td className="px-2 py-2 text-center align-top">
+                      <td className="px-3 py-4 text-center">
                         <input
                           type="number"
                           min={0}
@@ -368,20 +592,20 @@ export default function TermCommentEntryPage() {
                               Number(e.target.value),
                             )
                           }
-                          className="h-9 w-16 rounded-md border border-slate-300 text-center text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                          className="h-10 w-20 rounded-lg border border-slate-300 text-center text-sm shadow-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                         />
                       </td>
 
                       {/* COMMENTS */}
-                      <td className="px-3 py-2 align-top">
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <div className="">
-                            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">
-                              Teacher
+                      <td className="px-4 py-4">
+                        <div className="space-y-3">
+                          <div>
+                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Teacher Comment
                             </label>
 
                             <textarea
-                              rows={3}
+                              rows={2}
                               value={student.class_teacher_comment}
                               onChange={(e) =>
                                 updateStudent(
@@ -391,17 +615,17 @@ export default function TermCommentEntryPage() {
                                 )
                               }
                               placeholder="Teacher's comment..."
-                              className="w-full resize-none rounded-md border border-slate-300 p-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                              className="w-full resize-none rounded-lg border border-slate-300 p-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                             />
                           </div>
 
                           <div>
-                            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-500">
-                              Principal
+                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Principal Comment
                             </label>
 
                             <textarea
-                              rows={3}
+                              rows={2}
                               value={student.principal_comment}
                               onChange={(e) =>
                                 updateStudent(
@@ -411,8 +635,64 @@ export default function TermCommentEntryPage() {
                                 )
                               }
                               placeholder="Principal's comment..."
-                              className="w-full resize-none rounded-md border border-slate-300 p-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                              className="w-full resize-none rounded-lg border border-slate-300 p-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                             />
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* BEHAVIOUR */}
+                      <td className="px-3 py-4">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                          <div className="space-y-3">
+                            {behaviourItems.map((item) => (
+                              <div
+                                key={item.key}
+                                className="grid grid-cols-[42px_1fr] items-center gap-2 md:grid-cols-[55px_1fr] md:gap-3"
+                              >
+                                <span className="text-xs font-semibold text-slate-700 whitespace-nowrap">
+                                  {item.label}
+                                </span>
+
+                                <div className="flex flex-wrap items-center gap-2 md:gap-4">
+                                  {(["A", "B", "C", "D", "E"] as const).map(
+                                    (grade) => (
+                                      <label
+                                        key={grade}
+                                        className="flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <input
+                                          type="radio"
+                                          name={`${student.student}-${item.key}`}
+                                          value={grade}
+                                          checked={
+                                            student.behaviour[
+                                              item.key as keyof BehaviourRecord
+                                            ] === grade
+                                          }
+                                          onChange={(e) =>
+                                            updateStudent(
+                                              student.student,
+                                              "behaviour",
+                                              {
+                                                ...student.behaviour,
+                                                [item.key]: e.target
+                                                  .value as BehaviourGrades,
+                                              },
+                                            )
+                                          }
+                                          className="h-4 w-4 accent-emerald-600"
+                                        />
+
+                                        <span className="text-[11px] font-semibold text-slate-600">
+                                          {grade}
+                                        </span>
+                                      </label>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </td>
@@ -431,7 +711,7 @@ export default function TermCommentEntryPage() {
                   disabled={submitting}
                   className="rounded-xl bg-emerald-600 px-8 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
-                  {submitting ? "Saving..." : "Save All Comments"}
+                  {submitting ? "Saving..." : "Save All Records"}
                 </button>
               </div>
             </div>

@@ -5,7 +5,7 @@ from academics.models import (
     SchoolAsset,
     Term,
 )
-
+from urllib.parse import urljoin
 from ...models import (
     ClassFees,
     ClassTeacherSignature,
@@ -38,11 +38,12 @@ class ResultSnapshotContext:
         school_class,
         session,
         term,
+        request=None
     ):
         self.school_class = school_class
         self.session = session
         self.term = term
-
+        self.request=request
         self.load()
         
     def load(self):
@@ -69,6 +70,25 @@ class ResultSnapshotContext:
 
             self.attach_subject_summaries()
 
+    
+
+    def absolute_url(self, obj):
+        if not obj:
+            return None
+
+        if isinstance(obj, str):
+            url = obj
+        else:
+            try:
+                url = obj.url
+            except ValueError:
+                return None
+
+        if self.request:
+            return self.request.build_absolute_uri(url)
+
+        return urljoin(settings.SITE_URL, url)
+
     def load_terms(self):
         self.terms = Term.objects.filter(session=self.session)
      
@@ -76,9 +96,17 @@ class ResultSnapshotContext:
     def load_signatures(self): 
         class_teacher_signature = ClassTeacherSignature.objects.filter(school_class=self.school_class, is_active=True).first()
         head_teacher_signature = HeadTeacherSignature.objects.filter(is_active=True).first()
-        self.teacher_signature=class_teacher_signature.signature.url
-        self.principal_signature = head_teacher_signature.signature.url
+        self.teacher_signature = (self.absolute_url(class_teacher_signature.signature)
+            if class_teacher_signature
+            else None
+        )
 
+        self.principal_signature = (
+            self.absolute_url(head_teacher_signature.signature)
+            if head_teacher_signature
+            else None
+        )
+        
     def load_term_history(self):
 
         history = (
@@ -252,10 +280,13 @@ class ResultSnapshotContext:
 
         logo = SchoolAsset.objects.filter(asset_type="logo", is_active=True).first()
         header = SchoolAsset.objects.filter(asset_type="header", is_active=True).first()
-        default_header = settings.DEFAULT_HEADER
-        default_avatar = settings.DEFAULT_AVATAR
-        self.assets = ({"logo": logo.image.url, "header": header.image.url, "default_header": default_header, "default_avatar": default_avatar})
 
+        self.assets = {
+            "logo": self.absolute_url(logo.image) if logo else None,
+            "header": self.absolute_url(header.image) if header else None,
+            "default_header": self.absolute_url(settings.DEFAULT_HEADER),
+            "default_avatar": self.absolute_url(settings.DEFAULT_AVATAR),
+        }
         self.school_days = (
             SchoolDays.objects.filter(
                 term=self.term,

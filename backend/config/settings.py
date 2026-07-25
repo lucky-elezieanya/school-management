@@ -26,8 +26,12 @@ CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
     default="http://localhost:3000",
 ).split(",")
+CORS_ALLOW_CREDENTIALS = True
 
+WHITENOISE_ALLOW_ALL_ORIGINS = True
 
+FRONTEND_URL=config("FRONTEND_URL")
+PDF_RENDER_SECRET=config("PDF_RENDER_SECRET")
 # ======================================================
 # APPLICATIONS
 # ======================================================
@@ -51,9 +55,20 @@ INSTALLED_APPS = [
     "academics",
     "results",
     'storages',
+    "django_q",
     # Celery 
     "django_celery_beat"
 ]
+
+
+Q_CLUSTER = {
+    'name': 'my_project_cluster',
+    'workers': 4,          # Concurrently processed background tasks
+    'recycle': 500,        # Memory clearing restart interval
+    'timeout': 120,         # Maximum seconds a task can run
+    'retry': 120,          # Seconds to wait before retrying a stalled task
+    'orm': 'default',      
+}
 
 # ======================================================
 # MIDDLEWARE

@@ -44,14 +44,6 @@ export async function login(username: string, password: string) {
 
 export async function fetchCurrentUser(userId: number) {
   const tokens = getAccessToken();
-  console.log("Starting fetchCurrentUser");
-
-  console.log({
-    userId,
-
-    url: `${BASE_URL}/accounts/users/${userId}/`,
-    windowExists: typeof window !== "undefined",
-  });
   if (!tokens) return;
   try {
     const response = await apiAction("accounts", "users", userId);
@@ -62,21 +54,6 @@ export async function fetchCurrentUser(userId: number) {
     throw err;
   }
 }
-
-// export async function fetchCurrentUser(userId: number, access: string) {
-//   const response = await fetch(`${BASE_URL}/accounts/users/${userId}/`, {
-//     headers: {
-//       Authorization: `Bearer ${access}`,
-//     },
-//   });
-
-//   if (!response.ok) {
-//     throw new Error("Unable to fetch user.");
-//   }
-//   const result = await response.json();
-//   return result;
-// }
-
 export async function fetchCurrentTerm() {
   return getActiveTermSession();
 }

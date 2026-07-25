@@ -1,20 +1,18 @@
 "use client";
 
-import { useRef } from "react";
-
 import PdfActions from "./PdfActions";
 import PdfContainer from "./PdfContainer";
 
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { useRef } from "react";
 
 interface Props {
   snapshot: StudentResultSnapshot;
 }
 
 export default function PdfPreview({ snapshot }: Props) {
-//   const pdfRef = useRef<HTMLDivElement>(null);
-  const { pdfDOMRef, setPdfDOMElement } = useAuth();
+  const pdfRef = useRef<HTMLDivElement>(null);
 
   return (
     <main
@@ -48,7 +46,7 @@ export default function PdfPreview({ snapshot }: Props) {
            
           "
         >
-          <PdfActions snapshot={snapshot} pdfRef={pdfDOMRef} />
+          <PdfActions snapshot={snapshot} pdfRef={pdfRef} />
         </div>
       </div>
 
@@ -77,7 +75,7 @@ export default function PdfPreview({ snapshot }: Props) {
               my-4
             "
           >
-            <PdfContainer ref={setPdfDOMElement} snapshot={snapshot} />
+            <PdfContainer ref={pdfRef} snapshot={snapshot} />
           </div>
         </div>
       </section>

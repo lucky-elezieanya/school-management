@@ -2,7 +2,7 @@ import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 
 import BehaviourPanel from "./Behaviour/BehaviourPanel";
 import CommentPanel from "./Comments/CommentPanel";
-import PerformanceChart from "./PerformanceChart/PerformanceChart";
+import PerformanceChart from "./PerformanceChart/PerformanceChart_svg";
 
 interface BottomSectionProps {
   snapshot: StudentResultSnapshot;
@@ -15,6 +15,7 @@ export default function BottomSection({ snapshot }: BottomSectionProps) {
     <section className="mt-1 space-y-3">
       {customization.showPerformanceChart && (
         <PerformanceChart svg={snapshot.charts.performance} />
+        // <PerformanceChart subjects={snapshot.subjects} />
       )}
 
       <div

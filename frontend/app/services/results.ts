@@ -2,6 +2,10 @@
 
 import { request, BASE_URL, apiHeaders } from "../lib/api";
 
+export function getBackendBaseUrl(url: string) {
+  return url.replace(/\/api\/?$/, "");
+}
+
 export function getOrdinal(position: any) {
   const n = Number(position);
 
@@ -20,8 +24,6 @@ export function getOrdinal(position: any) {
       return `${n}th`;
   }
 }
-
-
 
 const handleResponse = async (res: Response) => {
   let data: any = null;
@@ -195,7 +197,7 @@ export const getWorkFlowApprovedStatus = async (
   term: number,
   session: number,
 ) => {
-  const url = `${BASE_URL}/results/workflow/?school_class=${school_class}&term=${term}&session=${session}`;
+  const url = `${BASE_URL}/results/workflow/?school_class=${school_class}&term=${term}&session=${session}`
   const res = await fetch(url, {
     headers: apiHeaders(),
   });

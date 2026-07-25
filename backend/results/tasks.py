@@ -24,6 +24,58 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from weasyprint import HTML
 
+
+
+# =================== DJANGO Q FUNCTION ========================== #
+
+
+import logging
+
+from .utils.services.class_pdf_generator import (
+    generate_class_pdfs,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def generate_result_pdfs_task(
+    term_id: int,
+    session_id: int,
+    class_id: int,
+):
+    """
+    Django-Q entry point.
+
+    Generates every student's PDF for one class,
+    then merges them into a class PDF.
+    """
+
+    logger.info(
+        "Starting PDF generation "
+        "for class=%s term=%s session=%s",
+        class_id,
+        term_id,
+        session_id,
+    )
+
+    return generate_class_pdfs(
+        school_class_id=class_id,
+        term_id=term_id,
+        session_id=session_id,
+    )
+
+
+
+
+
+
+
+
+
+
+
+# =================== DJANGO Q FUNCTION ========================== #
+
 logger = logging.getLogger(__name__)
 
 @shared_task(
@@ -33,7 +85,7 @@ logger = logging.getLogger(__name__)
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
-def generate_result_pdfs_task(self, term_id, session_id):
+def generate_result_pdfs_task_old(self, term_id, session_id):
 
     session = AcademicSession.objects.get(pk=session_id)
     term = Term.objects.get(pk=term_id)
@@ -233,7 +285,7 @@ def generate_result_pdfs_task(self, term_id, session_id):
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
-def generate_result_pdfs_for_class_task(self, term_id, session_id, class_id):
+def generate_result_pdfs_for_class_task_old(self, term_id, session_id, class_id):
     # 1. Fetch Core Context Objects
     try:
         session = AcademicSession.objects.get(pk=session_id)

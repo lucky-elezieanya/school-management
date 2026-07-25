@@ -17,6 +17,12 @@ const nextConfig: NextConfig = {
         pathname: "/media/**",
       },
       {
+        protocol: "http",
+        hostname: "127.0.0.1",
+        port: "8000",
+        pathname: "/static/**",
+      },
+      {
         protocol: "https",
         hostname: "://unsplash.com",
         port: "",

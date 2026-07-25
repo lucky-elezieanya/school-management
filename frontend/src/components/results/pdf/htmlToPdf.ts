@@ -5,7 +5,7 @@ export async function htmlToPdf(element: HTMLElement): Promise<Blob> {
     .set({
       margin: 0,
       image: {
-        type: "jpeg",
+        type: "png",
         quality: 1,
       },
       html2canvas: {

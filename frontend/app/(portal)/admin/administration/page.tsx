@@ -64,13 +64,9 @@ export default function AdministrationPage() {
       href: "/admin/administration/grades",
       icon: AwardIcon,
     },
+
     {
-      name: "Behavioural qualities",
-      href: "/admin/administration/behaviour",
-      icon: Brain,
-    },
-    {
-      name: "Attendance / Behavioural Comments",
+      name: "Term Comments",
       href: "/admin/administration/comments",
       icon: PenBox,
     },
@@ -101,14 +97,14 @@ export default function AdministrationPage() {
       icon: FileSearch,
     },
     {
+      name: "Results Checklist",
+      href: "/admin/administration/results/generate",
+      icon: FilePlus,
+    },
+    {
       name: "Customize Results",
       href: "/admin/administration/results/customize",
       icon: BookAIcon,
-    },
-    {
-      name: "Generate Results PDFs",
-      href: "/admin/administration/results/generate",
-      icon: FilePlus,
     },
     {
       name: "Open/Close Results Portal",

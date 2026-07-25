@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 interface Props {
   image?: string;
   gender: string;
@@ -19,7 +17,7 @@ export default function StudentPhoto({ image, gender, fallback }: Props) {
       "
     >
       <img
-        src={image || fallback}
+        src={image|| fallback}
         alt="Student"
         width={80}
         height={80}

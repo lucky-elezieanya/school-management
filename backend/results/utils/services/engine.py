@@ -22,10 +22,12 @@ class ResultEngine:
         school_class,
         session,
         term,
+        request=None
     ):
         self.school_class = school_class
         self.session = session
         self.term = term
+        self.request = request
 
     def save_snapshots(self, snapshots):
 
@@ -134,6 +136,7 @@ class ResultEngine:
             school_class=self.school_class,
             session=self.session,
             term=self.term,
+            request=self.request
         )
 
         # ----------------------------------------------------

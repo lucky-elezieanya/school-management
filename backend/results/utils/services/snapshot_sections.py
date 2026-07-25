@@ -1,3 +1,4 @@
+from django.conf import settings
 from academics.models import Student
 from django.conf import settings
 from .calculations import (
@@ -190,16 +191,16 @@ def build_summary(
 
     }
 
-def build_student(student):
+def build_student(student, absolute_url):
     return {
         "id": student.id,
         "fullName": student.user.full_name,
         "gender": student.user.gender,
         "admissionNumber": student.admission_number,
         "profilePicture": (
-            student.user.profile_picture.url
+            absolute_url(student.user.profile_picture)
             if student.user.profile_picture
-            else None
+            else absolute_url(settings.DEFAULT_AVATAR)
         ),
     }
     
@@ -212,6 +213,8 @@ def build_school(enrollment, session, term):
             "id": enrollment.school_class.id,
             "name": enrollment.school_class.name,
             "arm": enrollment.school_class.arm.name,
+            "description": enrollment.school_class.description,
+            "code": enrollment.school_class.arm.code
         },
 
         "session": {

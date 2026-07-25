@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import Link from "next/link";
 import {toast} from "sonner"
+import { useRouter } from "next/navigation";
 
 export default function ResultEntryTable({
   subject,
@@ -20,7 +21,7 @@ export default function ResultEntryTable({
   approvedStatus,
 }: any) {
   const { currentTerm, user } = useAuth();
-
+    const router = useRouter()
   const [students, setStudents] = useState<any[]>([]);
   const [maxScores, setMaxScores] = useState<any>({});
   const [grades, setGrades] = useState<any[]>([]);
@@ -272,13 +273,13 @@ export default function ResultEntryTable({
           </p>
         </div>
       )}
-      {
-        errors && Object.keys(errors).length > 0 && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-2">
-            <p className="font-medium text-red-800">{errors[Object.keys(errors)[0]]}</p>   
-          </div>
-        )
-      }
+      {errors && Object.keys(errors).length > 0 && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-2">
+          <p className="font-medium text-red-800">
+            {errors[Object.keys(errors)[0]]}
+          </p>
+        </div>
+      )}
       {/* TABLE WRAPPER */}
       <section className="w-full overflow-x-auto border rounded-lg">
         <table className="w-full min-w-150 border-collapse text-xs sm:text-sm">
@@ -472,14 +473,27 @@ export default function ResultEntryTable({
         </table>
       </section>
       {/* SUBMIT BUTTON */}
-      <div className="mt-4 flex justify-center lg:justify-end lg:p-1 p-2">
+      <div className="mt-4 flex flex-col justify-end gap-3 p-2 sm:flex-row sm:items-center lg:p-1">
+        <button
+          onClick={() =>
+            router.push(
+              user?.role === "admin"
+                ? "/admin/administration/comments"
+                : "/teachers/comments",
+            )
+          }
+          className="inline-flex items-center justify-center rounded-lg border border-emerald-600 bg-white px-5 py-2 font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-50 hover:border-emerald-700 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+        >
+          Term Comments
+        </button>
+
         <button
           onClick={submit}
           disabled={isDisabled}
-          className={`px-6 py-2 rounded-lg shadow text-white transition w-full lg:w-auto ${
+          className={`inline-flex items-center justify-center rounded-lg px-6 py-2 font-medium text-white shadow transition sm:min-w-[180px] ${
             isDisabled
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-emerald-600 hover:bg-emerald-700"
+              ? "cursor-not-allowed bg-gray-400"
+              : "bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-300"
           }`}
         >
           {approvedStatus === "Approved"

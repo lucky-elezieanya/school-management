@@ -34,7 +34,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { apiAction, apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
+import {apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
 import { TeacherType } from "@/app/lib/types";
 
 const navLinks: {
@@ -67,16 +67,9 @@ const navLinks: {
     icon: <BookPlus size={18} />,
     href: "/teachers/classes",
   },
-
-  {
-    id: "behaviour",
-    name: "Behaviour Qualities",
-    icon: <Star size={18} />,
-    href: "/teachers/behaviour",
-  },
   {
     id: "comments",
-    name: "Attendance/Behavioural Comments",
+    name: "Term Comments",
     icon: <MessageSquare size={18} />,
     href: "/teachers/comments",
   },
@@ -110,7 +103,7 @@ export default function TeacherLayout({
     if (!user) {
       router.replace("/login");
     }
-    if (user.role !== "teacher") {
+    if (user?.role !== "teacher") {
       router.replace("/login");
     }
   }, [authLoading, user, router]);

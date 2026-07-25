@@ -246,8 +246,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
 
         user = self.request.user
+        user_id = self.request.query_params.get("user")
         role = user.role
 
+        if user_id:
+            return queryset.filter(user_id=user_id)
+        
         if user.is_staff or user.is_superuser or role == "admin":
             return queryset
 

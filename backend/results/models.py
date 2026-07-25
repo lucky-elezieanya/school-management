@@ -140,6 +140,7 @@ class ResultCustomization(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
     class Meta:
         ordering = ["-updated_at"]
         unique_together = ("session", "term", "school_class")
@@ -153,6 +154,13 @@ class ResultCustomization(models.Model):
         )
 
 class ClassResultPDF(models.Model):
+    STATUS_CHOICES = (
+        ("PENDING", "Pending"),
+        ("PROCESSING", "Processing"),
+        ("DONE", "Done"),
+        ("FAILED", "Failed"),
+    )
+    
     school_class = models.ForeignKey(
         "academics.Class",
         on_delete=models.CASCADE,
@@ -174,11 +182,33 @@ class ClassResultPDF(models.Model):
         null=True,
         blank=True,
     )
-    status = models.CharField(default="PENDING")
 
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="PENDING",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     updated_at = models.DateTimeField(auto_now=True)
+    generated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    generation_duration_ms = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    retry_count = models.PositiveSmallIntegerField(
+        default=0,
+    )
+
+    error_message = models.TextField(
+        blank=True,
+        default="",
+    )
 
     class Meta:
         unique_together = (
@@ -205,7 +235,7 @@ class ResultPDF(models.Model):
         on_delete=models.CASCADE,
         related_name="result_pdfs",
     )
-
+ 
     term = models.ForeignKey(
         "academics.Term",
         on_delete=models.PROTECT,
@@ -243,6 +273,30 @@ class ResultPDF(models.Model):
     updated_at = models.DateTimeField(
         auto_now=True
     )
+    generated_at = models.DateTimeField(
+    null=True,
+    blank=True,
+    db_index=True,
+    )
+    snapshot_computed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    generation_duration_ms = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    retry_count = models.PositiveSmallIntegerField(
+        default=0,
+    )
+    
+    error_message = models.TextField(
+    blank=True,
+    default="",
+    )
 
     class Meta:
         unique_together = (
@@ -256,7 +310,15 @@ class ResultPDF(models.Model):
             models.Index(fields=["term"]),
             models.Index(fields=["session"]),
             models.Index(fields=["status"]),
+            
         ]
+        models.Index(
+        fields=[
+            "student",
+            "term",
+            "session",
+        ],
+    )
 
     def __str__(self):
         return (

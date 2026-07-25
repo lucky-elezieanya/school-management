@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useRoleGuard } from "@/app/lib/hooks/useRoleGuard";
@@ -50,6 +50,7 @@ import {
 import { getOrdinal } from "@/app/services/results";
 import { AcademicSession, TermSession } from "@/app/lib/types";
 import { sessionTerms } from "@/app/services/academics";
+import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 
 export default function StudentDashboardPage() {
   useRoleGuard(["student"]);
@@ -68,8 +69,12 @@ export default function StudentDashboardPage() {
   const [isDownloading, setIsDownloading] = useState(false);
 
   // Selected filters for results & fees
-  const [selectedSession, setSelectedSession] = useState<string>(String(currentTerm?.session.id));
-  const [selectedTerm, setSelectedTerm] = useState<string>(String(currentTerm?.id));
+  const [selectedSession, setSelectedSession] = useState<string>(
+    String(currentTerm?.session.id),
+  );
+  const [selectedTerm, setSelectedTerm] = useState<string>(
+    String(currentTerm?.id),
+  );
 
   // Results & performance metrics state
   const [results, setResults] = useState<any[]>([]);
@@ -85,7 +90,9 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsReleased, setResultsReleased] = useState(false);
-  
+
+  const [snapshot, setSnapshot] = useState<StudentResultSnapshot | null>(null);
+
   const fetchTerms = async (sessionId: number) => {
     if (!sessionId) return;
 
@@ -106,9 +113,12 @@ export default function StudentDashboardPage() {
         const headers = apiHeaders();
 
         // 1. Fetch Student Profile (filters to current student based on user relation)
-        const studentRes = await fetch(`${BASE_URL}/academics/students/`, {
-          headers,
-        });
+        const studentRes = await fetch(
+          `${BASE_URL}/academics/students/?user=${user?.id}`,
+          {
+            headers,
+          },
+        );
         const studentJson = await studentRes.json();
 
         if (studentJson.results && studentJson.results.length > 0) {
@@ -129,7 +139,6 @@ export default function StudentDashboardPage() {
         });
         const sessionsJson = await sessionsRes.json();
         setSessions(sessionsJson.results || []);
-
       } catch (err) {
         console.error("Error fetching initial student dashboard data:", err);
       } finally {
@@ -145,33 +154,74 @@ export default function StudentDashboardPage() {
     fetchTerms(Number(selectedSession));
   }, [selectedSession]);
 
+  //   const handleDownloadPdf = async (pdfUrl:string) => {
+  //     if (!pdfUrl) return;
+  //     setIsDownloading(true);
+  //     try {
+  //       const response = await fetch(pdfUrl, {
+  //         headers: apiHeaders(),
+  //       });
+  //       if (!response.ok) throw new Error("Failed to fetch file from server");
+  //       const blob = await response.blob();
+  //       const localUrl = window.URL.createObjectURL(blob);
+  //       // Create a temporary hidden link element to force download
+  //       const link = document.createElement("a");
+  //       link.href = localUrl;
+  //       link.setAttribute(
+  //         "download",
+  //         `Report_Sheet_${studentData?.id || "Student"}.pdf`,
+  //       );
+  //       document.body.appendChild(link);
+  //       link.click();
+  //       setIsDownloading(false);
+  //       // Clean up memory and DOM
+  //       link.remove();
+  //       window.URL.revokeObjectURL(localUrl);
+  //     } catch (error) {
+  //       console.error("Secure download failed:", error);
+  //       alert("Could not download the PDF. Please try again.");
+  //     } finally {
+  //       setIsDownloading(false);
+  //     }
+  //   };
 
-  const handleDownloadPdf = async () => {
-    if (!pdfUrl) return;
+  const viewResults = async () => {
+    const snapshotRes = await getSnapShot();
+    const snapshot = snapshotRes[0]
+
+    if (!snapshot) {
+      toast.error("Result sheet is not available.");
+      return;
+    }
+
+    router.push(`/results/preview/${snapshot.id}`);
+  };
+
+  const getSnapShot = async () => {
+    const url = `${BASE_URL}/results/result-snapshots/?student=${studentData.id}&session=${selectedSession}&term=${selectedTerm}`;
+
     setIsDownloading(true);
+
     try {
-      const response = await fetch(pdfUrl, {
-        headers: apiHeaders(), 
+      const res = await fetch(url, {
+        headers: apiHeaders(),
       });
-      if (!response.ok) throw new Error("Failed to fetch file from server");
-      const blob = await response.blob();
-      const localUrl = window.URL.createObjectURL(blob);
-      // Create a temporary hidden link element to force download
-      const link = document.createElement("a");
-      link.href = localUrl;
-      link.setAttribute(
-        "download",
-        `Report_Sheet_${studentData?.id || "Student"}.pdf`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      setIsDownloading(false)
-      // Clean up memory and DOM
-      link.remove();
-      window.URL.revokeObjectURL(localUrl);
-    } catch (error) {
-      console.error("Secure download failed:", error);
-      alert("Could not download the PDF. Please try again.");
+
+      if (!res.ok) {
+        toast.error("Unable to load result.");
+        return null;
+      }
+
+      const data = await res.json();
+
+      const snapshotRes = data.results ?? null;
+
+      setSnapshot(snapshotRes);
+
+      return snapshotRes;
+    } catch {
+      toast.error("Unable to load result.");
+      return null;
     } finally {
       setIsDownloading(false);
     }
@@ -357,8 +407,8 @@ export default function StudentDashboardPage() {
     );
   }
 
-  const currentClass = studentData.current_enrollment?.school_class;
-  const activeSessionName = studentData.current_enrollment?.session?.name;
+  const currentClass = studentData?.current_enrollment?.school_class;
+  const activeSessionName = studentData?.current_enrollment?.session?.name;
   const currentClassTeacherName =
     currentClass?.class_teacher?.user?.full_name || "Unassigned";
 
@@ -851,17 +901,15 @@ export default function StudentDashboardPage() {
                       {/* Right Actions */}
                       <div className="flex w-full flex-col sm:flex-row sm:justify-center lg:justify-end items-center gap-3 lg:w-auto">
                         <button
-                          onClick={() =>
-                            router.push(
-                              `/students/${studentData.id}/result?class_id=${currentClass.id}&term_id=${currentTerm?.id}&session_id=${currentTerm?.session.id}`,
-                            )
-                          }
+                          type="button"
+                          //   disabled={resultsLoading}
+                          onClick={viewResults}
                           className="w-full sm:w-auto min-w-[170px] rounded-xl border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 transition-all hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm"
                         >
                           View Results
                         </button>
 
-                        {pdfUrl ? (
+                        {/* {pdfUrl ? (
                           <button
                             onClick={handleDownloadPdf}
                             disabled={isDownloading}
@@ -882,7 +930,7 @@ export default function StudentDashboardPage() {
                             <Clock size={16} />
                             <span>Generating Report Sheet...</span>
                           </button>
-                        )}
+                        )} */}
                       </div>
                     </div>
                   </div>

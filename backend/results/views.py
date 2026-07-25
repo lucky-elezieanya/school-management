@@ -5,7 +5,7 @@ from django.http import FileResponse
 from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-
+from django_q.tasks import async_task
 from .utils.services.engine import ResultEngine
 
 from .permissions import IsAdminUser, IsTeacherOrAdmin
@@ -28,7 +28,7 @@ from dataclasses import asdict
 from celery.result import AsyncResult
 from rest_framework.decorators import api_view
 
-from .tasks import compute_all_results_for_class_task, compute_all_results_task, generate_result_pdfs_for_class_task, generate_result_pdfs_task, recompute_all_results_task
+from .tasks import  generate_result_pdfs_for_class_task_old, generate_result_pdfs_task, recompute_all_results_task
 from .services import get_student_results, update_result_workflow, merge_class_result_pdfs
 
 from django.http import FileResponse, HttpResponse
@@ -36,23 +36,44 @@ from django.template.loader import render_to_string
 
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
 
+
 class StudentResultSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
-
     serializer_class = StudentResultSnapshotSerializer
-
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["student", "school_class", "session", "term"]
 
-    queryset = (
-        StudentResultSnapshot.objects
-        .select_related(
-            "student__user",
-            "school_class",
-            "session",
-            "term",
+    def get_queryset(self):
+        queryset = (
+            StudentResultSnapshot.objects.select_related(
+                "student__user",
+                "school_class",
+                "session",
+                "term",
+            )
+            .order_by("-computed_at")
         )
-        .order_by("-computed_at")
-    )
 
+        school_class = self.request.query_params.get("school_class")
+        student = self.request.query_params.get("student")
+        term = self.request.query_params.get("term")
+        session = self.request.query_params.get("session")
+
+        if school_class:
+            queryset = queryset.filter(school_class_id=school_class)
+
+        if student:
+            queryset = queryset.filter(student_id=student)
+
+        if term:
+            queryset = queryset.filter(term_id=term)
+
+        if session:
+            queryset = queryset.filter(session_id=session)
+
+        return queryset
+    
+    
 class ResultCustomizationViewSet(viewsets.ModelViewSet):
     serializer_class = ResultCustomizationSerializer
     permission_classes = [IsAuthenticated]
@@ -135,6 +156,10 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
         session_id = request.data.get("session")
         term_id = request.data.get("term")
         school_class_id = request.data.get("school_class_id")
+        
+        school_class = Class.objects.get(id=school_class_id)
+        term = Term.objects.filter(id=term_id, session=session_id).first()
+        session = AcademicSession.objects.get(id=session_id)
 
         if not session_id or not term_id:
             return Response(
@@ -183,6 +208,13 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
                     **lookup,
                 )
             )
+            ResultEngine(
+                school_class=school_class,
+                session=session,
+                term=term,
+                request=self.request
+            ).compute()
+
 
         serializer = self.get_serializer(customization)
 
@@ -270,18 +302,24 @@ class ResultComputationViewSet(viewsets.ViewSet):
                 {"detail": "term_id and session_id are required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+            
+        classes = Class.objects.all()
+        term = Term.objects.filter(id=term_id, session=session_id).first()
+        session = AcademicSession.objects.get(id=session_id)
+        
+        for school_class in classes:
+            ResultEngine(
+                school_class=school_class,
+                session=session,
+                term=term,
+                request=self.request
+            ).compute()
 
-        task = queue_task(
-            compute_all_results_task,
-            term_id,
-            session_id,
-            task_name="Compute All Results",
-        )
+
 
         return Response(
             {
-                "task_id": task["id"],
-                "status": "queued",
+                "status": "Done",
             },
             status=status.HTTP_202_ACCEPTED,
         )
@@ -517,51 +555,142 @@ class BehaviourViewSet(viewsets.ModelViewSet):
 
         return queryset.none()
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-upsert",
+        permission_classes=[IsTeacherOrAdmin],
+    )
+    def bulk_upsert(self, request):
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+        school_class_id = request.data.get("school_class_id")
+        records = request.data.get("records", [])
 
-        obj, created = Behaviour.objects.update_or_create(
-            student=serializer.validated_data["student"],
-            term=serializer.validated_data["term"],
-            session=serializer.validated_data["session"],
-            school_class = serializer.validated_data["school_class"],
-            defaults={
-                "skills": serializer.validated_data.get("skills", "A"),
-                "politeness": serializer.validated_data.get("politeness", "A"),
-                "neatness": serializer.validated_data.get("neatness", "A"),
-                "self_control": serializer.validated_data.get("self_control", "A"),
-                "relationship": serializer.validated_data.get("relationship", "A"),
-                "attendance": serializer.validated_data.get("attendance", "A"),
-                "punctuality": serializer.validated_data.get("punctuality", "A"),
-                "leadership": serializer.validated_data.get("leadership", "A"),
-            },
-        )
+        # ---------------------------------------------------
+        # VALIDATION
+        # ---------------------------------------------------
+
+        if not all([term_id, session_id, school_class_id]):
+            return Response(
+                {
+                    "status": "error",
+                    "message": "term_id, session_id and school_class_id are required.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(records, list) or not records:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "records must be a non-empty list.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        saved_records = []
+        errors = []
+
+        # ---------------------------------------------------
+        # PROCESS RECORDS
+        # ---------------------------------------------------
+
+        with transaction.atomic():
+
+            for index, item in enumerate(records):
+
+                payload = {
+                    "student_id": item.get("student"),
+                    "school_class_id": school_class_id,
+                    "term_id": term_id,
+                    "session_id": session_id,
+
+                    "skills": item.get("skills", "A"),
+                    "politeness": item.get("politeness", "A"),
+                    "neatness": item.get("neatness", "A"),
+                    "self_control": item.get("self_control", "A"),
+                    "relationship": item.get("relationship", "A"),
+                    "attendance": item.get("attendance", "A"),
+                    "punctuality": item.get("punctuality", "A"),
+                    "leadership": item.get("leadership", "A"),
+                }
+
+                instance = Behaviour.objects.filter(
+                    student_id=item.get("student"),
+                    school_class_id=school_class_id,
+                    term_id=term_id,
+                    session_id=session_id,
+                ).first()
+
+                serializer = self.get_serializer(
+                    instance=instance,
+                    data=payload,
+                    partial=instance is not None,
+                )
+
+                try:
+                    serializer.is_valid(raise_exception=True)
+
+                    behaviour = serializer.save()
+
+                    saved_records.append(behaviour)
+
+                except DjangoValidationError as exc:
+                    errors.append(
+                        {
+                            "index": index,
+                            "student": item.get("student"),
+                            "errors": exc.detail,
+                        }
+                    )
+
+                except Exception as exc:
+                    errors.append(
+                        {
+                            "index": index,
+                            "student": item.get("student"),
+                            "errors": str(exc),
+                        }
+                    )
+
+        # ---------------------------------------------------
+        # RESPONSE
+        # ---------------------------------------------------
+
+        serializer = self.get_serializer(saved_records, many=True)
+
+        if errors and not saved_records:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "No behaviour records were saved.",
+                    "results": [],
+                    "errors": errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return Response(
             {
-                "message": "Behaviour created" if created else "Behaviour updated",
-                "created": created,
-                "behaviour": self.get_serializer(obj).data,
-                "student_id": obj.student_id,
-                "behaviour_id": obj.id,
+                "status": "success" if not errors else "partial_success",
+                "message": (
+                    "Behaviour saved successfully."
+                    if not errors
+                    else "Behaviour saved with some errors."
+                ),
+                "results": serializer.data,
+                "saved_count": len(saved_records),
+                "failed_count": len(errors),
+                "errors": errors,
             },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            status=status.HTTP_200_OK,
         )
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop("partial", False)
-        instance = self.get_object()
-
-        serializer = self.get_serializer(
-            instance,
-            data=request.data,
-            partial=partial,
-        )
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-
-        return Response(serializer.data)
-
+        
+    def create(self, request, *args, **kwargs):
+        return self.upsert(request)
+    
+    
 class MaxScoreViewset(viewsets.ModelViewSet):
     serializer_class = MaxScoresSerializer
     permission_classes = [IsTeacherOrAdmin]
@@ -1421,6 +1550,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 school_class,
                 session,
                 term,
+                request=request
             ).compute()
       
         return Response(
@@ -2279,14 +2409,13 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
         }
 
         if all(checks.values()):
-            transaction.on_commit(
-                lambda: generate_result_pdfs_for_class_task.delay(
-                    workflow.term_id,
-                    workflow.session_id,
-                    workflow.school_class_id,
-                )
-            )
-
+            ResultEngine(
+                school_class=workflow.school_class,
+                session=workflow.session,
+                term=workflow.term,
+                request=self.request
+            ).compute()
+            
             return True
 
         return False

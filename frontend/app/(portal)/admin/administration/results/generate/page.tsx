@@ -1,9 +1,9 @@
 "use client";
-
+import {toast} from "sonner"
 import { apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   XCircle,
@@ -17,16 +17,13 @@ import {
 import { getSessions, sessionTerms } from "@/app/services/academics";
 import { AcademicSession, ClassType, Term } from "@/app/lib/types";
 
-type Status = "idle" | "queued" | "processing" | "done" | "failed";
+type Status = "Computing" | "Done" | "Failed" | "idle";
 
 export default function GenerateResultsPage() {
   const { currentTerm } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<Status>("idle");
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
   const [sessionId, setSessionId] = useState(currentTerm?.session?.id);
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
   const [session, setSession] = useState({
@@ -204,86 +201,30 @@ export default function GenerateResultsPage() {
       params.delete("class_id");
     }
   };
-  // --------------------------------------------------
-  // GENERATE
-  // --------------------------------------------------
-  const generate = async () => {
-    setStatus("queued");
-    setLogs((p) => [...p, "🚀 Starting PDF generation..."]);
 
-    try {
-      let payload;
-      if (!selectedClass) {
-        payload = {
-          term_id: termId,
-          session_id: sessionId,
-        };
-      } else {
-        payload = payload = {
-          term_id: termId,
-          session_id: sessionId,
-          class_id: selectedClass.id,
-        };
-      }
-      const res = await fetch(`${BASE_URL}/results/result-pdfs/generate/`, {
-        method: "POST",
-        headers: { ...apiHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      setTaskId(data.task_id);
-
-      setLogs((p) => [...p, `📦 Task queued: ${data.task_id}`]);
-    } catch (err) {
-      setStatus("failed");
-      setLogs((p) => [...p, "❌ Failed to start task"]);
-    }
-  };
-
-  // --------------------------------------------------
-  // POLLING
-  // --------------------------------------------------
-  useEffect(() => {
-    if (!taskId) return;
-
-    const interval = setInterval(async () => {
+  const compute = async () => {
+    setStatus("Computing")
       try {
-        const res = await fetch(
-          `${BASE_URL}/results/result-pdfs/status/?task_id=${taskId}`,
-          {
-            headers: apiHeaders(),
-          },
-        );
-
-        const data = await res.json();
-
-        setLogs((p) => [...p, `📡 ${data.state}`]);
-
-        if (data.state === "PROGRESS") setStatus("processing");
-
-        if (data.state === "SUCCESS") {
-          setStatus("done");
-          setLogs((p) => [...p, "✅ Completed"]);
-          clearInterval(interval);
+        const payload = {
+          term_id: termId,
+          session_id: sessionId
+        };
+        const res = await fetch(`${BASE_URL}/results/computation/compute/`, {
+          method: "POST",
+          headers: { ...apiHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json()
+        if (res.ok){
+            setStatus("Done")
+            toast.info(`${data.status}`)
         }
 
-        if (data.state === "FAILURE") {
-          setStatus("failed");
-          setLogs((p) => [...p, "❌ Failed"]);
-          clearInterval(interval);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }, 4000);
+    } catch (error) {
+        setStatus("Failed")
+    }
+  }
 
-    return () => clearInterval(interval);
-  }, [taskId]);
-
-  // --------------------------------------------------
-  // UI
-  // --------------------------------------------------
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -466,10 +407,10 @@ export default function GenerateResultsPage() {
         <div className="bg-white p-5 rounded-xl shadow-sm">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-600" />
-            <h2 className="text-xl font-semibold">Generate Result PDFs</h2>
+            <h2 className="text-xl font-semibold">Compute Results</h2>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Batch generation for all students (background processing)
+            Compute results for all students (Do this whenever you change customization settings)
           </p>
         </div>
 
@@ -506,43 +447,28 @@ export default function GenerateResultsPage() {
 
         {/* BUTTON */}
         <button
-          onClick={generate}
-          disabled={!allReady || status === "processing"}
+          onClick={compute}
+          disabled={!allReady || status === "Computing"}
           className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition
             ${
-              !allReady || status === "processing"
+              !allReady || status === "Computing"
                 ? "bg-gray-300 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700 text-white"
             }`}
         >
-          {status === "processing" ? (
+          {status === "Computing" ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Generating...
+              Computing...
             </>
           ) : (
             <>
               <PlayCircle className="w-4 h-4" />
-              Generate PDFs
+              Compute
             </>
           )}
         </button>
 
-        {/* LOGS */}
-        <div className="bg-gray-900 text-gray-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Terminal className="w-4 h-4 text-green-400" />
-            <h3 className="font-medium">Task Logs</h3>
-          </div>
-
-          <div className="max-h-60 overflow-y-auto text-xs space-y-1">
-            {logs.slice(-5).map((l, i) => (
-              <div key={i} className="opacity-90">
-                {l}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

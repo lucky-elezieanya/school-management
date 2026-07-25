@@ -1,3 +1,4 @@
+from html import escape
 import math
 
 
@@ -7,9 +8,9 @@ def generate_chart(results):
 
     results = [
         {
-            "subject_code": "ENG",
-            "total_score": 75,
-            "subject_average": 64,
+            "subjectCode": "ENG",
+            "totalScore": 75,
+            "subjectAverage": 64,
         }
     ]
     """
@@ -17,10 +18,10 @@ def generate_chart(results):
     if not results:
         return ""
 
-    subjects = [r["subject_code"] for r in results]
-    scores = [float(r["total_score"]) for r in results]
+    subjects = [r["subjectCode"] for r in results]
+    scores = [float(r["totalScore"]) for r in results]
     averages = [
-        float(r.get("subject_average") or 0)
+        float(r.get("subjectAverage") or 0)
         for r in results
     ]
 
@@ -29,13 +30,13 @@ def generate_chart(results):
     # ----------------------------------------
 
     left = 60
-    right = 25
-    top = 15
-    bottom = 40
+    right = 20
+    top = 10
+    bottom = 28
 
-    chart_height = 180
+    chart_height = 95
 
-    bar_width = 16
+    bar_width = 14
     gap_between_bars = 4
     group_spacing = 14
 
@@ -46,12 +47,13 @@ def generate_chart(results):
     )
 
     chart_width = max(
-        500,
+        420,
         len(subjects) * group_width + 80,
     )
 
     width = left + chart_width + right
     height = top + chart_height + bottom
+
     # ----------------------------------------
     # Y Axis Scale
     # ----------------------------------------
@@ -77,11 +79,16 @@ def generate_chart(results):
     svg.append(
         f"""
         <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="{width}"
-        height="{height}"
-        viewBox="0 0 {width} {height}"
-        preserveAspectRatio="xMidYMid meet">
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            width="100%"
+            height="100%"
+            viewBox="0 0 {width} {height}"
+            preserveAspectRatio="xMidYMid meet"
+            shape-rendering="geometricPrecision"
+            text-rendering="geometricPrecision">
+
+            <title>Student Performance Chart</title>
         """
     )
 
@@ -92,15 +99,14 @@ def generate_chart(results):
     svg.append(
         f"""
         <rect
-        x="0"
-        y="0"
-        width="{width}"
-        height="{height}"
-        fill="white"/>
+            x="0"
+            y="0"
+            width="{width}"
+            height="{height}"
+            fill="white"/>
         """
     )
 
-    
     # ----------------------------------------
     # Grid Lines
     # ----------------------------------------
@@ -111,25 +117,25 @@ def generate_chart(results):
 
         svg.append(
             f"""
-        <line
-        x1="{left}"
-        y1="{yy}"
-        x2="{left + chart_width}"
-        y2="{yy}"
-        stroke="#d8d8d8"
-        stroke-width="1"/>
-        """
+            <line
+                x1="{left}"
+                y1="{yy}"
+                x2="{left + chart_width}"
+                y2="{yy}"
+                stroke="#d8d8d8"
+                stroke-width="0.5"/>
+            """
         )
 
         svg.append(
             f"""
             <text
-            x="{left - 8}"
-            y="{yy + 4}"
-            font-size="10"
-            text-anchor="end"
-            fill="#444">
-            {value}
+                x="{left - 8}"
+                y="{yy + 3}"
+                font-size="8"
+                text-anchor="end"
+                fill="#444">
+                {value}
             </text>
             """
         )
@@ -148,12 +154,12 @@ def generate_chart(results):
         svg.append(
             f"""
             <line
-            x1="{center}"
-            y1="{top}"
-            x2="{center}"
-            y2="{top + chart_height}"
-            stroke="#efefef"
-            stroke-width="1"/>
+                x1="{center}"
+                y1="{top}"
+                x2="{center}"
+                y2="{top + chart_height}"
+                stroke="#efefef"
+                stroke-width="0.3"/>
             """
         )
 
@@ -164,13 +170,13 @@ def generate_chart(results):
     svg.append(
         f"""
         <rect
-        x="{left}"
-        y="{top}"
-        width="{chart_width}"
-        height="{chart_height}"
-        fill="none"
-        stroke="black"
-        stroke-width="1.2"/>
+            x="{left}"
+            y="{top}"
+            width="{chart_width}"
+            height="{chart_height}"
+            fill="none"
+            stroke="black"
+            stroke-width="0.3"/>
         """
     )
 
@@ -186,82 +192,83 @@ def generate_chart(results):
             scores[i] / max_score
         ) * chart_height
 
-        avg_height = (
+        average_height = (
             averages[i] / max_score
         ) * chart_height
 
-        # Student
+        # Student Bar
 
         svg.append(
             f"""
             <rect
-            x="{gx}"
-            y="{y(scores[i])}"
-            width="{bar_width}"
-            height="{student_height}"
-            rx="2"
-            fill="#2563eb"/>
+                x="{gx}"
+                y="{y(scores[i])}"
+                width="{bar_width}"
+                height="{student_height}"
+                rx="2"
+                fill="#2563eb"/>
             """
         )
 
-        # Average
+        # Average Bar
 
         svg.append(
             f"""
             <rect
-            x="{gx + bar_width + gap_between_bars}"
-            y="{y(averages[i])}"
-            width="{bar_width}"
-            height="{avg_height}"
-            rx="2"
-            fill="#7c3aed"/>
+                x="{gx + bar_width + gap_between_bars}"
+                y="{y(averages[i])}"
+                width="{bar_width}"
+                height="{average_height}"
+                rx="2"
+                fill="#7c3aed"/>
             """
         )
 
-        # Subject Labels
+        # Subject Label
 
         center = gx + bar_width
 
         svg.append(
             f"""
             <text
-            x="{center + 8}"
-            y="{top + chart_height + 14}"
-            font-size="10"
-            text-anchor="end"
-            transform="rotate(-40 {center + 8},{top + chart_height + 14})"
-            fill="#444">
-            {subject}
+                x="{center + 7}"
+                y="{top + chart_height + 11}"
+                font-size="7"
+                text-anchor="end"
+                transform="rotate(-40 {center + 7},{top + chart_height + 11})"
+                fill="#444">
+                {escape(subject)}
             </text>
             """
         )
 
     # ----------------------------------------
-    # Y Axis Label
+    # Y Axis Title
     # ----------------------------------------
 
     svg.append(
         f"""
         <text
-        transform="rotate(-90)"
-        x="-{top + chart_height / 2}"
-        y="18"
-        font-size="11"
-        text-anchor="middle"
-        fill="#444">
-        Subject Scores
+            transform="rotate(-90)"
+            x="-{top + chart_height / 2}"
+            y="18"
+            font-size="9"
+            text-anchor="middle"
+            fill="#444">
+            Subject Scores
         </text>
         """
     )
+
     # ----------------------------------------
-    # Legend (drawn last so it sits above bars)
+    # Legend
     # ----------------------------------------
 
-    legend_width = 120
-    legend_height = 34
+    legend_width = 95
+    legend_height = 28
 
-    legend_x = left + chart_width - legend_width - 8
-    legend_y = top + 6
+    legend_x = left + chart_width - legend_width - 6
+    legend_y = top + 4
 
     svg.append(
         f"""
@@ -270,44 +277,45 @@ def generate_chart(results):
             y="{legend_y}"
             width="{legend_width}"
             height="{legend_height}"
-            rx="3"
-            ry="3"
+            rx="2"
+            ry="2"
             fill="white"
-            fill-opacity="0.88"
+            fill-opacity="0.9"
             stroke="#d0d0d0"
-            stroke-width="0.5"/>
+            stroke-width="0.3"/>
 
         <rect
-            x="{legend_x + 8}"
-            y="{legend_y + 7}"
-            width="10"
-            height="10"
+            x="{legend_x + 6}"
+            y="{legend_y + 6}"
+            width="8"
+            height="8"
             fill="#2563eb"/>
 
         <text
-            x="{legend_x + 24}"
-            y="{legend_y + 16}"
-            font-size="10"
+            x="{legend_x + 20}"
+            y="{legend_y + 13}"
+            font-size="8"
             fill="#222">
             Student
         </text>
 
         <rect
-            x="{legend_x + 8}"
-            y="{legend_y + 21}"
-            width="10"
-            height="10"
+            x="{legend_x + 6}"
+            y="{legend_y + 17}"
+            width="8"
+            height="8"
             fill="#7c3aed"/>
 
         <text
-            x="{legend_x + 24}"
-            y="{legend_y + 30}"
-            font-size="10"
+            x="{legend_x + 20}"
+            y="{legend_y + 24}"
+            font-size="8"
             fill="#222">
             Average
         </text>
         """
     )
+
     svg.append("</svg>")
 
     return "".join(svg)

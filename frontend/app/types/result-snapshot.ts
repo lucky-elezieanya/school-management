@@ -180,6 +180,8 @@ export interface ChartsSnapshot {
 
 export interface StudentResultSnapshot {
   id: number;
+  session: AcademicSession;
+  term: Term;
   student: StudentSnapshot;
 
   school: SchoolSnapshot;

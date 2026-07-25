@@ -3,6 +3,7 @@ import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 import SchoolLogo from "./SchoolLogo";
 import StudentMetric from "./StudentMetric";
 import StudentPhoto from "./StudentPhoto";
+import { renderPosition } from "@/app/components/sections/Broadsheet/BroadsheetTable";
 
 interface Props {
   snapshot: StudentResultSnapshot;
@@ -50,7 +51,7 @@ export default function StudentInformation({ snapshot }: Props) {
        "
           >
             <StudentPhoto
-              image={student.profilePicture}
+              image={student?.profilePicture? student.profilePicture : "/avatar.png"}
               gender={student.gender}
               fallback={"/avatar.png"}
             />
@@ -104,7 +105,10 @@ export default function StudentInformation({ snapshot }: Props) {
             border-gray-400
             px-2 py-1"
             >
-              <StudentMetric label="Position:" value={summary.classPosition} />
+              <StudentMetric
+                label="Position:"
+                value={renderPosition(summary.classPosition)}
+              />
             </td>
           )}
 

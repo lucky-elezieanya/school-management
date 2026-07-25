@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 
 import {
   AlertCircle,
@@ -13,11 +14,12 @@ import { useEffect, useMemo, useState } from "react";
 import { apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { AcademicSession, ClassType, Term } from "@/app/lib/types";
-import { getOrdinal } from "@/app/services/results";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSessions, sessionTerms } from "@/app/services/academics";
+import ResultBroadsheet from "./Broadsheet/ResultBroadsheet";
+import { StudentResultSnapshot } from "@/app/types/result-snapshot";
+import { getWorkFlowApprovedStatus } from "@/app/services/results";
 
 type ResultCell = {
   class_subject_id: number;
@@ -67,13 +69,6 @@ export type BroadsheetData = {
   rows: BroadsheetRow[];
 };
 
-const scoreFields = [{ key: "total_score", label: "Score" }] as const;
-
-const formatValue = (value: string | number | null | undefined) => {
-  if (value === null || value === undefined || value === "") return "-";
-  return String(value);
-};
-
 export const saveBlob = (blob: Blob, filename: string) => {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -90,7 +85,7 @@ export default function AdminViewResults() {
   const router = useRouter();
   const [classes, setClasses] = useState<ClassType[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassType | null>(null);
-  const [broadsheet, setBroadsheet] = useState<BroadsheetData | null>(null);
+  const [snapshot, setSnapshot] = useState<StudentResultSnapshot | null>(null);
   const [query, setQuery] = useState("");
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingResults, setLoadingResults] = useState(false);
@@ -110,23 +105,26 @@ export default function AdminViewResults() {
     name: currentTerm && currentTerm.name,
     is_active: currentTerm && currentTerm.is_active,
   });
-  const [resultExist, setResultExist] = useState(false);
+  const [classApprovalStatus, setClassApprovalStatus] = useState("Pending");
 
-  const checkResultSheetExists = async () => {
-    const url = `${BASE_URL}/results/results/results-sheets-exist/?school_class_id=${selectedClass?.id}&term_id=${termId}`;
-    const res = await fetch(url, {
-      headers: apiHeaders(),
-    });
-    const data = await res.json();
-    if (res && data.class_results_exists) {
-      setResultExist(!resultExist);
-    }
+  const [broadsheet, setBroadsheet] = useState<BroadsheetData | null>(null);
+
+  const getApprovalStatus = async () => {
+    if (!selectedClass || !session || !term) return;
+    const res = await getWorkFlowApprovedStatus(
+      selectedClass?.id!,
+      term.id!,
+      session.id!,
+    );
+    console.log("Approval: ", res);
+    setClassApprovalStatus(res.results.status);
   };
 
   useEffect(() => {
-    if (!termId || !selectedClass) return;
-    checkResultSheetExists();
-  }, [termId, selectedClass, sessionId]);
+    if (!selectedClass || !session || !term) return;
+    getApprovalStatus();
+  }, [selectedClass, term, session]);
+
   //   sessions
   useEffect(() => {
     const fetchSessions = async () => {
@@ -167,7 +165,8 @@ export default function AdminViewResults() {
         const data = await handleResponse(res);
         setClasses(data?.results || data || []);
         setSelectedClass(data?.results[0]);
-        loadBroadsheet(data?.results[0])
+        loadSnapshot(data?.results[0]);
+        loadBroadsheet(data?.results[0]);
       } catch (err: any) {
         setError(err?.message || "Unable to load classes.");
       } finally {
@@ -187,6 +186,30 @@ export default function AdminViewResults() {
       return classLabel.toLowerCase().includes(search);
     });
   }, [classes, query]);
+
+  const loadSnapshot = async (schoolClass: ClassType) => {
+    if (!termId || !sessionId) {
+      setError("No active term and session is available.");
+      return;
+    }
+
+    try {
+      setSelectedClass(schoolClass);
+      setSnapshot(null);
+      setError("");
+      setLoadingResults(true);
+
+      const url = `${BASE_URL}/results/result-snapshots/?school_class=${schoolClass.id}&session=${session.id}&term=${term.id}`;
+      const res = await fetch(url, { headers: apiHeaders() });
+      const data = await handleResponse(res);
+      setSnapshot(data);
+      loadBroadsheet(schoolClass);
+    } catch (err: any) {
+      setError(err?.message || "Unable to load class results.");
+    } finally {
+      setLoadingResults(false);
+    }
+  };
 
   const loadBroadsheet = async (schoolClass: ClassType) => {
     if (!termId || !sessionId) {
@@ -221,9 +244,7 @@ export default function AdminViewResults() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(
-          data?.detail || "Unable to download class result sheet.",
-        );
+        toast.error(data?.detail || "Unable to download class result sheet.");
       }
 
       const blob = await res.blob();
@@ -234,41 +255,6 @@ export default function AdminViewResults() {
     } finally {
       setDownloading(null);
     }
-  };
-
-  const downloadStudentPdf = async (row: BroadsheetRow) => {
-    if (!selectedClass || !termId || !sessionId) return;
-
-    try {
-      setDownloading(`student-${row.student_id}`);
-      const url = `${BASE_URL}/results/results/student-pdf/?student_id=${row.student_id}&class_id=${selectedClass.id}&term_id=${termId}&session_id=${sessionId}`;
-      const res = await fetch(url, { headers: apiHeaders() });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.detail || "Unable to download student PDF.");
-      }
-
-      const blob = await res.blob();
-      const filename = `${row.admission_number || row.student_id}_${currentTerm?.name || "result"}.pdf`;
-      saveBlob(blob, filename.replace(/\s+/g, "_"));
-    } catch (err: any) {
-      setError(err?.message || "Unable to download student PDF.");
-    } finally {
-      setDownloading(null);
-    }
-  };
-
-  const previewClassPdf = () => {
-    if (!selectedClass || !termId || !sessionId) return;
-
-    router.push(
-      `${
-        user?.role === "admin"
-          ? "/admin/administration/results/class-preview"
-          : "/teachers/class-preview"
-      }?class_id=${selectedClass.id}&term_id=${termId}&session_id=${sessionId}`,
-    );
   };
 
   return (
@@ -396,80 +382,55 @@ export default function AdminViewResults() {
           </div>
         </div>
         {/* =============== classes ================== */}
-        <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4">
+          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-4">
               <h2 className="text-base font-bold text-slate-900">Classes</h2>
+
               <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                 <Search className="h-4 w-4 text-slate-400" />
+
                 <input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search classes"
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  className="flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
-              {selectedClass && (
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={previewClassPdf}
-                    className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-white text-sm"
-                  >
-                    All PDFs
-                  </button>
-
-                  <button
-                    onClick={downloadClassCsv}
-                    className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-white"
-                  >
-                    CSV
-                  </button>
-                </div>
-              )}
             </div>
 
-            <div className="max-h-[520px] space-y-2 overflow-y-auto p-3">
-              {loadingClasses ? (
-                <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading classes
-                </div>
-              ) : filteredClasses.length > 0 ? (
-                filteredClasses.map((schoolClass) => {
-                  const isSelected = selectedClass?.id === schoolClass.id;
-                  return (
-                    <button
-                      key={schoolClass.id}
-                      type="button"
-                      onClick={() => loadBroadsheet(schoolClass)}
-                      className={`w-full rounded-lg border px-3 py-3 text-left transition ${
-                        isSelected
-                          ? "border-emerald-500 bg-emerald-600 text-white shadow-sm"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50"
+            <div className="flex flex-wrap gap-3 p-4">
+              {filteredClasses.map((schoolClass) => {
+                const selected = selectedClass?.id === schoolClass.id;
+
+                return (
+                  <button
+                    key={schoolClass.id}
+                    onClick={() => loadSnapshot(schoolClass)}
+                    className={`rounded-lg border px-4 py-3 transition ${
+                      selected
+                        ? "border-emerald-500 bg-emerald-600 text-white"
+                        : "border-slate-200 hover:bg-emerald-50"
+                    }`}
+                  >
+                    <div className="font-semibold">
+                      {schoolClass.name} {schoolClass.arm?.code}
+                    </div>
+
+                    <div
+                      className={`text-xs ${
+                        selected ? "text-emerald-50" : "text-slate-500"
                       }`}
                     >
-                      <span className="block text-sm font-bold">
-                        {schoolClass.name} {schoolClass.arm?.code}
-                      </span>
-                      <span
-                        className={`mt-1 block text-xs ${
-                          isSelected ? "text-emerald-50" : "text-slate-500"
-                        }`}
-                      >
-                        {schoolClass.arm?.name || "No arm"}
-                      </span>
-                    </button>
-                  );
-                })
-              ) : (
-                <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
-                  No classes found.
-                </p>
-              )}
+                      {schoolClass.arm?.name}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-          </aside>
+          </section>
 
-          <div className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+          <section className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-950">
@@ -477,17 +438,12 @@ export default function AdminViewResults() {
                     ? `${selectedClass.name} ${selectedClass.arm?.code || ""}`
                     : "Select a class"}
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {broadsheet
-                    ? `${broadsheet.rows.length} students, ${broadsheet.subjects.length} subjects`
-                    : "Approved class results will appear here."}
-                </p>
               </div>
 
-              {broadsheet && (
+              {snapshot && (
                 <span className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200">
                   <CheckCircle2 className="h-4 w-4" />
-                  {broadsheet.workflow.status}
+                  {classApprovalStatus}
                 </span>
               )}
             </div>
@@ -504,166 +460,16 @@ export default function AdminViewResults() {
                 <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
                 Loading class broadsheet
               </div>
-            ) : broadsheet ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-max border-separate border-spacing-0 text-sm">
-                  <thead>
-                    <tr className="bg-emerald-700 text-white">
-                      <th
-                        rowSpan={2}
-                        className="stick left-0 z-20 min-w-5 border-r border-emerald-600 bg-emerald-700 px-3 py-3 text-left align-middle"
-                      >
-                        S/N
-                      </th>
-                      <th
-                        rowSpan={2}
-                        className="stick left-0 z-20 min-w-56 border-r border-emerald-600 bg-emerald-700 px-3 py-3 text-left align-middle"
-                      >
-                        Student
-                      </th>
-
-                      {broadsheet.subjects.map((subject) => (
-                        <th
-                          key={subject.class_subject_id}
-                          colSpan={scoreFields.length}
-                          className="border-r border-emerald-600 px-3 py-3 text-center font-bold"
-                        >
-                          {subject.code}
-                        </th>
-                      ))}
-                      <th
-                        rowSpan={2}
-                        className="min-w-24 border-r border-emerald-600 px-3 py-3 text-center align-middle"
-                      >
-                        Total
-                      </th>
-
-                      <th
-                        rowSpan={2}
-                        className="min-w-24 border-r border-emerald-600 px-3 py-3 text-center align-middle"
-                      >
-                        Score %
-                      </th>
-                      <th
-                        rowSpan={2}
-                        className="min-w-24 border-r border-emerald-600 px-3 py-3 text-center align-middle"
-                      >
-                        Position
-                      </th>
-                      <th
-                        rowSpan={2}
-                        className="min-w-32 px-3 py-3 text-center align-middle"
-                      >
-                        PDF
-                      </th>
-                    </tr>
-                    <tr className="bg-emerald-50 text-emerald-950">
-                      {broadsheet.subjects.flatMap((subject) =>
-                        scoreFields.map((field) => (
-                          <th
-                            key={`${subject.class_subject_id}-${field.key}`}
-                            className="border-b border-r border-emerald-100 px-2 py-2 text-center text-xs font-semibold"
-                          >
-                            {field.label}
-                          </th>
-                        )),
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {broadsheet.rows.length > 0 ? (
-                      broadsheet.rows.map((row, rowIndex) => (
-                        <tr
-                          key={row.student_id}
-                          className={
-                            rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50"
-                          }
-                        >
-                          <td className="stick left-0 z-10 border-b border-r border-slate-200 bg-inherit px-3 py-3 font-semibold text-slate-900 ">
-                            <span>{rowIndex + 1}</span>
-                          </td>
-                          <td className="stick left-0 z-10 border-b border-r border-slate-200 bg-inherit px-3 py-3 font-semibold text-slate-900 flex flex-row gap-2">
-                            <Link
-                              className="flex flex-row gap-1 text-blue-600"
-                              href={`${user?.role === "admin" ? `/admin/administration/students/${row.student_id}` : `/teachers/students/${row.student_id}`}`}
-                            >
-                              <div className="relative w-10 h-10 rounded-full overflow-hidden border-4 border-emerald-100 shadow-md">
-                                <img
-                                  src={
-                                    row.profile_picture
-                                      ? row.profile_picture.startsWith("http")
-                                        ? row.profile_picture
-                                        : `${BASE_URL}${row.profile_picture}`
-                                      : "/avatar.png"
-                                  }
-                                  className="object-cover h-10 w-10"
-                                />
-                              </div>
-
-                              <div className="flex flex-col gap-1">
-                                <span>{row.student_name}</span>
-                                <span className="text-gray-400 italic">
-                                  {row.admission_number}
-                                </span>
-                              </div>
-                            </Link>
-                          </td>
-
-                          {row.subjects.flatMap((subject) =>
-                            scoreFields.map((field) => (
-                              <td
-                                key={`${row.student_id}-${subject.class_subject_id}-${field.key}`}
-                                className="border-b border-r border-slate-200 px-2 py-3 text-center text-blue-500 font-semibold"
-                              >
-                                {formatValue(subject[field.key])}
-                              </td>
-                            )),
-                          )}
-                          <td className="border-b border-r border-slate-200 px-3 py-3 text-center font-semibold text-blue-700">
-                            {formatValue(row.total_score)}
-                          </td>
-                          <td className="border-b border-r border-slate-200 px-3 py-3 text-center text-blue-700">
-                            {formatValue(row.average_score)}%
-                          </td>
-
-                          <td className="border-b border-r border-slate-200 px-3 py-3 text-center text-blue-700">
-                            {getOrdinal(formatValue(row.position))}
-                          </td>
-                          <td className="border-b border-slate-200 px-3 py-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => downloadStudentPdf(row)}
-                              disabled={
-                                !row.pdf_available ||
-                                downloading === `student-${row.student_id}`
-                              }
-                              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                            >
-                              {downloading === `student-${row.student_id}` ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Download className="h-3.5 w-3.5" />
-                              )}
-                              {row.pdf_available ? "PDF" : "Not ready"}
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={
-                            4 + broadsheet.subjects.length * scoreFields.length
-                          }
-                          className="px-6 py-12 text-center text-slate-500"
-                        >
-                          No result records found for this class.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            ) : snapshot ? (
+              selectedClass &&
+              session &&
+              term && (
+                <ResultBroadsheet
+                  schoolClass={selectedClass.id}
+                  session={session.id!}
+                  term={term.id!}
+                />
+              )
             ) : (
               <div className="flex min-h-80 items-center justify-center p-6 text-center">
                 <div className="max-w-sm">
@@ -680,7 +486,7 @@ export default function AdminViewResults() {
                 </div>
               </div>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </section>

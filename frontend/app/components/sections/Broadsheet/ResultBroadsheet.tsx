@@ -6,6 +6,7 @@ import { AlertCircle, Loader2, RefreshCcw } from "lucide-react";
 
 import { apiHeaders, BASE_URL } from "@/app/lib/api";
 import BroadsheetTable from "./BroadsheetTable";
+import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 
 interface SubjectSnapshot {
   subjectId: number;
@@ -99,7 +100,7 @@ export default function ResultBroadsheet({
 
   const [error, setError] = useState("");
 
-  const [snapshots, setSnapshots] = useState<ResultSnapshot[]>([]);
+  const [snapshots, setSnapshots] = useState<any[]>([]);
 
   const fetchSnapshots = async () => {
     if (!schoolClass || !session || !term) return;
@@ -120,7 +121,7 @@ export default function ResultBroadsheet({
         throw new Error("Unable to load broadsheet.");
       }
 
-      const data: ApiResponse = await response.json();
+      const data: any = await response.json();
 
       // sort by class position
       const sorted = [...data.results].sort((a, b) => {
@@ -299,7 +300,6 @@ export default function ResultBroadsheet({
           subjects={subjects}
           customization={customization}
           onPreview={previewStudent}
-         
         />
       </div>
     </div>
