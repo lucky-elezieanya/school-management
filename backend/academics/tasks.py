@@ -1,30 +1,30 @@
-from results.celery_utils import ProgressTask
-from celery import shared_task
 from django.utils import timezone
+
 from .models import StudentImport
 from .services.student_import import import_students
+from .services.utils.progress_tracker import ProgressTask
 
 
-@shared_task(
-    bind=True,
-    base=ProgressTask,
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_kwargs={"max_retries": 3},
-)
-def import_students_task(self, import_id):
+def import_students_task(import_id: int):
     """
-    Background task for importing students from an uploaded file.
+    Imports students synchronously.
     """
 
     student_import = StudentImport.objects.get(pk=import_id)
 
     student_import.status = "processing"
     student_import.started_at = timezone.now()
-    student_import.save(update_fields=["status", "started_at"])
+    student_import.save(
+        update_fields=[
+            "status",
+            "started_at",
+        ]
+    )
+
+    progress = ProgressTask()
 
     try:
-        self.update_progress(
+        progress.update_progress(
             current=0,
             total=100,
             message="Preparing student import...",
@@ -32,12 +32,11 @@ def import_students_task(self, import_id):
 
         result = import_students(
             file_path=student_import.file.path,
-            progress_callback=self.update_progress,
+            progress_callback=progress.update_progress,
         )
 
         student_import.status = "completed"
         student_import.completed_at = timezone.now()
-
         student_import.created_count = result["created_count"]
         student_import.skipped_count = result["skipped_count"]
         student_import.result = result

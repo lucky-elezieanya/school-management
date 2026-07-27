@@ -51,6 +51,7 @@ import { getOrdinal } from "@/app/services/results";
 import { AcademicSession, TermSession } from "@/app/lib/types";
 import { sessionTerms } from "@/app/services/academics";
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
+import { renderPosition } from "@/app/components/sections/Broadsheet/BroadsheetTable";
 
 export default function StudentDashboardPage() {
   useRoleGuard(["student"]);
@@ -154,40 +155,9 @@ export default function StudentDashboardPage() {
     fetchTerms(Number(selectedSession));
   }, [selectedSession]);
 
-  //   const handleDownloadPdf = async (pdfUrl:string) => {
-  //     if (!pdfUrl) return;
-  //     setIsDownloading(true);
-  //     try {
-  //       const response = await fetch(pdfUrl, {
-  //         headers: apiHeaders(),
-  //       });
-  //       if (!response.ok) throw new Error("Failed to fetch file from server");
-  //       const blob = await response.blob();
-  //       const localUrl = window.URL.createObjectURL(blob);
-  //       // Create a temporary hidden link element to force download
-  //       const link = document.createElement("a");
-  //       link.href = localUrl;
-  //       link.setAttribute(
-  //         "download",
-  //         `Report_Sheet_${studentData?.id || "Student"}.pdf`,
-  //       );
-  //       document.body.appendChild(link);
-  //       link.click();
-  //       setIsDownloading(false);
-  //       // Clean up memory and DOM
-  //       link.remove();
-  //       window.URL.revokeObjectURL(localUrl);
-  //     } catch (error) {
-  //       console.error("Secure download failed:", error);
-  //       alert("Could not download the PDF. Please try again.");
-  //     } finally {
-  //       setIsDownloading(false);
-  //     }
-  //   };
-
   const viewResults = async () => {
     const snapshotRes = await getSnapShot();
-    const snapshot = snapshotRes[0]
+    const snapshot = snapshotRes[0];
 
     if (!snapshot) {
       toast.error("Result sheet is not available.");
@@ -227,6 +197,11 @@ export default function StudentDashboardPage() {
     }
   };
 
+  const currentClass = studentData?.current_enrollment?.school_class;
+  const activeSessionName = studentData?.current_enrollment?.session?.name;
+  const currentClassTeacherName =
+    currentClass?.class_teacher?.user?.full_name || "Unassigned";
+
   // Fetch results and academic metrics when active session/term or studentData changes
   useEffect(() => {
     if (!studentData || !selectedSession || !selectedTerm) return;
@@ -247,7 +222,7 @@ export default function StudentDashboardPage() {
           commentRes,
           schoolDaysRes,
           feesRes,
-          pdfRes,
+          releaseRes,
         ] = await Promise.all([
           fetch(`${BASE_URL}/results/results/${queryParams}`, { headers }),
           fetch(`${BASE_URL}/results/result-summaries/${queryParams}`, {
@@ -267,7 +242,7 @@ export default function StudentDashboardPage() {
             { headers },
           ),
           fetch(
-            `${BASE_URL}/results/result-pdfs/my-pdf/?term_id=${selectedTerm}&session_id=${selectedSession}`,
+            `${BASE_URL}/results/workflow/?school_class=${currentClass.id}&term=${selectedTerm}&session=${selectedSession}`,
             { headers },
           ),
         ]);
@@ -279,6 +254,7 @@ export default function StudentDashboardPage() {
         const commentJson = await commentRes.json();
         const schoolDaysJson = await schoolDaysRes.json();
         const feesJson = await feesRes.json();
+        const releaseStatusJson = await releaseRes.json();
 
         // 1. Set Results Details
         const fetchedResults = resultsJson.results || [];
@@ -291,9 +267,13 @@ export default function StudentDashboardPage() {
             : null;
         setSummary(fetchedSummary);
 
-        // 3. Set Release Gating (we check if PDF generation returns 403 Forbidden which implies results are not released)
-        const isReleased = pdfRes.status !== 403;
-        setResultsReleased(isReleased);
+        // 3. check if results have been released
+        const isReleased =
+          releaseStatusJson.results && releaseStatusJson.results.length > 0
+            ? releaseStatusJson.results[0].status
+            : null;
+
+        setResultsReleased(isReleased === "Released");
 
         // 4. Set other performance details (only populated fully if released)
         setBehaviour(
@@ -321,16 +301,6 @@ export default function StudentDashboardPage() {
             ? feesJson.results[0]
             : null,
         );
-
-        // 5. Handle PDF report response
-        if (pdfRes.ok) {
-          const pdfJson = await pdfRes.json();
-          const cleanUrl = BASE_URL.replace(/\/api$/, "");
-          const link = `${cleanUrl}${pdfJson.pdf_url}`;
-          setPdfUrl(link);
-        } else {
-          setPdfUrl(null);
-        }
       } catch (err) {
         console.error("Error loading student academic records:", err);
         setResultsReleased(false);
@@ -406,11 +376,6 @@ export default function StudentDashboardPage() {
       </div>
     );
   }
-
-  const currentClass = studentData?.current_enrollment?.school_class;
-  const activeSessionName = studentData?.current_enrollment?.session?.name;
-  const currentClassTeacherName =
-    currentClass?.class_teacher?.user?.full_name || "Unassigned";
 
   return (
     <div className="min-h-screen bg-slate-50/30 flex flex-col md:flex-row relative">
@@ -757,7 +722,7 @@ export default function StudentDashboardPage() {
                   </div>
                   <div className="pt-4 border-t border-slate-100 flex flex-col gap-2 mt-4">
                     <a
-                      href={`mailto:${currentClass?.class_teacher?.user?.email || "admin@school.com"}`}
+                      href={`mailto:${currentClass?.class_teacher?.user?.email || "admin@school.com"}?subject=Results Issues`}
                       className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1.5"
                     >
                       <Mail size={13} />
@@ -862,7 +827,7 @@ export default function StudentDashboardPage() {
                       </span>
                       <p className="text-xl font-black text-indigo-600 mt-2">
                         {summary?.position
-                          ? formatPosition(summary.position)
+                          ? renderPosition(formatPosition(summary.position))
                           : "N/A"}
                       </p>
                     </div>

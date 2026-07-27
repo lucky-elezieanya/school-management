@@ -1,5 +1,5 @@
 // services/results.ts
-
+import {toast} from "sonner"
 import { request, BASE_URL, apiHeaders } from "../lib/api";
 
 export function getBackendBaseUrl(url: string) {
@@ -43,7 +43,7 @@ const handleResponse = async (res: Response) => {
         .join(", ") ||
       `Request failed with status ${res.status}`;
 
-    throw new Error(message);
+   toast.error(message);
   }
 
   return data;

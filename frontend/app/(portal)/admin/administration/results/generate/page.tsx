@@ -332,7 +332,7 @@ export default function GenerateResultsPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Choose the class whose result PDFs should be generated.
+              Choose the class whose results should be recomputed. Skip this section to select all classes
             </p>
           </div>
 

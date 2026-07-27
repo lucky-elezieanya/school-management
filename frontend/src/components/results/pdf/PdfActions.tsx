@@ -4,44 +4,10 @@ import { toast } from "sonner";
 import { ArrowLeft, Download, Printer } from "lucide-react";
 import { PdfActionProps } from "./types";
 import { usePrintPdf } from "./printPdf";
-import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 import { useRouter } from "next/navigation";
-import { buildFilename } from "./createPdfBlob";
+import { downloadPdf } from "./downloadPdf";
 
-export async function downloadPdf(
-  element: HTMLElement,
-  snapshot: StudentResultSnapshot,
-) {
-  const html2pdf = (await import("html2pdf.js")).default;
-  const filename = buildFilename(snapshot);
-  await html2pdf()
-    .set({
-      filename: filename,
-      margin: 0,
-      image: {
-        type: "png",
-        quality: 1,
-      },
-      html2canvas: {
-        scale: 1,
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        letterRendering: true,
-        scrollX: 0,
-        scrollY: 0
-        
-    },
-    jsPDF: {
-        unit: "mm",
-        format: "a4",
-        orientation: "portrait",
-        
-      },
-    })
-    .from(element)
-    .save();
-}
+
 
 export default function PdfActions({ pdfRef, snapshot }: PdfActionProps) {
   const print = usePrintPdf(pdfRef);

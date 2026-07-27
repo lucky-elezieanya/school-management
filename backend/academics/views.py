@@ -1,5 +1,5 @@
-from celery.result import AsyncResult
-
+from .services.utils.progress_tracker import ProgressTask
+from uuid import uuid4
 from .tasks import import_students_task
 from .permissions import IsAdminUser, IsTeacherOrAdmin
 from .models import AcademicSession, Arms, Class, PromotionBatch, PromotionRecord, PromotionRule, SchoolAsset, StudentEnrollment, StudentImport, Teacher, Student, Subject, ClassSubject, Term
@@ -288,11 +288,10 @@ class StudentViewSet(viewsets.ModelViewSet):
 
         if self.action in [
             "create",
-            "update",
-            "partial_update",
+           
             "destroy",
         ]:
-            # return [IsAdminUser()]
+        
             return [IsTeacherOrAdmin()]
 
         return [IsAuthenticated()]
@@ -458,44 +457,33 @@ class StudentImportViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=["get"], url_path="status")
     def status(self, request):
-
         task_id = request.query_params.get("task_id")
-        task_result = StudentImport.objects.filter(task_id=task_id).first()
 
         if not task_id:
-            return Response({
-                "detail": "task_id is required"
-            }, status=400)
+            return Response(
+                {"detail": "task_id is required"},
+                status=400,
+            )
 
-        result = AsyncResult(task_id)
+        task_result = StudentImport.objects.filter(task_id=task_id).first()
+
+        if not task_result:
+            return Response(
+                {"detail": "Task not found."},
+                status=404,
+            )
 
         response_data = {
-            "task_id": task_id,
-            "state": result.state,
-            "ready": result.ready(),
+            "task_id": task_result.task_id,
+            "state": task_result.status,
+            "ready": task_result.status in ("completed", "failed"),
             "created_count": task_result.created_count,
-            "skipped_count": task_result.skipped_count
+            "skipped_count": task_result.skipped_count,
+            "result": task_result.result,
+            "error": task_result.error,
         }
 
-        # --------------------------------------------------
-        # SAFE RESULT HANDLING
-        # --------------------------------------------------
-        if result.ready():
-            try:
-                # if success → normal result
-                response_data["result"] = result.result
-
-            except Exception:
-                # fallback safety
-                response_data["result"] = None
-
-            # if failure → convert exception to string
-            if result.failed():
-                response_data["error"] = str(result.result)
-                response_data["result"] = None
-
-        return Response(response_data)
-        
+        return Response(response_data)  
     
 # ==============================
 # STUDENT FILE UPLOAD VIEWSET
@@ -533,25 +521,29 @@ class StudentFileUploadView(APIView):
                 {"error": "Unsupported file format"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
+        task_id = str(uuid4())
         student_import = StudentImport.objects.create(
             file=file_obj,
             status="pending",
+            task_id=task_id
         )
 
-        task = import_students_task.delay(student_import.id)
+        task = import_students_task(student_import.id)
 
-        student_import.task_id = task.id
-        student_import.save(update_fields=["task_id"])
+        student_import.refresh_from_db()
 
         return Response(
             {
-                "message": "Student import has been queued.",
-                "task_id": task.id,
+                "message": "Student import completed successfully.",
+                "task_id": student_import.task_id,
                 "import_id": student_import.id,
-                "status": "pending",
+                "status": student_import.status,
+                "created_count": student_import.created_count,
+                "skipped_count": student_import.skipped_count,
+                "completed_at": student_import.completed_at,
+                "result": student_import.result,
             },
-            status=status.HTTP_202_ACCEPTED,
+            status=status.HTTP_200_OK,
         )
         
 class ArmsViewSet(viewsets.ModelViewSet):

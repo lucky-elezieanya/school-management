@@ -23,6 +23,7 @@ export default function Header({ image }: HeaderProps) {
         width={1000}
         height={160}
         priority
+      
         className="
                     w-[80%]
                     h-auto

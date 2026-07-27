@@ -7,5 +7,5 @@ class ResultsConfig(AppConfig):
     name = "results"
 
     def ready(self):
-        import results.tasks
+      
         import results.signals

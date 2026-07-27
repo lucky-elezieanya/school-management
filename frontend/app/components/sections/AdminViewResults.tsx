@@ -112,12 +112,19 @@ export default function AdminViewResults() {
   const getApprovalStatus = async () => {
     if (!selectedClass || !session || !term) return;
     const res = await getWorkFlowApprovedStatus(
-      selectedClass?.id!,
+      selectedClass?.id,
       term.id!,
       session.id!,
     );
-    console.log("Approval: ", res);
-    setClassApprovalStatus(res.results.status);
+    if (res){
+
+        setClassApprovalStatus(res?.results[0]?.status);
+    }else {
+        toast.error("No results for this class")
+        setError("No results for this class yet!")
+        return
+    }
+
   };
 
   useEffect(() => {
@@ -155,6 +162,7 @@ export default function AdminViewResults() {
     fetchTerms(sessionId);
   }, [sessionId]);
 
+// ====================  Classes ===================== //
   useEffect(() => {
     const loadClasses = async () => {
       try {
@@ -186,6 +194,8 @@ export default function AdminViewResults() {
       return classLabel.toLowerCase().includes(search);
     });
   }, [classes, query]);
+
+//   =========== Snapshot and Broadsheet ================ //
 
   const loadSnapshot = async (schoolClass: ClassType) => {
     if (!termId || !sessionId) {

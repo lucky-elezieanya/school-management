@@ -5,7 +5,6 @@ from django.http import FileResponse
 from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from django_q.tasks import async_task
 from .utils.services.engine import ResultEngine
 
 from .permissions import IsAdminUser, IsTeacherOrAdmin
@@ -21,21 +20,15 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.permissions import IsAuthenticated
 from academics.models import AcademicSession, ClassSubject, SchoolAsset, Student, StudentEnrollment, Teacher, Term, Class
 from django.db import transaction
-from .utils.report_service import get_student_report_data
-from .utils.report import ReportSerializer
-from dataclasses import asdict
 
-from celery.result import AsyncResult
 from rest_framework.decorators import api_view
 
-from .tasks import  generate_result_pdfs_for_class_task_old, generate_result_pdfs_task, recompute_all_results_task
-from .services import get_student_results, update_result_workflow, merge_class_result_pdfs
+from .services import  update_result_workflow
 
 from django.http import FileResponse, HttpResponse
 from django.template.loader import render_to_string
 
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
-
 
 class StudentResultSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = StudentResultSnapshotSerializer
@@ -72,7 +65,6 @@ class StudentResultSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(session_id=session)
 
         return queryset
-    
     
 class ResultCustomizationViewSet(viewsets.ModelViewSet):
     serializer_class = ResultCustomizationSerializer
@@ -286,8 +278,7 @@ class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
             )
 
         serializer.save()
-        
-     
+           
 class ResultComputationViewSet(viewsets.ViewSet):
     """
     Handles async result computation via Celery
@@ -324,27 +315,7 @@ class ResultComputationViewSet(viewsets.ViewSet):
             status=status.HTTP_202_ACCEPTED,
         )
 
-    
-    @action(detail=False, methods=["post"], url_path="recompute")
-    def recompute(self, request):
-        term_id = request.data.get("term_id")
-        session_id = request.data.get("session_id")
 
-        if not term_id or not session_id:
-            return Response(
-                {"detail": "term_id and session_id are required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        task = recompute_all_results_task.delay(
-            term_id=term_id,
-            session_id=session_id,
-        )
-
-        return Response(
-            {"task_id": task.id, "status": "queued"},
-            status=status.HTTP_202_ACCEPTED,
-        )
 
 @api_view(["GET"])
 def task_status(request, task_id):
@@ -775,168 +746,7 @@ class ResultPDFViewSet(viewsets.ViewSet):
     queryset = ResultPDF.objects.all()
     serializer_class = ResultPDFSerializer
     permission_classes = [IsAuthenticated]
-    
-    @action(detail=False, methods=["get"], url_path="my-pdf")
-    def my_pdf(self, request):
-        user = self.request.user
-        term_id = request.query_params.get("term_id")
-        session_id = request.query_params.get("session_id")
-        
-        if not term_id or not session_id:
-            return Response({"detail": "term_id and session_id are required."}, status=400)
-            
-        
-        if user.role == "student":       
-            student = Student.objects.get(user=user)
-            current_class = student.current_class
-        
-        if not user == student.user:
-            return Response({"detail": "Only students can view their PDF results."}, status=403)
-            
-        if not current_class:
-            return Response({"detail": "No current enrollment found for student."}, status=404)
-            
-        workflow = ResultWorkflow.objects.filter(
-            school_class=current_class,
-            term_id=term_id,
-            session_id=session_id
-        ).first()
-        
-        if not workflow or workflow.status != "Released":
-            return Response({"detail": "Results have not been released yet."}, status=403)
-            
-        pdf_record = ResultPDF.objects.filter(
-            student=student,
-            term_id=term_id,
-            session_id=session_id,
-            status="DONE"
-        ).first()
-        
-        if not pdf_record:
-            return Response({"detail": "PDF report sheet is not available or is still generating."}, status=404)
-        print("backend return url: ", pdf_record.file.url)
-            
-        return Response({
-            "pdf_url": pdf_record.file.url if pdf_record.file else None
-        })
 
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="generate",
-    )
-    def generate(self, request):
-        term_id = request.data.get("term_id")
-        session_id = request.data.get("session_id")
-        school_class_id = request.data.get("class_id")
-
-        if not term_id or not session_id:
-            return Response(
-                {
-                    "detail":
-                    "term_id and session_id are required."
-                },
-                status=400,
-            )
-        if school_class_id:
-            task = generate_result_pdfs_for_class_task.delay(
-                term_id,
-                session_id,
-                school_class_id
-            )
-
-        task = generate_result_pdfs_task.delay(
-            term_id,
-            session_id,
-        )
-
-        return Response({
-            "task_id": task.id,
-            "status": "queued",
-        })
-        
-
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="upload-student-pdf",
-        permission_classes=[IsTeacherOrAdmin],
-    )
-    def upload_student_pdf(self, request):
-        student_id = request.data.get("student_id")
-        term_id = request.data.get("term_id")
-        session_id = request.data.get("session_id")
-        file_obj = request.FILES.get("file")
-
-        if not all([student_id, term_id, session_id, file_obj]):
-            return Response(
-                {"detail": "student_id, term_id, session_id, and file are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            student = Student.objects.get(pk=student_id)
-            term = Term.objects.get(pk=term_id)
-            session = AcademicSession.objects.get(pk=session_id)
-        except (Student.DoesNotExist, Term.DoesNotExist, AcademicSession.DoesNotExist) as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-
-        pdf_obj, _ = ResultPDF.objects.get_or_create(
-            student=student,
-            term=term,
-            session=session,
-        )
-
-        if pdf_obj.file:
-            pdf_obj.file.delete(save=False)
-
-        file_name = f"{student.admission_number}_result_{session.name}_{term.name}.pdf"
-        pdf_obj.file.save(file_name, file_obj, save=False)
-        pdf_obj.status = "DONE"
-        pdf_obj.save()
-
-        return Response({
-            "detail": "Student result PDF uploaded successfully.",
-            "pdf_url": pdf_obj.file.url if pdf_obj.file else None
-        }, status=status.HTTP_200_OK)
-
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="merge-class-pdf",
-        permission_classes=[IsTeacherOrAdmin],
-    )
-    def merge_class_pdf(self, request):
-        class_id = request.data.get("school_class_id") or request.data.get("class_id")
-        term_id = request.data.get("term_id")
-        session_id = request.data.get("session_id")
-
-        if not all([class_id, term_id, session_id]):
-            return Response(
-                {"detail": "school_class_id, term_id, and session_id are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            school_class = Class.objects.get(pk=class_id)
-            term = Term.objects.get(pk=term_id)
-            session = AcademicSession.objects.get(pk=session_id)
-        except (Class.DoesNotExist, Term.DoesNotExist, AcademicSession.DoesNotExist) as e:
-            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
-
-        merged_pdf = merge_class_result_pdfs(school_class, term, session)
-
-        if not merged_pdf or merged_pdf.status == "FAILED":
-            return Response(
-                {"detail": "Merging class PDFs failed or no student PDFs were found."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        return Response({
-            "detail": "Class PDFs merged successfully.",
-            "pdf_url": merged_pdf.file.url if merged_pdf.file else None
-        }, status=status.HTTP_200_OK)
-        
     @action(detail=False, methods=["get"], url_path="status")
     def status(self, request):
 
@@ -2301,7 +2111,7 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
     )
 
     permission_classes = [
-        IsTeacherOrAdmin
+        IsAuthenticated
     ]
 
     filter_backends = [

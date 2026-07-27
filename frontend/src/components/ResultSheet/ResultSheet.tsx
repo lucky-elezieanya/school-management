@@ -30,7 +30,7 @@ export default function ResultSheet({ snapshot }: Props) {
       {/* Page Content */}
       <div className="relative z-10 flex flex-col gap-2">
         {/* School Header */}
-        <Header image={snapshot.assets.header} />
+        <Header image={snapshot?.assets?.header || "/cozzi-header.png"} />
 
         {/* Student Information */}
         <StudentInformation snapshot={snapshot} />

@@ -1,8 +1,6 @@
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
-import os
-import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -55,20 +53,9 @@ INSTALLED_APPS = [
     "academics",
     "results",
     'storages',
-    "django_q",
-    # Celery 
-    "django_celery_beat"
+
 ]
 
-
-Q_CLUSTER = {
-    'name': 'my_project_cluster',
-    'workers': 4,          # Concurrently processed background tasks
-    'recycle': 500,        # Memory clearing restart interval
-    'timeout': 120,         # Maximum seconds a task can run
-    'retry': 120,          # Seconds to wait before retrying a stalled task
-    'orm': 'default',      
-}
 
 # ======================================================
 # MIDDLEWARE
@@ -139,32 +126,6 @@ AWS_QUERYSTRING_EXPIRE = 3600  # 1 hour
 AWS_S3_FILE_OVERWRITE = True
 AWS_S3_VERIFY = True
 
-# ======================================================
-# CELERY 
-# ======================================================
-
-CELERY_BROKER_URL = config("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND")
-
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
-
-CELERY_TIMEZONE = "Africa/Lagos"
-CELERY_ENABLE_UTC = False
-
-CELERY_TASK_TRACK_STARTED = True
-
-CELERY_TASK_TIME_LIMIT = 60 * 10
-CELERY_TASK_SOFT_TIME_LIMIT = 60 * 8
-
-CELERY_TASK_ACKS_LATE = True
-CELERY_TASK_REJECT_ON_WORKER_LOST = True
-CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-
-CELERY_TASK_ALWAYS_EAGER = False
-
-CELERY_RESULT_EXPIRES = 60 * 60 * 24  # 1 day
 
 # # Password validation
 # # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -267,12 +228,6 @@ else:
 AUTH_USER_MODEL = "accounts.User"
 
 IS_PRODUCTION = config("IS_PRODUCTION", cast=bool, default=False)
-
-# if IS_PRODUCTION:
-#     SESSION_COOKIE_SECURE = True
-#     CSRF_COOKIE_SECURE = True
-#     SECURE_SSL_REDIRECT = True
-#     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True

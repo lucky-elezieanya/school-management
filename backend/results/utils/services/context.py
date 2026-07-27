@@ -284,8 +284,6 @@ class ResultSnapshotContext:
         self.assets = {
             "logo": self.absolute_url(logo.image) if logo else None,
             "header": self.absolute_url(header.image) if header else None,
-            "default_header": self.absolute_url(settings.DEFAULT_HEADER),
-            "default_avatar": self.absolute_url(settings.DEFAULT_AVATAR),
         }
         self.school_days = (
             SchoolDays.objects.filter(

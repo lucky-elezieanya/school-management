@@ -19,11 +19,12 @@ export default function Watermark({ logo }: Props) {
             "
     >
       <Image
-        src={logo || "/images/logo.jpg"}
+        src={logo || "/logo.png"}
         alt=""
         width={500}
         height={500}
         className="object-contain"
+        loading="eager"
       />
     </div>
   );

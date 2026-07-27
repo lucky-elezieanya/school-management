@@ -32,7 +32,7 @@ export default function StudentInformation({ snapshot }: Props) {
         border-gray-400
         "
           >
-            <SchoolLogo logo={assets.logo} fallback={"assets.defaultLogo"} />
+            <SchoolLogo logo={assets.logo} fallback={"/logo.png"} />
           </td>
 
           <td

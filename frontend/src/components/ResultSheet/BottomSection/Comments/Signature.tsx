@@ -26,11 +26,10 @@ export default function Signature({
         src={image}
         alt={alt}
         width={120}
-        height={60}
+        height={100}
         className="
-          max-h-[60px]
-          w-auto
-          object-contain
+        h-auto w-auto
+          object-contai
         "
       />
     </div>

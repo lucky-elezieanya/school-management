@@ -199,9 +199,8 @@ def build_student(student, absolute_url):
         "admissionNumber": student.admission_number,
         "profilePicture": (
             absolute_url(student.user.profile_picture)
-            if student.user.profile_picture
-            else absolute_url(settings.DEFAULT_AVATAR)
-        ),
+           )
+       
     }
     
 def build_school(enrollment, session, term):
@@ -313,10 +312,7 @@ def build_comments(
 def build_assets(settings):
     return {
         "logo": settings.get("logo"),
-        "header": settings.get("header"),
-        "defaultLogo": settings.get("default_logo"),
-        "defaultHeader": settings.get("default_header"),
-        "defaultAvatar": settings.get("default_avatar"),
+        "header": settings.get("header")
     }
 def build_customization(customization):
 

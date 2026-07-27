@@ -7,12 +7,10 @@ import { Download, Eye, Loader2, RefreshCw } from "lucide-react";
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 import { ResultSnapshot } from "./ResultBroadsheet";
 import { BASE_URL } from "@/app/lib/api";
-import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { downloadAllPdfs } from "@/src/components/results/pdf/downloadAllPdfs";
 import { PdfContainer } from "@/src/components/results/pdf";
 import { getBackendBaseUrl } from "@/app/services/results";
-import { downloadPdf } from "@/src/components/results/pdf/PdfActions";
+import { downloadPdf } from "@/src/components/results/pdf/downloadPdf";
 
 interface Props {
   snapshots: any[];
@@ -98,22 +96,10 @@ export default function BroadsheetTable({
   const scoreFields: ScoreField[] = [];
   const pdfRef = useRef<HTMLDivElement>(null);
 
-  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
   const [currentSnapshot, setCurrentSnapshot] =
     useState<StudentResultSnapshot | null>(null);
-
-  const [downloadingStudent, setDownloadingStudent] = useState<number | null>(
-    null,
-  );
-
-  const [downloadingAll, setDownloadingAll] = useState(false);
-
-  const [downloadProgress, setDownloadProgress] = useState({
-    completed: 0,
-    total: 0,
-    percent: 0,
-  });
+const [downloading, setDownloading] = useState(false)
 
   const orderedSnapshots = [...snapshots].sort(
     (a, b) =>
@@ -182,12 +168,11 @@ export default function BroadsheetTable({
     async (studentId: number) => {
       const snapshot = snapshotMap.get(studentId);
 
-      console.log("student snapshots: ", snapshot);
 
       if (!snapshot) return;
 
       try {
-        setDownloadingStudent(studentId);
+        setDownloading(true);
 
         setCurrentSnapshot(snapshot);
 
@@ -199,56 +184,13 @@ export default function BroadsheetTable({
 
         await downloadPdf(pdfRef.current, snapshot);
       } finally {
-        setDownloadingStudent(null);
+        setDownloading(false);
       }
     },
     [snapshotMap],
   );
 
-  const handleDownloadAll = useCallback(async () => {
-    try {
-      setDownloadingAll(true);
 
-      const snapshots = [...snapshotMap.values()];
-
-      setDownloadProgress({
-        completed: 0,
-        total: snapshots.length,
-        percent: 0,
-      });
-
-      await downloadAllPdfs(
-        snapshots,
-        async (snapshot: StudentResultSnapshot): Promise<HTMLElement> => {
-          setCurrentSnapshot(snapshot);
-
-          await new Promise(requestAnimationFrame);
-          await new Promise(requestAnimationFrame);
-
-          if (!pdfRef.current) {
-            throw new Error("PDF container not ready");
-          }
-
-          return pdfRef.current;
-        },
-        (completed, total) => {
-          setDownloadProgress({
-            completed,
-            total,
-            percent: Math.round((completed / total) * 100),
-          });
-        },
-      );
-    } finally {
-      setDownloadingAll(false);
-
-      setDownloadProgress({
-        completed: 0,
-        total: 0,
-        percent: 0,
-      });
-    }
-  }, [snapshotMap]);
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-whit shadow-sm ">
@@ -348,47 +290,20 @@ export default function BroadsheetTable({
                 Position
               </th>
             )}
-            {/* print all */}
+    
             <th
               className="
         min-w-32
         px-3 py-3
         text-center
+        items-center flex flex-row gap-2
       "
             >
-              <button
-                onClick={handleDownloadAll}
-                disabled={downloadingAll}
-                className="
-            flex
-            w-full
-            items-center
-            justify-center
-            gap-2
-            rounded-lg
-            bg-white
-            px-4
-            py-2
-            text-emerald-700
-            font-semibold
-            transition
-            hover:bg-emerald-50
-            disabled:opacity-60
-            disabled:cursor-not-allowed
-        "
-              >
-                {downloadingAll ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Printing...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <Download className="h-4 w-4" />
-                    Print All
-                  </span>
-                )}
-              </button>
+              <span>
+                {" "}
+                <Download size={18} className="w-5 h-5" />
+              </span>
+              <span>Print</span>
             </th>
           </tr>
         </thead>
@@ -531,8 +446,9 @@ export default function BroadsheetTable({
                       <Eye className="h-4 w-4" />
                     </button>
                     <button
+                    disabled={downloading}
                       onClick={() => handleDownload(snapshot.data.student.id)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100 disabled:opacity-0.4"
                       title="Download Result"
                     >
                       <Download className="h-4 w-4" />
@@ -553,43 +469,7 @@ export default function BroadsheetTable({
           )}
         </tbody>
       </table>
-      {downloadingAll && (
-        <div
-          className="
-            sticky
-            top-0
-            z-40
-            border-b
-            bg-emerald-50
-            px-6
-            py-3
-        "
-        >
-          <div className="flex justify-between text-sm">
-            <span className="font-medium">Generating Results...</span>
-
-            <span>
-              {downloadProgress.completed}/{downloadProgress.total} (
-              {downloadProgress.percent}%)
-            </span>
-          </div>
-
-          <div className="mt-2 h-2 rounded-full bg-emerald-100">
-            <div
-              className="
-                    h-full
-                    rounded-full
-                    bg-emerald-600
-                    transition-all
-                    duration-300
-                "
-              style={{
-                width: `${downloadProgress.percent}%`,
-              }}
-            />
-          </div>
-        </div>
-      )}
+  
 
       <div className="hidden">
         {currentSnapshot && (

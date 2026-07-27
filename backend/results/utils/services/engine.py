@@ -60,6 +60,7 @@ class ResultEngine:
                 snapshot.data = data
 
                 snapshot.status = StudentResultSnapshot.STATUS_READY
+                snapshot.version += 1
 
                 to_update.append(snapshot)
 
@@ -101,6 +102,7 @@ class ResultEngine:
                 [
                     "data",
                     "status",
+                    "version"
                 ],
 
                 batch_size=500,

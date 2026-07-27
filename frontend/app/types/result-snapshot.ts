@@ -163,11 +163,6 @@ export interface AssetsSnapshot {
 
   header?: string;
 
-  defaultLogo: string;
-
-  defaultHeader: string;
-
-  defaultAvatar: string;
 }
 
 /* ======== CHARTS ========== */

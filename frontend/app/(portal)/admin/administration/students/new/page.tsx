@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { uploadFile, apiAction, createAction, apiHeaders, BASE_URL } from "@/app/lib/api";
+import {
+  uploadFile,
+  apiAction,
+  createAction,
+  apiHeaders,
+  BASE_URL,
+} from "@/app/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArmsType, ClassType } from "@/app/lib/types";
@@ -34,12 +40,6 @@ export default function NewStudentPage() {
     parent_address: "",
     password: "",
   });
-  const [taskId, setTaskId] = useState<string | null>(null);
-
-  const [status, setStatus] = useState<Status>("idle");
-
-  const [logs, setLogs] = useState<string[]>([]);
-
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -82,7 +82,7 @@ export default function NewStudentPage() {
       }
     } catch (error) {
       console.log(error);
-     
+
       toast.error("Something went wrong");
     } finally {
       setLoading(false);
@@ -92,82 +92,38 @@ export default function NewStudentPage() {
   /* =========================
         UPLOAD STUDENTS
     ========================== */
-  const handleUploadSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
+  const handleUploadSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!file) {
-      toast.error("Please select a spreadsheet");
+      toast.error("Please select a spreadsheet.");
       return;
     }
 
     setLoading(true);
-    setStatus("queued");
-    setLogs((p) => [...p, "🚀 Starting student upload..."]);
 
     try {
       const res = await uploadFile(file);
-   
-      setTaskId(res.task_id);
-      setLogs((p) => [...p, `📦 Task queued: ${res.task_id}`]);
-     
+
+      toast.success(res.message);
+
+      alert(
+        `Student import completed.
+      
+      Created: ${res.created_count}
+      Skipped: ${res.skipped_count}
+      Completed at: ${new Date(res.completed_at).toLocaleString()}`,
+      );
+
+      setFile(null);
     } catch (error: any) {
-      console.log(error);
-      setStatus("failed");
-      setLogs((p) => [...p, "❌ Failed to start task"]);
       toast.error(
-        error?.error || error?.detail || "Something went wrong during upload",
+        error?.error ?? error?.detail ?? "Something went wrong during upload.",
       );
     } finally {
       setLoading(false);
     }
   };
-
-  // --------------------------------------------------
-  // POLLING
-  // --------------------------------------------------
-  useEffect(() => {
-    if (!taskId) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(
-          `${BASE_URL}/academics/student-imports/status/?task_id=${taskId}`,
-          {
-            headers: apiHeaders(),
-          },
-        );
-
-        const data = await res.json();
-
-        setLogs((p) => [...p, `📡 ${data.state}`]);
-
-        if (data.state === "PROGRESS") setStatus("processing");
-
-        if (data.state === "SUCCESS") {
-          setStatus("done");
-          setLogs((p) => [...p, "✅ Completed"]);
-          toast.success(
-            `Import completed.\n\nCreated: ${data.created_count}\nSkipped: ${data.skipped_count}`,
-          );
-
-          router.push("/admin/administration/students");
-          clearInterval(interval);
-        }
-
-        if (data.state === "FAILURE") {
-          setStatus("failed");
-          setLogs((p) => [...p, "❌ Failed"]);
-          clearInterval(interval);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }, 4000);
-
-    return () => clearInterval(interval);
-  }, [taskId]);
-
-
 
   useEffect(() => {
     // Fetch classes from backend when component mounts
@@ -694,7 +650,7 @@ export default function NewStudentPage() {
                   </ul>
                 </div>
               </div>
-            
+
               <button
                 type="submit"
                 disabled={loading}
@@ -713,21 +669,6 @@ export default function NewStudentPage() {
                 )}
               </button>
             </form>
-            {/* LOGS */}
-            <div className="bg-gray-900 text-gray-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Terminal className="w-4 h-4 text-emerald-400" />
-                <h3 className="font-medium">Task Logs</h3>
-              </div>
-
-              <div className="max-h-60 overflow-y-auto text-xs space-y-1">
-                {logs.map((l, i) => (
-                  <div key={i} className="opacity-90">
-                    {l}
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
       </div>
