@@ -206,14 +206,13 @@ export const getWorkFlowApprovedStatus = async (
 
 export async function uploadTeacherSignature(
   file: File,
-  schoolClassId: number,
+  
   classTeacherId: number,
   is_active: boolean,
 ) {
   const formData = new FormData();
 
   formData.append("signature", file);
-  formData.append("school_class", schoolClassId.toString());
   formData.append("teacher", classTeacherId.toString());
   formData.append("is_active", is_active.toString());
 

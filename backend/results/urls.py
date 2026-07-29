@@ -1,14 +1,14 @@
 # urls.py
 from django.urls import path
 from rest_framework.routers import DefaultRouter
-from .views import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultPDFViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet, ResultComputationViewSet, preview_pdf_html, task_status)
+from .views import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultPDFViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet, ResultComputationViewSet, task_status)
 
 
 
 urlpatterns = [
     path("tasks/<str:task_id>/", task_status, name="task-status",
-    ),
-    path("pdf/preview/", preview_pdf_html, name="pdf-preview"), 
+    )
+    
 ]
 router = DefaultRouter()
 router.register(r'results', ResultViewSet, basename='results')

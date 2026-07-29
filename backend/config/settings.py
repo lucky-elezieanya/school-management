@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     "accounts",
     "academics",
     "results",
+    "news", 
+    
     'storages',
 
 ]

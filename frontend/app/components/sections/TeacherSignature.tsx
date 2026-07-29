@@ -16,8 +16,11 @@ export default function TeacherSignaturePage() {
 
   const getCurrentClass = async (selectedClass: number) => {
     const res = await apiAction("academics", `classes`, selectedClass);
-    if (res) {
-      setClassTeacherId(res.class_teacher.id);
+    if (res?.class_teacher?.id) {
+      setClassTeacherId(res?.class_teacher?.id);
+    } else {
+      setClassTeacherId(null);
+      alert(`No teacher assigned to this class yet!`);
     }
   };
   const getTeacherSignature = async (classId: number) => {
@@ -29,6 +32,10 @@ export default function TeacherSignaturePage() {
       );
 
       setTeacherSignature(result);
+    } else {
+      setTeacherSignature([]);
+      alert(`No signatures set for this class yet!`);
+      return;
     }
   };
 
@@ -42,7 +49,9 @@ export default function TeacherSignaturePage() {
       );
 
       if (deleted) {
-        selectedClass && getTeacherSignature(selectedClass);
+        alert(`Signature deleted successfully, kindly reupload`)
+        setTeacherSignature([]);
+        return
       }
     } catch (err) {
       console.error("Delete failed:", err);

@@ -4,7 +4,6 @@ import { uploadTeacherSignature } from "@/app/services/results";
 import { useState } from "react";
 
 export default function TeacherSignatureUploadComponent({
-  schoolClassId,
   classTeacherId,
 }: {
   schoolClassId: number;
@@ -13,11 +12,7 @@ export default function TeacherSignatureUploadComponent({
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
-    const getCurrentSignature = async () => {
-
-    }
-
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent) {
     e.preventDefault();
 
     if (!file) return;
@@ -25,12 +20,13 @@ export default function TeacherSignatureUploadComponent({
     try {
       setLoading(true);
 
-      await uploadTeacherSignature(file, schoolClassId, classTeacherId, true);
-
-      alert("Signature uploaded successfully");
+      const res = await uploadTeacherSignature(file, classTeacherId, true);
+      if (res) {
+        alert(`${res.message}\n`);
+      }
+      return;
     } catch (error) {
-      console.error(error);
-      alert("Upload failed");
+      alert(`Upload failed\n${error}`);
     } finally {
       setLoading(false);
     }
@@ -74,7 +70,6 @@ export default function TeacherSignatureUploadComponent({
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-
         <input
           type="file"
           accept="image/*"

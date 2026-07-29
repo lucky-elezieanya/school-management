@@ -26,7 +26,6 @@ from rest_framework.decorators import api_view
 from .services import  update_result_workflow
 
 from django.http import FileResponse, HttpResponse
-from django.template.loader import render_to_string
 
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
 
@@ -228,23 +227,110 @@ class SchoolDaysViewSet(viewsets.ModelViewSet):
         "session",
     ]
 
-def preview_pdf_html(request):
-
-    student = Student.objects.get(id=44)
-    school_class = Class.objects.get(id=1)
-    context = get_student_results(student, 3, 1, school_class)
-
-    html = render_to_string(
-        "results/pdf/result_sheet.html",
-       context
-    )
-
-    return HttpResponse(html)
-
 class ClassTeacherSignatureViewSet(viewsets.ModelViewSet):
     queryset = ClassTeacherSignature.objects.all()
     serializer_class = ClassTeacherSignatureSerializer
     permission_classes = [IsTeacherOrAdmin]
+    
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        teacher_id = request.data.get("teacher")
+
+        if not teacher_id:
+            return Response(
+                {"detail": "teacher is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        classes = Class.objects.filter(class_teacher_id=teacher_id)
+
+        if not classes.exists():
+            return Response(
+                {"detail": "This teacher is not assigned to any class."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created = []
+
+        for school_class in classes:
+            data = request.data.copy()
+            data["school_class"] = school_class.id
+
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+
+            created.append(serializer.data)
+
+        return Response(
+            {
+                "message": f"Signature applied to {len(created)} class(es).",
+                "count": len(created),
+                "results": created,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+        
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        teacher = instance.teacher
+
+        classes = Class.objects.filter(
+            class_teacher=teacher
+        )
+
+        updated = []
+
+        for school_class in classes:
+
+            signature = ClassTeacherSignature.objects.filter(
+                teacher=teacher,
+                school_class=school_class,
+            ).first()
+
+            data = request.data.copy()
+            data["teacher"] = teacher.id
+            data["school_class"] = school_class.id
+
+            if signature:
+                serializer = self.get_serializer(
+                    signature,
+                    data=data,
+                    partial=True,
+                )
+            else:
+                serializer = self.get_serializer(
+                    data=data,
+                )
+
+            serializer.is_valid(raise_exception=True)
+            updated.append(serializer.save())
+
+        serializer = self.get_serializer(updated[0])
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+   
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        teacher = instance.teacher
+
+        deleted_count, _ = ClassTeacherSignature.objects.filter(
+            teacher=teacher
+        ).delete()
+
+        return Response(
+            {
+                "detail": f"{deleted_count} signature(s) deleted successfully."
+            },
+            status=status.HTTP_200_OK,
+        )
     
 class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
     queryset = HeadTeacherSignature.objects.all()
