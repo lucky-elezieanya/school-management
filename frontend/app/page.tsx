@@ -2,19 +2,20 @@
 
 import Link from "next/link";
 import {
-	BookOpen,
-	GraduationCap,
-	Users,
-	School,
-	BadgeCheck,
-	Phone,
-	ChevronRight,
-	Sparkles,
+  BookOpen,
+  GraduationCap,
+  Users,
+  School,
+  BadgeCheck,
+  Phone,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import NewsCarousel from "./components/News/NewsCarousel";
+import Footer from "./components/sections/Footer";
 
 export default function HomePage() {
-	return (
+  return (
     <div className="min-h-screen bg-white text-gray-800 overflow-x-hidden">
       {/* ================= NAVBAR ================= */}
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b">
@@ -151,7 +152,9 @@ export default function HomePage() {
       </section>
 
       {/* ============news carousel =============== */}
-      <NewsCarousel />
+      <section className="py-10 mx-auto">
+        <NewsCarousel />
+      </section>
 
       {/* ================= FEATURES ================= */}
       <section className="py-20 bg-gray-50">
@@ -331,58 +334,7 @@ export default function HomePage() {
       </section>
 
       {/* ================= FOOTER ================= */}
-      <footer className="bg-gray-950 text-gray-400 py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
-          <div className="flex flex-col md:flex-row justify-between gap-8">
-            <div>
-              <div className="flex items-center gap-3">
-                <img
-                  src="/logo.jpg"
-                  alt="Logo"
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-
-                <div>
-                  <h4 className="text-white font-bold text-xl">
-                    Cozzi Schools
-                  </h4>
-
-                  <p className="text-sm text-gray-500">
-                    Excellence • Discipline • Godliness
-                  </p>
-                </div>
-              </div>
-
-              <p className="mt-4 text-sm max-w-md leading-relaxed">
-                Empowering children with knowledge, leadership, character and
-                Christian values for a brighter future.
-              </p>
-            </div>
-
-            <div>
-              <h5 className="text-white font-semibold mb-4">Quick Links</h5>
-
-              <div className="flex flex-col gap-2 text-sm">
-                <Link href="/" className="hover:text-white">
-                  Home
-                </Link>
-
-                <Link href="/login" className="hover:text-white">
-                  Portal Login
-                </Link>
-
-                <Link href="/login" className="hover:text-white">
-                  Get Started
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-gray-800 mt-10 pt-6 text-center text-sm">
-            © {new Date().getFullYear()} Cozzi Schools. All rights reserved.
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

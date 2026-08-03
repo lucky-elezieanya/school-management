@@ -32,10 +32,17 @@ class NewsListSerializer(NewsBaseSerializer):
     class Meta:
         model = News
         fields = [
-            "id", "title", "slug", "summary", "cover_image", "status",
-            "published", "featured", "published_at", "created_at", "updated_at",
+            "id",
+            "title",
+            "slug",
+            "summary",
+            "cover_image",
+            "status",
+            "featured",
+            "published_at",
+            "created_at",
+            "updated_at",
         ]
-
 
 class NewsDetailSerializer(NewsBaseSerializer):
     images = NewsImageSerializer(many=True, read_only=True)
@@ -43,29 +50,49 @@ class NewsDetailSerializer(NewsBaseSerializer):
     class Meta:
         model = News
         fields = [
-            "id", "title", "slug", "summary", "content", "cover_image",
-            "featured", "status", "published", "published_at", "created_at",
-            "updated_at", "images",
+            "id",
+            "title",
+            "slug",
+            "summary",
+            "content",
+            "cover_image",
+            "featured",
+            "status",
+            "published_at",
+            "created_at",
+            "updated_at",
+            "images",
         ]
-
 
 class AdminNewsSerializer(NewsDetailSerializer):
     class Meta(NewsDetailSerializer.Meta):
-        read_only_fields = ["id", "slug", "created_at", "updated_at", "images", "cover_image"]
-
-    def validate(self, attrs):
-        if "status" in attrs:
-            attrs["published"] = attrs["status"] == "published"
-        elif "published" in attrs:
-            attrs["status"] = "published" if attrs["published"] else "draft"
-        return attrs
+        read_only_fields = [
+            "id",
+            "slug",
+            "created_at",
+            "updated_at",
+            "images",
+            "cover_image",
+        ]
 
     def create(self, validated_data):
-        if validated_data.get("published") and not validated_data.get("published_at"):
+        if (
+            validated_data.get("status") == "published"
+            and not validated_data.get("published_at")
+        ):
             validated_data["published_at"] = timezone.now()
+
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        if validated_data.get("published", instance.published) and not instance.published and not validated_data.get("published_at"):
+        new_status = validated_data.get("status", instance.status)
+
+        if (
+            instance.status != "published"
+            and new_status == "published"
+            and not instance.published_at
+            and not validated_data.get("published_at")
+        ):
             validated_data["published_at"] = timezone.now()
+
         return super().update(instance, validated_data)

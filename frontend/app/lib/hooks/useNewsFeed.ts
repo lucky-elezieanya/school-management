@@ -10,9 +10,22 @@ export function useNewsFeed() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
-    void getPublishedNews().then((data) => active && setNews(data)).catch((err: unknown) => active && setError(err instanceof Error ? err.message : "Unable to load news.")).finally(() => active && setLoading(false));
-    return () => { active = false; };
+    const publishedNews = async () => {
+      setLoading(true);
+      try {
+        const res = await getPublishedNews();
+        const data = res.results;
+        setNews(data);
+      } catch (error) {
+        setLoading(false);
+        console.log(error);
+        return;
+      } finally {
+        setLoading(false);
+        return;
+      }
+    };
+    publishedNews();
   }, []);
 
   return { news, loading, error };

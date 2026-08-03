@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Newspaper, Plus } from "lucide-react";
-import type { News, NewsSummary } from "@/app/types/news";
+import type { News} from "@/app/types/news";
 import NewsTable from "./components/NewsTable";
+import { apiHeaders, BASE_URL } from "@/app/lib/api";
 
 export default function NewsAdminPage() {
   const [news, setNews] = useState<News[]>([]);
@@ -13,7 +14,13 @@ export default function NewsAdminPage() {
   const loadNews = useCallback(async () => {
     try {
       setLoading(true);
-      setNews(await getAdminNews());
+      const res = await getAdminNews();
+      const data = res.results;
+      setNews(data);
+    }catch(error){
+        setNews([])
+        
+        return
     } finally {
       setLoading(false);
     }
@@ -24,7 +31,7 @@ export default function NewsAdminPage() {
   }, [loadNews]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-bold">
@@ -48,11 +55,12 @@ export default function NewsAdminPage() {
   );
 }
 
-async function getAdminNews(): Promise<News[]> {
-  const response = await fetch("/api/admin/news", {
+async function getAdminNews() {
+  const response = await fetch(`${BASE_URL}/news/admin/news/`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
+      ...apiHeaders(),
     },
     cache: "no-store",
   });
@@ -61,6 +69,5 @@ async function getAdminNews(): Promise<News[]> {
     throw new Error("Failed to load admin news");
   }
 
-  return (await response.json()) as News[];
+  return await response.json();
 }
-

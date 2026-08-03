@@ -38,7 +38,7 @@ class NewsAdmin(admin.ModelAdmin):
         "title",
         "status",
         "featured",
-        "published",
+       
         "cover_preview",
         "published_at",
         "created_at",
