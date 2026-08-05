@@ -88,7 +88,7 @@ const navLinks = [
 
   {
     name: "School Open Days",
-    href: "/admin/administration/attendance/days_school_opened",
+    href: "/admin/administration/days_school_opened",
     icon: CalendarClock,
   },
 

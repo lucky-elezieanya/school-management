@@ -329,7 +329,7 @@ const [downloading, setDownloading] = useState(false)
 
                 <td className="sticky left-16 z-20 border-b border-r border-slate-200 bg-inherit px-4 py-3">
                   <Link
-                    href={`/results/preview/${snapshot.data.student.id}`}
+                    href={`/results/preview/${snapshot.id}`}
                     className="flex items-center gap-3"
                   >
                     <div className="relative h-11 w-11 overflow-hidden rounded-full border-2 border-emerald-100">

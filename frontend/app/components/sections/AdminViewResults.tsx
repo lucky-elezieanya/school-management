@@ -116,15 +116,13 @@ export default function AdminViewResults() {
       term.id!,
       session.id!,
     );
-    if (res){
-
-        setClassApprovalStatus(res?.results[0]?.status);
-    }else {
-        toast.error("No results for this class")
-        setError("No results for this class yet!")
-        return
+    if (res) {
+      setClassApprovalStatus(res?.results[0]?.status);
+    } else {
+      toast.error("No results for this class");
+      setError("No results for this class yet!");
+      return;
     }
-
   };
 
   useEffect(() => {
@@ -162,7 +160,7 @@ export default function AdminViewResults() {
     fetchTerms(sessionId);
   }, [sessionId]);
 
-// ====================  Classes ===================== //
+  // ====================  Classes ===================== //
   useEffect(() => {
     const loadClasses = async () => {
       try {
@@ -195,7 +193,7 @@ export default function AdminViewResults() {
     });
   }, [classes, query]);
 
-//   =========== Snapshot and Broadsheet ================ //
+  //   =========== Snapshot and Broadsheet ================ //
 
   const loadSnapshot = async (schoolClass: ClassType) => {
     if (!termId || !sessionId) {
@@ -212,8 +210,10 @@ export default function AdminViewResults() {
       const url = `${BASE_URL}/results/result-snapshots/?school_class=${schoolClass.id}&session=${session.id}&term=${term.id}`;
       const res = await fetch(url, { headers: apiHeaders() });
       const data = await handleResponse(res);
-      setSnapshot(data);
-      loadBroadsheet(schoolClass);
+      if (data) {
+        setSnapshot(data);
+        loadBroadsheet(schoolClass);
+      }
     } catch (err: any) {
       setError(err?.message || "Unable to load class results.");
     } finally {
@@ -236,7 +236,9 @@ export default function AdminViewResults() {
       const url = `${BASE_URL}/results/results/class-broadsheet/?class_id=${schoolClass.id}&term_id=${termId}&session_id=${sessionId}`;
       const res = await fetch(url, { headers: apiHeaders() });
       const data = await handleResponse(res);
-      setBroadsheet(data);
+      if (data) {
+        setBroadsheet(data);
+      }
     } catch (err: any) {
       setError(err?.message || "Unable to load class results.");
     } finally {
