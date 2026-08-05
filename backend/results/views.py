@@ -1,17 +1,18 @@
 from decimal import Decimal
-import os
+
 import csv
-from django.http import FileResponse
 from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+
+from .utils.services.approve_workflow import approve_workflow
 from .utils.services.engine import ResultEngine
 
 from .permissions import IsAdminUser, IsTeacherOrAdmin
 from rest_framework import viewsets, status
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import ( Attendance, Behaviour, ClassFees, ClassResultPDF, ClassTeacherSignature, GradingScale, HeadTeacherSignature, MaxScores, Result, ResultCustomization, SchoolDays, StudentResultSnapshot,  SubjectResultStatus, TermComment, ResultSummary, ResumptionDate, ActivateResultPortal, ResultWorkflow, SubjectSummary, ResultPDF)
-from .serializers import (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassTeacherSignatureSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultPDFSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, StudentResultSnapshotSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
+from .models import ( Attendance, Behaviour, ClassFees, ClassTeacherSignature, GradingScale, HeadTeacherSignature, MaxScores, Result, ResultCustomization, SchoolDays, StudentResultSnapshot,  SubjectResultStatus, TermComment, ResultSummary, ResumptionDate, ActivateResultPortal, ResultWorkflow, SubjectSummary)
+from .serializers import (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassTeacherSignatureSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, StudentResultSnapshotSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
 
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -21,11 +22,9 @@ from rest_framework.permissions import IsAuthenticated
 from academics.models import AcademicSession, ClassSubject, SchoolAsset, Student, StudentEnrollment, Teacher, Term, Class
 from django.db import transaction
 
-from rest_framework.decorators import api_view
+from .utils.services.update_workflow import  update_result_workflow
 
-from .services import  update_result_workflow
-
-from django.http import FileResponse, HttpResponse
+from django.http import HttpResponse
 
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
 
@@ -147,10 +146,7 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
         session_id = request.data.get("session")
         term_id = request.data.get("term")
         school_class_id = request.data.get("school_class_id")
-        
-        school_class = Class.objects.get(id=school_class_id)
-        term = Term.objects.filter(id=term_id, session=session_id).first()
-        session = AcademicSession.objects.get(id=session_id)
+
 
         if not session_id or not term_id:
             return Response(
@@ -199,13 +195,22 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
                     **lookup,
                 )
             )
-            ResultEngine(
-                school_class=school_class,
-                session=session,
-                term=term,
-                request=self.request
-            ).compute()
+          
+            if school_class_id:
+                workflow = ResultWorkflow.objects.filter(
+                    school_class_id=school_class_id,
+                    term_id=term_id,
+                    session_id=session_id,
+                ).first()
+                
+                if workflow and workflow.all_results_submitted and not workflow.status == "Released":
 
+                    ResultEngine(
+                        school_class=workflow.school_class,
+                        session=workflow.session,
+                        term=workflow.term,
+                        request=self.request
+                    ).compute()
 
         serializer = self.get_serializer(customization)
 
@@ -400,23 +405,6 @@ class ResultComputationViewSet(viewsets.ViewSet):
             },
             status=status.HTTP_202_ACCEPTED,
         )
-
-
-
-@api_view(["GET"])
-def task_status(request, task_id):
-
-    task = AsyncResult(task_id)
-
-    response = {
-        "state": task.state,
-        "result": task.result,
-    }
-
-    if task.state == "PROGRESS":
-        response.update(task.info)
-
-    return Response(response)
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     queryset = Attendance.objects.select_related(
@@ -828,49 +816,186 @@ class GradingScaleViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
         
-class ResultPDFViewSet(viewsets.ViewSet):
-    queryset = ResultPDF.objects.all()
-    serializer_class = ResultPDFSerializer
+# RESULT VIEWSET
+# ============================== 
+class ResultViewSet(viewsets.ModelViewSet):
+    queryset = Result.objects.select_related(
+        "student",
+        "student__user",
+        "class_subject",
+        "session",
+        "term"
+    )
+
+    serializer_class = ResultSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['term', 'student', 'class_subject', 'session']
 
-    @action(detail=False, methods=["get"], url_path="status")
-    def status(self, request):
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy", "bulk_create"]:
+            return [IsTeacherOrAdmin()]
+        return [IsAuthenticated()]
 
-        task_id = request.query_params.get("task_id")
-
-        if not task_id:
-            return Response({
-                "detail": "task_id is required"
-            }, status=400)
-
-        result = AsyncResult(task_id)
-
-        response_data = {
-            "task_id": task_id,
-            "state": result.state,
-            "ready": result.ready(),
-        }
-
-        # --------------------------------------------------
-        # SAFE RESULT HANDLING
-        # --------------------------------------------------
-        if result.ready():
-            try:
-                # if success → normal result
-                response_data["result"] = result.result
-
-            except Exception:
-                # fallback safety
-                response_data["result"] = None
-
-            # if failure → convert exception to string
-            if result.failed():
-                response_data["error"] = str(result.result)
-                response_data["result"] = None
-
-        return Response(response_data)
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
         
+        user_role = user.role
+        
+        if user.is_staff or user.is_superuser or user_role=="admin":
+            return queryset
 
+        if user_role == "teacher":
+            return queryset.filter(
+                class_subject__school_class__class_teacher__user=user
+            )
+
+        if user_role == "student":
+            from django.db.models import F
+            return queryset.filter(
+                student__user=user,
+                class_subject__submission_statuses__term=F('term'),
+                class_subject__submission_statuses__session=F('session'),
+                class_subject__submission_statuses__is_released=True
+            ).distinct()
+
+        return queryset.none()        
+      
+    @action(detail=False, methods=["get"], url_path="subject-results")
+    def subject_results(self, request):
+        user_role = request.user.role
+        if not request.user.is_staff and not user_role == "teacher":
+            return Response({"detail": "Permission denied"}, status=403)
+
+        class_id = request.query_params.get("class_id")
+        class_subject_id = request.query_params.get("class_subject_id")
+        
+        if not class_id or not class_subject_id:
+            return Response(
+                {
+                    "detail": "class_id and class_subject_id are required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            class_subject = ClassSubject.objects.select_related(
+                "school_class",
+                "subject"
+            ).get(
+                id=class_subject_id,
+                school_class_id=class_id
+            )
+        except ClassSubject.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Class subject not found"
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        results = Result.objects.select_related(
+            "student__user",
+                "student"
+            ).filter(
+                term=request.query_params.get("term"),
+                class_subject_id=class_subject_id,
+                class_subject__school_class_id=class_id
+            )
+
+        return Response(
+            {
+                "class_subject": {
+                    "id": class_subject.id,
+                    "subject": class_subject.subject.name,
+                    "class": class_subject.school_class.name,
+                },
+                "results": [
+                    {
+                        "result_id": result.id,
+                        "student_id": result.student.id,
+                        "student_name": result.student.user.full_name,
+                        "profile_picture": request.build_absolute_uri(result.student.user.profile_picture.url) if result.student.user.profile_picture else None,
+                        
+                        "admission_number": result.student.admission_number,
+                        "first_test": result.first_test,
+                        "second_test": result.second_test,
+                        "exam_score": result.exam_score,
+                        "total_score": result.total_score,
+                        "grade": result.grade,
+                        "remark": result.remark,
+                        "teacher_submitted": result.teacher_submitted,
+                    }
+                    for result in results
+                ],
+            }
+        )
+    
+    @action(detail=False, methods=['get'], url_path="results-sheets-exist")
+    def result_sheets_exist(self, request):
+        user_role = request.user.role
+        if not request.user.is_staff and not user_role == "teacher":
+            return Response({"detail": "Permission denied"}, status=403)
+
+        term_id = request.query_params.get("term_id")
+        school_class_id = request.query_params.get("school_class_id")
+        
+        if not term_id and not school_class_id:
+            return Response(
+                {
+                    "detail": "term_id is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            
+        class_merged_pdf = ClassResultPDF.objects.filter(
+            term_id=term_id,
+            school_class_id=school_class_id
+        ).exists()
+       
+        return Response({
+            "class_results_exists": class_merged_pdf
+        })
+    
+    @action(detail=False, methods=["get"], url_path="all-results-submitted")
+    def all_results_submitted(self, request):
+        user_role = request.user.role
+        if not request.user.is_staff and not user_role == "teacher":
+            return Response({"detail": "Permission denied"}, status=403)
+
+        term_id = request.query_params.get("term_id")
+        
+        if not term_id:
+            return Response(
+                {
+                    "detail": "term_id is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        class_subjects = ClassSubject.objects.select_related(
+            "school_class",
+            "subject"
+        ).filter(
+            term_id=term_id,
+        ).count()
+        
+        submission_statuses = SubjectResultStatus.objects.filter(
+            term_id=term_id,
+            is_submitted=True,
+        ).count()
+
+        
+        all_submitted = submission_statuses == class_subjects
+       
+
+        return Response(
+          {
+            "all_results_submitted": all_submitted,
+           }
+        )
+    
     @action(detail=False, methods=["get"], url_path="precheck")
     def precheck(self, request):
         term_id = request.query_params.get("term_id")
@@ -1043,258 +1168,6 @@ class ResultPDFViewSet(viewsets.ViewSet):
                 current_session_id=session_id,
             ).exists(),
         })
-
-# RESULT VIEWSET
-# ============================== 
-class ResultViewSet(viewsets.ModelViewSet):
-    queryset = Result.objects.select_related(
-        "student",
-        "student__user",
-        "class_subject",
-        "session",
-        "term"
-    )
-
-    serializer_class = ResultSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['term', 'student', 'class_subject', 'session']
-
-    def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy", "bulk_create"]:
-            return [IsTeacherOrAdmin()]
-        return [IsAuthenticated()]
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        user = self.request.user
-        
-        user_role = user.role
-        
-        if user.is_staff or user.is_superuser or user_role=="admin":
-            return queryset
-
-        if user_role == "teacher":
-            return queryset.filter(
-                class_subject__school_class__class_teacher__user=user
-            )
-
-        if user_role == "student":
-            from django.db.models import F
-            return queryset.filter(
-                student__user=user,
-                class_subject__submission_statuses__term=F('term'),
-                class_subject__submission_statuses__session=F('session'),
-                class_subject__submission_statuses__is_released=True
-            ).distinct()
-
-        return queryset.none()        
-    
-       
-    @action(detail=False, methods=["get"], url_path="subject-results")
-    def subject_results(self, request):
-        user_role = request.user.role
-        if not request.user.is_staff and not user_role == "teacher":
-            return Response({"detail": "Permission denied"}, status=403)
-
-        class_id = request.query_params.get("class_id")
-        class_subject_id = request.query_params.get("class_subject_id")
-        
-        if not class_id or not class_subject_id:
-            return Response(
-                {
-                    "detail": "class_id and class_subject_id are required"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            class_subject = ClassSubject.objects.select_related(
-                "school_class",
-                "subject"
-            ).get(
-                id=class_subject_id,
-                school_class_id=class_id
-            )
-        except ClassSubject.DoesNotExist:
-            return Response(
-                {
-                    "detail": "Class subject not found"
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        results = Result.objects.select_related(
-            "student__user",
-                "student"
-            ).filter(
-                term=request.query_params.get("term"),
-                class_subject_id=class_subject_id,
-                class_subject__school_class_id=class_id
-            )
-
-        return Response(
-            {
-                "class_subject": {
-                    "id": class_subject.id,
-                    "subject": class_subject.subject.name,
-                    "class": class_subject.school_class.name,
-                },
-                "results": [
-                    {
-                        "result_id": result.id,
-                        "student_id": result.student.id,
-                        "student_name": result.student.user.full_name,
-                        "profile_picture": request.build_absolute_uri(result.student.user.profile_picture.url) if result.student.user.profile_picture else None,
-                        
-                        "admission_number": result.student.admission_number,
-                        "first_test": result.first_test,
-                        "second_test": result.second_test,
-                        "exam_score": result.exam_score,
-                        "total_score": result.total_score,
-                        "grade": result.grade,
-                        "remark": result.remark,
-                        "teacher_submitted": result.teacher_submitted,
-                    }
-                    for result in results
-                ],
-            }
-        )
-    
-    
-    @action(detail=False, methods=['get'], url_path="results-sheets-exist")
-    def result_sheets_exist(self, request):
-        user_role = request.user.role
-        if not request.user.is_staff and not user_role == "teacher":
-            return Response({"detail": "Permission denied"}, status=403)
-
-        term_id = request.query_params.get("term_id")
-        school_class_id = request.query_params.get("school_class_id")
-        
-        if not term_id and not school_class_id:
-            return Response(
-                {
-                    "detail": "term_id is required"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-            
-        class_merged_pdf = ClassResultPDF.objects.filter(
-            term_id=term_id,
-            school_class_id=school_class_id
-        ).exists()
-       
-        return Response({
-            "class_results_exists": class_merged_pdf
-        })
-    
-    @action(detail=False, methods=["get"], url_path="all-results-submitted")
-    def all_results_submitted(self, request):
-        user_role = request.user.role
-        if not request.user.is_staff and not user_role == "teacher":
-            return Response({"detail": "Permission denied"}, status=403)
-
-        term_id = request.query_params.get("term_id")
-        
-        if not term_id:
-            return Response(
-                {
-                    "detail": "term_id is required"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        class_subjects = ClassSubject.objects.select_related(
-            "school_class",
-            "subject"
-        ).filter(
-            term_id=term_id,
-        ).count()
-        
-        submission_statuses = SubjectResultStatus.objects.filter(
-            term_id=term_id,
-            is_submitted=True,
-        ).count()
-
-        
-        all_submitted = submission_statuses == class_subjects
-       
-
-        return Response(
-          {
-            "all_results_submitted": all_submitted,
-           }
-        )
-    
-    @action(detail=False, methods=["get"], url_path="completed-results")
-    def completed_results(self, request):
-        user_role = request.user.role
-        if not request.user.is_staff and not user_role == "teacher":
-            return Response({"detail": "Permission denied"}, status=403)
-
-        class_id = request.query_params.get("class_id")
-        class_subject_id = request.query_params.get("class_subject_id")
-        
-        if not class_id or not class_subject_id:
-            return Response(
-                {
-                    "detail": "class_id and class_subject_id are required"
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            class_subject = ClassSubject.objects.select_related(
-                "school_class",
-                "subject"
-            ).get(
-                id=class_subject_id,
-                school_class_id=class_id
-            )
-        except ClassSubject.DoesNotExist:
-            return Response(
-                {
-                    "detail": "Class subject not found"
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        results = Result.objects.select_related(
-            "student__user",
-                "student"
-            ).filter(
-                term=request.query_params.get("term"),
-                class_subject_id=class_subject_id,
-                class_subject__school_class_id=class_id
-            )
-
-        return Response(
-            {
-                "class_subject": {
-                    "id": class_subject.id,
-                    "subject": class_subject.subject.name,
-                    "class": class_subject.school_class.name,
-                },
-                "results": [
-                    {
-                        "result_id": result.id,
-                        "student_id": result.student.id,
-                        "student_name": result.student.user.full_name,
-                        "profile_picture": request.build_absolute_uri(result.student.user.profile_picture.url) if result.student.user.profile_picture else None,
-                        
-                        "admission_number": result.student.admission_number,
-                        "first_test": result.first_test,
-                        "second_test": result.second_test,
-                        "exam_score": result.exam_score,
-                        "total_score": result.total_score,
-                        "grade": result.grade,
-                        "remark": result.remark,
-                        "teacher_submitted": result.teacher_submitted,
-                    }
-                    for result in results
-                ],
-            }
-        )
     # -----------------------------
     # BULK CREATE / UPDATE OPTIMIZED
     # -----------------------------
@@ -1506,15 +1379,14 @@ class ResultViewSet(viewsets.ModelViewSet):
                     {"detail": "Teacher profile not found."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            isStaff = False
-            if request.user.is_staff:
-                isStaff = True
+          
+
             allowed = Class.objects.filter(
                 id=school_class_id,
                 class_teacher=teacher,
             ).exists()
 
-            if not allowed:
+            if not allowed and not request.user.is_staff and not request.user.is_superuser:
                 return None, Response(
                     {
                         "detail": "You can only view results for your assigned classes."
@@ -1805,132 +1677,7 @@ class ResultViewSet(viewsets.ModelViewSet):
             writer.writerow(csv_row)
 
         return response
-
-    @action(detail=False, methods=["get"], url_path="student-pdf")
-    def student_pdf(self, request):
-        if not (
-            request.user.is_staff
-            or request.user.is_superuser
-            or request.user.role == "admin" 
-            or request.user.role == "teacher"
-        ):
-            return Response(
-                {"detail": "Only administrators and teachers can download student PDFs here."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if request.user.role == "teacher":
-            teacher = Teacher.objects.get(user=request.user)
-            pass
-        student_id = request.query_params.get("student_id")
-        school_class_id = (
-            request.query_params.get("class_id")
-            or request.query_params.get("school_class")
-            or request.query_params.get("school_class_id")
-        )
-        term_id = request.query_params.get("term_id") or request.query_params.get("term")
-        session_id = request.query_params.get("session_id") or request.query_params.get("session")
-
-        if not student_id or not school_class_id or not term_id or not session_id:
-            return Response(
-                {
-                    "detail": (
-                        "student_id, class_id, term_id and session_id "
-                        "are required."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        workflow = self._get_approved_workflow(
-            school_class_id,
-            term_id,
-            session_id,
-        )
-
-        if not workflow:
-            return Response(
-                {"detail": "PDF can only be downloaded after results approval."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        pdf_record = ResultPDF.objects.filter(
-            student_id=student_id,
-            term_id=term_id,
-            session_id=session_id,
-            status="DONE",
-        ).first()
-
-        if not pdf_record or not pdf_record.file:
-            return Response(
-                {"detail": "PDF report sheet is not available."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        return FileResponse(
-            pdf_record.file.open("rb"),
-            as_attachment=True,
-            filename=pdf_record.file.name.split("/")[-1],
-        )
-     
-    @action(detail=False, methods=["get"], url_path="student-pdf-info")
-    def student_pdf_info(self, request):
-
-        params, error = self._require_student_pdf_params(request)
-        if error:
-            return error
-
-        pdf_record = ResultPDF.objects.filter(
-            student_id=params["student_id"],
-            term_id=params["term_id"],
-            session_id=params["session_id"],
-            status="DONE",
-        ).first()
-
-        if not pdf_record or not pdf_record.file:
-            return Response(
-                {"detail": "PDF report sheet is not available."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        return Response({
-            "url": request.build_absolute_uri(pdf_record.file.url),
-            "filename": os.path.basename(pdf_record.file.name),
-        })
-        
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path="class-results-pdf",
-    )
-    def class_results_pdf(self, request):
-
-        params, error = self._require_broadsheet_params(request)
-
-        if error:
-            return error
-
-        merged = ClassResultPDF.objects.filter(
-            school_class_id=params["school_class_id"],
-            term_id=params["term_id"],
-            session_id=params["session_id"],
-        ).first()
-
-        if not merged or not merged.file:
-
-            return Response(
-                {
-                    "detail": "Merged class PDF not available."
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-      
-        return FileResponse(
-            merged.file.open("rb"),
-            as_attachment=False,
-            filename=merged.file.name.split("/")[-1],
-            content_type="application/pdf",
-        )
-
+ 
 class TermCommentViewSet(viewsets.ModelViewSet):
     queryset = TermComment.objects.select_related("student", "student__user", "term", "session", "school_class")
     serializer_class = TermCommentSerializer
@@ -2211,111 +1958,7 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
         "status",
     ]
 
-    # helper function to handle pdf generation after approval of results
-    def approve_workflow(
-        self,
-        workflow,
-        user,
-        school_class_id,
-        session_id,
-        term_id,
-    ):
-        if workflow.status == "Approved":
-            return False
-
-        workflow.status = "Approved"
-        workflow.approved_by = user
-        workflow.approved_at = timezone.now()
-        workflow.save(update_fields=[
-            "status",
-            "approved_by",
-            "approved_at",
-        ])
-
-        enrollment_count = StudentEnrollment.objects.filter(
-            session_id=session_id,
-            school_class_id=school_class_id,
-            is_current=True,
-        ).count()
-
-        attendance_count = Attendance.objects.filter(
-            term_id=term_id,
-            session_id=session_id,
-            school_class_id=school_class_id,
-        ).count()
-
-        behaviour_count = Behaviour.objects.filter(
-            term_id=term_id,
-            session_id=session_id,
-            school_class_id=school_class_id,
-        ).count()
-
-        comment_count = TermComment.objects.filter(
-            term_id=term_id,
-            session_id=session_id,
-            school_class_id=school_class_id,
-        ).count()
-
-        class_count = Class.objects.count()
-
-        checks = {
-            "attendance": attendance_count == enrollment_count,
-            "behaviour": behaviour_count == enrollment_count,
-            "comments": comment_count == enrollment_count,
-
-            "grades": GradingScale.objects.filter(
-                grading_type="subject"
-            ).exists(),
-
-            "school_days": SchoolDays.objects.filter(
-                term_id=term_id,
-                session_id=session_id,
-            ).exists(),
-
-            "school_assets": SchoolAsset.objects.filter(
-                is_active=True,
-                asset_type="logo",
-            ).exists(),
-
-            "class_teacher_signatures": (
-                ClassTeacherSignature.objects.filter(
-                    is_active=True,
-                ).count()
-                == class_count
-            ),
-
-            "head_teacher_signature": (
-                HeadTeacherSignature.objects.filter(
-                    is_active=True
-                ).exists()
-            ),
-
-            "class_fees": (
-                ClassFees.objects.filter(
-                    term_id=term_id,
-                    session_id=session_id,
-                ).count()
-                == class_count
-            ),
-
-            "resumption_date": ResumptionDate.objects.filter(
-                current_term_id=term_id,
-                current_session_id=session_id,
-            ).exists(),
-        }
-
-        if all(checks.values()):
-            ResultEngine(
-                school_class=workflow.school_class,
-                session=workflow.session,
-                term=workflow.term,
-                request=self.request
-            ).compute()
-            
-            return True
-
-        return False
-
+  
     @action(
         detail=False,
         methods=["post"],
@@ -2376,7 +2019,7 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        self.approve_workflow(workflow, request.user, school_class_id, session_id, term_id)
+        approve_workflow(workflow, request.user, school_class_id, session_id, term_id)
 
         serializer = self.get_serializer(workflow)
         return Response(serializer.data)

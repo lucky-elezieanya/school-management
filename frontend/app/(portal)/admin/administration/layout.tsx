@@ -9,20 +9,17 @@ import {
   AwardIcon,
   Banknote,
   BookAIcon,
-  Brain,
   FileBarChart,
   FileLock2Icon,
   GraduationCap,
   HousePlus,
   School,
-  UserCheck2,
   UserCog,
   ArrowUpCircle,
   CalendarClock,
   PenBox,
   UserPlus2,
   BookCopyIcon,
-  Calculator,
   FileOutput,
   FilePlus,
   FileSearch,
@@ -31,6 +28,7 @@ import {
   X,
   Menu,
   ArrowLeft,
+  Newspaper,
 } from "lucide-react";
 import { logout } from "@/app/lib/auth";
 import { useAuth } from "@/app/lib/hooks/useAuth";
@@ -116,7 +114,7 @@ const navLinks = [
   },
   {
     name: "Results Checklist",
-    href: "/admin/administration/results/generate",
+    href: "/admin/administration/results/checklist",
     icon: FilePlus,
   },
   {
@@ -161,6 +159,11 @@ const navLinks = [
     href: "/admin/administration/schoolHeader",
     icon: HousePlus,
   },
+      {
+        name: "News",
+        href: "/admin/news",
+        icon: Newspaper,
+      },
 ];
 export default function Layout({
   children,

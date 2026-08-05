@@ -28,7 +28,7 @@ export default function AdminPageHeader({
             {/* Breadcrumb */}
 
             <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Link href={'/admin'}>Dashboard</Link>
+              <Link href={'/admin/administration'}>Dashboard</Link>
 
               <ChevronRight size={14} />
 

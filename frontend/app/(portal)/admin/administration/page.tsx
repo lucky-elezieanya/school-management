@@ -19,6 +19,7 @@ import {
   FileOutput,
   FilePlus,
   FileSearch,
+  Newspaper,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -97,10 +98,10 @@ export default function AdministrationPage() {
       icon: FileSearch,
     },
     {
-      name: "Results Checklist",
-      href: "/admin/administration/results/generate",
-      icon: FilePlus,
-    },
+        name: "Results Checklist",
+        href: "/admin/administration/results/checklist",
+        icon: FilePlus,
+      },
     {
       name: "Customize Results",
       href: "/admin/administration/results/customize",
@@ -142,6 +143,11 @@ export default function AdministrationPage() {
       name: "School Logo",
       href: "/admin/administration/schoolHeader",
       icon: HousePlus,
+    },
+    {
+      name: "News",
+      href: "/admin/news",
+      icon: Newspaper,
     },
   ];
   return (

@@ -1,5 +1,4 @@
 from django.conf import settings
-from academics.models import Student
 from django.conf import settings
 from .calculations import (
     format_position,

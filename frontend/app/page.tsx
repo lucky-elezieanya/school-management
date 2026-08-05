@@ -42,17 +42,10 @@ export default function HomePage() {
           {/* NAV LINKS */}
           <nav className="flex items-center gap-2 sm:gap-4">
             <Link
-              href="/login"
-              className="hidden sm:flex px-4 py-2 text-sm font-medium text-emerald-800 hover:text-emerald-950 transition"
-            >
-              Login
-            </Link>
-
-            <Link
-              href="/login"
+              href="/portal"
               className="px-4 sm:px-5 py-2 text-sm font-semibold bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition shadow-md"
             >
-              Get Started
+              Portal
             </Link>
           </nav>
         </div>
@@ -84,18 +77,19 @@ export default function HomePage() {
 
             <div className="mt-8 flex flex-wrap gap-4">
               <Link
-                href="/login"
+                href="/portal"
                 className="inline-flex items-center gap-2 bg-emerald-800 text-white px-7 py-3 rounded-xl font-semibold hover:bg-emerald-900 transition shadow-lg"
               >
-                Get Started
+                Portal
                 <ChevronRight size={18} />
               </Link>
 
               <Link
-                href="/login"
+                href="/aboutUs"
                 className="inline-flex items-center gap-2 border-2 border-emerald-800 text-emerald-800 px-7 py-3 rounded-xl font-semibold hover:bg-emerald-50 transition"
               >
-                Portal Login
+                About Us
+                <ChevronRight size={18} />
               </Link>
             </div>
 
@@ -124,7 +118,7 @@ export default function HomePage() {
 
             <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white">
               <img
-                src="/banner-image.jfif"
+                src="/banner.jpg"
                 alt="Students"
                 className="w-full h-75 sm:h-112.5 object-cover"
               />
@@ -293,7 +287,7 @@ export default function HomePage() {
             </div>
 
             <Link
-              href="/login"
+              href="/portal"
               className="inline-flex items-center gap-2 mt-8 bg-emerald-800 text-white px-7 py-3 rounded-xl font-semibold hover:bg-emerald-900 transition"
             >
               Access School Portal
@@ -317,17 +311,17 @@ export default function HomePage() {
 
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
-              href="/login"
+              href="/portal"
               className="bg-white text-emerald-900 px-8 py-3 rounded-xl font-bold hover:bg-gray-100 transition"
             >
               Login To Portal
             </Link>
 
             <Link
-              href="/login"
+              href="/portal"
               className="border border-white px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition"
             >
-              Get Started
+              Portal
             </Link>
           </div>
         </div>

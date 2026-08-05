@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import (Attendance, Behaviour, ClassFees, GradingScale, MaxScores, Result, ResultPDF, ResultSummary, ResultWorkflow, SchoolDays, StudentResultSnapshot, TermComment, SubjectResultStatus, ResumptionDate,  ActivateResultPortal, SubjectSummary, ClassTeacherSignature,
+from .models import (Attendance, Behaviour, ClassFees, GradingScale, MaxScores, Result, ResultSummary, ResultWorkflow, SchoolDays, StudentResultSnapshot, TermComment, SubjectResultStatus, ResumptionDate,  ActivateResultPortal, SubjectSummary, ClassTeacherSignature,
     HeadTeacherSignature,)
 from academics.models import (Student, 
                               Class, 
@@ -100,10 +100,6 @@ class ResultCustomizationSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
-class ResultPDFSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ResultPDF
-        fields = "__all__"
 
 class SchoolDaysSerializer(serializers.ModelSerializer):
     session = AcademicSessionSerializer(read_only=True)
@@ -341,6 +337,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
             )
 
         return attrs  
+
 class MaxScoresSerializer(serializers.ModelSerializer):
     school_class = ClassSerializer(read_only=True)
     school_class_id = serializers.PrimaryKeyRelatedField(
@@ -719,6 +716,7 @@ class ResultWorkflowSerializer(serializers.ModelSerializer):
             "released_by",
             "released_at",
         ]
+
 class ResumptionDateSerializer(serializers.ModelSerializer):
     current_session = AcademicSessionSerializer(read_only=True)
     next_session = AcademicSessionSerializer(read_only=True)

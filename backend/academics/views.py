@@ -528,7 +528,7 @@ class StudentFileUploadView(APIView):
             task_id=task_id
         )
 
-        task = import_students_task(student_import.id)
+        import_students_task(student_import.id)
 
         student_import.refresh_from_db()
 

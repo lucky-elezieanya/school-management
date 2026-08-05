@@ -1,15 +1,9 @@
 # urls.py
 from django.urls import path
 from rest_framework.routers import DefaultRouter
-from .views import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultPDFViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet, ResultComputationViewSet, task_status)
+from .views import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet, ResultComputationViewSet)
 
 
-
-urlpatterns = [
-    path("tasks/<str:task_id>/", task_status, name="task-status",
-    )
-    
-]
 router = DefaultRouter()
 router.register(r'results', ResultViewSet, basename='results')
 router.register(r'attendance', AttendanceViewSet, basename='attendance')
@@ -32,7 +26,7 @@ router.register(r"subject-summaries", SubjectSummaryViewSet, basename="subject-s
 )
 router.register(r"computation", ResultComputationViewSet, basename="results-computation",
 )
-router.register(r"result-pdfs", ResultPDFViewSet, basename="result-pdfs")
+
 router.register(r"school-days", SchoolDaysViewSet, basename="school-days")
 router.register(
     "teacher-signatures",
@@ -52,5 +46,4 @@ router.register(
 )
 
 
-
-urlpatterns += router.urls
+urlpatterns = router.urls

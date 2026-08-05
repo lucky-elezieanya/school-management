@@ -52,8 +52,8 @@ export default function AboutUs() {
           {/* Background Cover Image */}
           <div className="absolute inset-0 z-0">
             <img
-              src="https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&q=80&w=2000"
-              alt="Cozzi Schools Campus Cover"
+              src="/classroom-image.jpg"
+                   alt="Cozzi Schools Campus Cover"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-950/90 via-emerald-900/85 to-emerald-950/90 backdrop-blur-[2px]"></div>
@@ -113,8 +113,8 @@ export default function AboutUs() {
             <div className="relative">
               <div className="relative h-96 md:h-[450px] w-full rounded-3xl overflow-hidden shadow-xl border-4 border-white group">
                 <img
-                  src="https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&q=80&w=1000"
-                  alt="Students in classroom"
+                  src="/classroom-image.jpg"
+                      alt="Students in classroom"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>

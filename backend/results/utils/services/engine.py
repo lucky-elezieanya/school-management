@@ -1,6 +1,4 @@
 from django.db import transaction
-
-from academics.models import StudentEnrollment
 from ..helpers import make_json_safe
 
 from ...models import StudentResultSnapshot
@@ -8,12 +6,8 @@ from ...models import StudentResultSnapshot
 from .context import ResultSnapshotContext
 
 from .snapshot_builder import StudentSnapshotBuilder
-
-from ...services import (
-    generate_subject_summaries_for_class,
-    generate_result_summary_for_class,
-)
-
+from .subject_summary import generate_subject_summaries_for_class
+from .result_summary import generate_result_summary_for_class
 
 class ResultEngine:
 

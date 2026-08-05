@@ -85,10 +85,10 @@ const router = useRouter();
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 space-x-4">
       <Link
         href="/admin/news"
-        className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800"
+        className="inline-flex items-center gap-2 px-8 py-4 text-sm font-medium text-emerald-700 hover:text-emerald-800"
       >
         <ArrowLeft size={16} />
         Back to News

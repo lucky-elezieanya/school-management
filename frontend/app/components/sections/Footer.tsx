@@ -81,26 +81,16 @@ export default function Footer() {
               Portal & Access
             </h5>
             <ul className="space-y-2.5 text-sm">
+            
               <li>
                 <Link
-                  href="/login"
+                  href="/portal"
                   className="hover:text-emerald-400 transition-colors flex items-center gap-1.5 group"
                 >
                   <span className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
                     ›
                   </span>
-                  Portal Login
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/login"
-                  className="hover:text-emerald-400 transition-colors flex items-center gap-1.5 group"
-                >
-                  <span className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    ›
-                  </span>
-                  Get Started
+                 Portal
                 </Link>
               </li>
             </ul>
@@ -115,7 +105,7 @@ export default function Footer() {
               <li className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span className="text-gray-400">
-                  123 Learning Avenue, Educational Zone, City State
+                   Lakeview Ubeji, Warri South, Delta State, Nigeria
                 </span>
               </li>
               <li className="flex items-center gap-3">

@@ -1,12 +1,9 @@
-import React from "react";
 import { Quote, Mail, Phone, MapPin, Heart, Sparkles } from "lucide-react";
 import Footer from "../components/sections/Footer";
-// Import your Footer component here:
-// import Footer from '@/components/Footer';
 
 export default function MeetFounders() {
   const founders = [
-    {
+    { 
       title: "Proprietress",
       name: "Mrs. Joy Akperi",
       email: "proprietress@cozzischools.com",
@@ -44,7 +41,7 @@ export default function MeetFounders() {
           {/* Background Cover Image */}
           <div className="absolute inset-0 z-0">
             <img
-              src="https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&q=80&w=2000"
+              src="/classroom-image.jpg"
               alt="Cozzi Schools Campus"
               className="w-full h-full object-cover"
             />

@@ -49,15 +49,6 @@ const handleResponse = async (res: Response) => {
   return data;
 };
 
-export const getTaskStatus = async (taskId: string) => {
-  const res = await fetch(`${BASE_URL}/results/tasks/${taskId}/`, {
-    method: "GET",
-    headers: apiHeaders(),
-  });
-
-  return handleResponse(res);
-};
-
 export const computeAllResults = async (payload: {
   term_id: number;
   session_id: number;
@@ -74,21 +65,6 @@ export const computeAllResults = async (payload: {
   return handleResponse(res);
 };
 
-export const recomputeAllResults = async (payload: {
-  term_id: number;
-  session_id: number;
-}) => {
-  const res = await fetch(`${BASE_URL}/results/computation/recompute/`, {
-    method: "POST",
-    headers: {
-      ...apiHeaders(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  return handleResponse(res);
-};
 
 export const fetchClasses = () => request("/academics/classes/");
 

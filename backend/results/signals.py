@@ -1,7 +1,7 @@
 from django.db.models.signals import (
     post_save,
     post_delete,
-    pre_save,
+  
 )
 from django.db import transaction
 from django.dispatch import receiver
@@ -9,9 +9,8 @@ from django.dispatch import receiver
 from .models import (
     SubjectResultStatus, Result
 )
-from .services import (
-    update_result_workflow, 
-)
+from .utils.services.update_workflow import update_result_workflow
+
 
 @receiver(
     post_save,

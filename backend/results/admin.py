@@ -21,8 +21,7 @@ from .models import (
     ActivateResultPortal,
     ResultWorkflow,
     SubjectSummary,
-    ResultPDF,
-    ClassResultPDF,
+
     ResultCustomization
 )
 
@@ -102,31 +101,6 @@ class ResultCustomizationAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
-@admin.register(ClassResultPDF)
-class ClassResultPDFAdmin(admin.ModelAdmin):
-
-    list_display = (
-        "school_class",
-        "term",
-        "session",
-        "status",
-        "file",
-        "created_at",
-    )
-
-    list_filter = (
-        "term",
-        "session",
-    )
-
-    search_fields = (
-        "school_class__name",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )
 
 @admin.register(SchoolDays)
 class SchoolDaysAdmin(admin.ModelAdmin):
@@ -245,67 +219,6 @@ class HeadTeacherSignatureAdmin(admin.ModelAdmin):
             return False
         return super().has_add_permission(request)
     
-@admin.register(ResultPDF)
-class ResultPDFAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "student",
-        "term",
-        "session",
-        "status",
-        "task_id",
-        "file",
-        "created_at",
-        "updated_at"
-    )
-    list_filter = (
-        "status",
-        "term",
-        "session",
-        "created_at",
-    )
-
-    search_fields = (
-        "id",
-        "task_id",
-        "student",
-    )
-
-    readonly_fields = (
-        "id",
-        "task_id",
-        "created_at",
-    )
-
-    fieldsets = (
-        ("Core Info", {
-            "fields": (
-                "id",
-                "student",
-                "term",
-                "session",
-            )
-        }),
-        ("Processing", {
-            "fields": (
-                "status",
-                "task_id",
-                "file",
-            )
-        }),
-        ("Meta", {
-            "fields": (
-                "created_at",
-            )
-        }),
-    )
-
-    ordering = ("-created_at",)
-
-    def has_add_permission(self, request):
-        # Prevent manual creation (PDFs should come from Celery/API)
-        return False
-
 @admin.register(SubjectSummary)
 class SubjectSummaryAdmin(
     admin.ModelAdmin

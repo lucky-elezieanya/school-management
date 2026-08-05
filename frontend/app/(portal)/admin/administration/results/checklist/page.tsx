@@ -78,7 +78,7 @@ export default function GenerateResultsPage() {
       }
 
       const res = await fetch(
-        `${BASE_URL}/results/result-pdfs/precheck/?${params.toString()}`,
+        `${BASE_URL}/results/results/precheck/?${params.toString()}`,
         {
           headers: apiHeaders(),
         },
