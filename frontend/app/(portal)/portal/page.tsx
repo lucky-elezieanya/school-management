@@ -22,24 +22,24 @@ const features = [
     description:
       "View, download and print examination results securely from anywhere.",
   },
-//   {
-//     icon: CreditCard,
-//     title: "School Fees",
-//     description:
-//       "Track fee payments, balances and print payment receipts instantly.",
-//   },
+  //   {
+  //     icon: CreditCard,
+  //     title: "School Fees",
+  //     description:
+  //       "Track fee payments, balances and print payment receipts instantly.",
+  //   },
   {
     icon: CalendarDays,
     title: "Attendance",
     description:
       "Parents and students can monitor attendance records throughout the term.",
   },
-//   {
-//     icon: BookOpen,
-//     title: "Assignments",
-//     description:
-//       "Receive assignments, learning materials and classroom resources.",
-//   },
+  //   {
+  //     icon: BookOpen,
+  //     title: "Assignments",
+  //     description:
+  //       "Receive assignments, learning materials and classroom resources.",
+  //   },
   {
     icon: Bell,
     title: "Announcements",
@@ -153,7 +153,7 @@ export default function CozziPortal() {
 
             {/* Student Image */}
             <img
-              src="/portal-image.png"
+              src="/student.png"
               alt="Student holding book"
               className="relative z-10 max-h-[500px] object-contain drop-shadow-2xl"
             />

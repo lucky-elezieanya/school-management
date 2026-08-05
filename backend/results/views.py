@@ -1472,16 +1472,6 @@ class ResultViewSet(viewsets.ModelViewSet):
             )
         }
 
-        pdf_student_ids = set(
-            ResultPDF.objects.filter(
-                student_id__in=[student.id for student in students],
-                term_id=term_id,
-                session_id=session_id,
-                status="DONE",
-                file__isnull=False,
-            ).values_list("student_id", flat=True)
-        )
-
         rows = []
         for student in students:
             summary = summary_map.get(student.id)
@@ -1515,7 +1505,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 "total_score": summary.total_score if summary else None,
                 "average_score": summary.average_score if summary else None,
                 "position": summary.position if summary else None,
-                "pdf_available": student.id in pdf_student_ids,
+              
                 "subjects": subject_results,
                  
             })
@@ -1551,71 +1541,6 @@ class ResultViewSet(viewsets.ModelViewSet):
             ],
             "rows": rows,
         }
-
-    def _require_student_pdf_params(self, request):
-
-        if not (
-            request.user.is_staff
-            or request.user.is_superuser
-            or request.user.role == "admin"
-            or request.user.role == "teacher"
-            or request.user.role == "student"
-        ):
-            return None, Response(
-                {"detail": "Permission denied."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        student_id = request.query_params.get("student_id")
-
-        school_class_id = (
-            request.query_params.get("class_id")
-            or request.query_params.get("school_class")
-            or request.query_params.get("school_class_id")
-        )
-
-        term_id = (
-            request.query_params.get("term_id")
-            or request.query_params.get("term")
-        )
-
-        session_id = (
-            request.query_params.get("session_id")
-            or request.query_params.get("session")
-        )
-
-        if not all([student_id, school_class_id, term_id, session_id]):
-            return None, Response(
-                {
-                    "detail": (
-                        "student_id, class_id, term_id and session_id are required."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        workflow = self._get_approved_workflow(
-            school_class_id,
-            term_id,
-            session_id,
-        )
-
-        if not workflow:
-            return None, Response(
-                {
-                    "detail": (
-                        "PDF can only be viewed after results approval."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        return {
-            "student_id": student_id,
-            "school_class_id": school_class_id,
-            "term_id": term_id,
-            "session_id": session_id,
-        }, None
 
     @action(detail=False, methods=["get"], url_path="class-broadsheet")
     def class_broadsheet(self, request):

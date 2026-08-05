@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   CheckCircle2,
@@ -104,8 +104,12 @@ export default function ResultsPreview() {
         headers: apiHeaders(),
       });
       const res = await resp.json();
+      if (res && res.results.length > 0) {
       setSubjects(res?.results || []);
-      setSelectedSubject(res?.results[0].id)
+      setSelectedSubject(res?.results[0]?.id || null)}
+      else {
+        toast.error("No subjects registered for this class in the current term. Please ensure subjects are assigned to the class before proceeding.");
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -448,7 +452,7 @@ export default function ResultsPreview() {
         {/* =================================== */}
         <div className="grid grid-cols-12 gap-6 items-start">
           {/* ==================== CLASSES ==================== */}
-          <div className="col-span-12 lg:col-span-2 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="col-span-12 lg:col-span-3 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b bg-slate-50 px-5 py-4">
               <h2 className="text-lg font-semibold text-slate-800">Classes</h2>
 
@@ -471,7 +475,7 @@ export default function ResultsPreview() {
                       : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50"
                   }`}
                 >
-                  <p className="font-semibold">{cls.name}</p>
+                  <p className="font-semibold text-sm">{cls.name}</p>
 
                   <p
                     className={`text-xs ${
@@ -506,7 +510,7 @@ export default function ResultsPreview() {
                     <button
                       key={sub.id}
                       onClick={() => setSelectedSubject(sub.id)}
-                      className={`w-full rounded-xl border px-4 py-3 text-left transition-all ${
+                      className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition-all ${
                         selectedSubject === sub.id
                           ? "border-emerald-600 bg-emerald-600 text-white shadow"
                           : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50"
@@ -525,7 +529,7 @@ export default function ResultsPreview() {
           </div>
 
           {/* ==================== RESULTS ==================== */}
-          <div className="col-span-12 lg:col-span-7 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="col-span-12 lg:col-span-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b bg-slate-50 px-6 py-4">
               <div className="flex items-center justify-between">
                 <div>
