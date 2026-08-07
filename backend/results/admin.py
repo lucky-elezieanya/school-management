@@ -636,6 +636,9 @@ class ResultWorkflowAdmin(
         "approved_at",
         "approved_by",
         "released_at",
+        "unlocked_at",
+        "released_by",
+        "unlocked_by"
     ]
 
     list_filter = [
@@ -656,6 +659,8 @@ class ResultWorkflowAdmin(
         "released_at",
         "approved_by",
         "released_by",
+        "unlocked_at",
+        "unlocked_by"
     ]
 @admin.register(ActivateResultPortal)
 class ActivateResultPortalAdmin(admin.ModelAdmin):

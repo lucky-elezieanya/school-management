@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 interface Props {
   logo?: string;
   fallback: string;
@@ -17,13 +15,13 @@ export default function SchoolLogo({ logo, fallback }: Props) {
         h-full
       "
     >
-      <Image
+      <img
         src={logo || fallback}
         alt="School Logo"
         width={70}
         height={80}
-        priority
-        className="object-contai w-auto h-auto"
+   
+        className="object-contai w-[70px] h-[80px]"
       />
     </div>
   );

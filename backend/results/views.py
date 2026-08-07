@@ -370,6 +370,20 @@ class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
 
         serializer.save()
            
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request, pk=None):
+        signature = self.get_object()
+
+        # Deactivate all active signatures
+        HeadTeacherSignature.objects.filter(is_active=True).update(is_active=False)
+
+        # Set the target signature to active
+        signature.is_active = True
+        signature.save(update_fields=["is_active"])
+
+        serializer = self.get_serializer(signature)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+           
 class ResultComputationViewSet(viewsets.ViewSet):
     """
     Handles async result computation via Celery
@@ -965,6 +979,7 @@ class ResultViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Permission denied"}, status=403)
 
         term_id = request.query_params.get("term_id")
+        school_class_id = request.query_params.get("school_class")
         
         if not term_id:
             return Response(
@@ -973,6 +988,19 @@ class ResultViewSet(viewsets.ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if school_class_id:
+            class_subjects = ClassSubject.objects.select_related(
+            "school_class",
+            "subject"
+            ).filter(
+                term_id=term_id,
+                school_class_id=school_class_id
+                ).count()
+            submission_statuses = SubjectResultStatus.objects.filter(
+            term_id=term_id,
+            is_submitted=True,
+            ).count()
 
         class_subjects = ClassSubject.objects.select_related(
             "school_class",
@@ -1883,7 +1911,6 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
         "status",
     ]
 
-  
     @action(
         detail=False,
         methods=["post"],
@@ -2011,11 +2038,11 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
 
         workflow.status = "Pending"
 
-        workflow.approved_by = (
+        workflow.unlocked_by = (
             request.user
         )
 
-        workflow.approved_at = timezone.now()
+        workflow.unlocked_at = timezone.now()
         workflow.save()
  
         serializer = self.get_serializer(
@@ -2074,9 +2101,9 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                     "All subjects have not been submitted.",
                 })
 
-                continue
+                continue 
 
-            self.approve_workflow(workflow, request.user, workflow.school_class_id, session_id, term_id)
+            approve_workflow(workflow, request.user, workflow.school_class_id, session_id, term_id)
 
             approved.append({
                 "class_id": workflow.school_class_id,
@@ -2124,7 +2151,7 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        approved = []
+        unlocked = []
         skipped = []
 
         for workflow in workflows:
@@ -2141,19 +2168,19 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                 continue
 
             workflow.status = "Pending"
-            workflow.approved_by = request.user
-            workflow.approved_at = timezone.now()
+            workflow.unlocked_by = request.user
+            workflow.unlocked_at = timezone.now()
             workflow.save()
 
-            approved.append({
+            unlocked.append({
                 "class_id": workflow.school_class_id,
                 "class_name": str(workflow.school_class),
             })
 
         return Response(
             {
-                "approved_count": len(approved),
-                "approved": approved,
+                "unlocked_count": len(unlocked),
+                "unlocked": unlocked,
                 "skipped": skipped,
             }
         )

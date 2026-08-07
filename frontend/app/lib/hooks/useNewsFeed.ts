@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { getPublishedNews } from "@/app/services/news";
-import type { NewsSummary } from "@/app/types/news";
+import type { News, NewsSummary } from "@/app/types/news";
 
 export function useNewsFeed() {
-  const [news, setNews] = useState<NewsSummary[]>([]);
+  const [news, setNews] = useState<News[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

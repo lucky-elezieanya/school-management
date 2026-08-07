@@ -81,7 +81,6 @@ export default function Footer() {
               Portal & Access
             </h5>
             <ul className="space-y-2.5 text-sm">
-            
               <li>
                 <Link
                   href="/portal"
@@ -90,7 +89,7 @@ export default function Footer() {
                   <span className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
                     ›
                   </span>
-                 Portal
+                  Portal
                 </Link>
               </li>
             </ul>
@@ -105,25 +104,38 @@ export default function Footer() {
               <li className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span className="text-gray-400">
-                   Lakeview Ubeji, Warri South, Delta State, Nigeria
+                  Cozzi Schools, Lakeview Ubeji, Warri South, Delta State,
+                  Nigeria
                 </span>
               </li>
-              <li className="flex items-center gap-3">
+              <li className="flex items-center gap-2 text-sm">
                 <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
                 <a
-                  href="tel:+2348001234567"
+                  href="tel:+2348028628797"
                   className="hover:text-emerald-400 transition-colors"
                 >
-                  +234 800 123 4567
+                  +2348028628797
+                </a>
+                <a
+                  href="tel:+2348148893742"
+                  className="hover:text-emerald-400 transition-colors"
+                >
+                  +2348148893742
+                </a>
+                <a
+                  href="tel:+2348102930441"
+                  className="hover:text-emerald-400 transition-colors"
+                >
+                  +2348102930441
                 </a>
               </li>
               <li className="flex items-center gap-3">
                 <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
                 <a
-                  href="mailto:info@cozzischools.com"
+                  href="mailto:info@chrisakperi@gmail.com"
                   className="hover:text-emerald-400 transition-colors"
                 >
-                  info@cozzischools.com
+                  chrisakperi@gmail.com
                 </a>
               </li>
             </ul>

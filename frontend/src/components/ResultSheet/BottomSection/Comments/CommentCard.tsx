@@ -13,7 +13,7 @@ export default function CommentCard({
 }: CommentCardProps) {
   return (
     <div className="flex justify-between items-end gap-4">
-      <div className="flex-1">
+      <div className="flex-1 w-[80%}">
         <h3
           className="
             text-[14px]
@@ -25,7 +25,6 @@ export default function CommentCard({
         >
           {title}
         </h3>
-
         <p
           className="
             text-[12px]
@@ -38,8 +37,9 @@ export default function CommentCard({
           {comment || "-"}
         </p>
       </div>
-
-      <Signature image={signature} />
+      <div className="bg-white h-[80px]">
+        <Signature image={signature} />
+      </div>
     </div>
   );
 }

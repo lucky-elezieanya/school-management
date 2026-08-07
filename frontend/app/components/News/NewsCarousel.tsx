@@ -84,7 +84,7 @@ export default function NewsCarousel() {
               Latest News
             </h2>
 
-            <p className="mt-3 text-gray-500 leading-relaxed">
+            <p className="mt-3 text-lg text-gray-500 leading-relaxed">
               Stay updated with events, achievements, school activities and
               important announcements from our community.
             </p>
@@ -141,13 +141,14 @@ export default function NewsCarousel() {
                           src={item.cover_image?.image ?? ""}
                           alt={item.title}
                           fill
+                          loading="eager"
                           className="object-cover group-hover:scale-105 transition duration-500"
                         />
                       </div>
 
                       <div className="p-6">
                         <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
-                          <CalendarDays size={15} />
+                          <CalendarDays size={18} />
 
                           {item.published_at &&
                             new Date(item.published_at).toLocaleDateString(
@@ -160,14 +161,15 @@ export default function NewsCarousel() {
                             )}
                         </div>
 
-                        <h3 className="font-bold text-xl text-emerald-950 group-hover:text-emerald-700 transition line-clamp-2">
+                        <h3 className="font-bold text-2xl text-emerald-950 group-hover:text-emerald-700 transition line-clamp-2">
                           {item.title[0].toLocaleUpperCase() +
                             item.title.slice(1)}
                         </h3>
 
-                        <p className="text-gray-600 mt-3 line-clamp-3">
-                          {item.summary[0].toLocaleUpperCase() +
-                            item.summary.slice(1)}
+                        <p className="text-lg text-gray-600 mt-3 line-clamp-3">
+                            {
+                                item.content[0].toLocaleUpperCase()+ item.content.slice(1, 350)
+                            }
                         </p>
                       </div>
                     </div>

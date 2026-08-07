@@ -21,6 +21,7 @@ export default function StudentPhoto({ image, gender, fallback }: Props) {
         alt="Student"
         width={80}
         height={80}
+        loading="eager"
         className="
           rounded-full
           object-cover

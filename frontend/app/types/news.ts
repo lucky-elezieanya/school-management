@@ -38,6 +38,7 @@ export interface NewsSummary {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  content: string;
 }
 
 export interface News extends NewsSummary {

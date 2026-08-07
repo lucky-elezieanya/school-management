@@ -728,8 +728,19 @@ class ResultWorkflow(models.Model):
         on_delete=models.SET_NULL,
         related_name="approved_results",
     )
+    unlocked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="unlocked_results",
+    )
 
     approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    unlocked_at = models.DateTimeField(
         null=True,
         blank=True,
     )

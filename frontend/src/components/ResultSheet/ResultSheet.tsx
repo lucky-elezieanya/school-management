@@ -39,7 +39,7 @@ export default function ResultSheet({ snapshot }: Props) {
         <ResultsTable snapshot={snapshot} />
 
         {/* Chart, Behaviour & Comments */}
-        <BottomSection snapshot={snapshot} />
+        <BottomSection snapshot={snapshot}/>
       </div>
     </div>
   );

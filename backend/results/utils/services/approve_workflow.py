@@ -1,5 +1,4 @@
-
-from time import timezone
+from django.utils import timezone
 
 from academics.models import Class, SchoolAsset, StudentEnrollment
 from ...models import Attendance, Behaviour, ClassFees, ClassTeacherSignature, GradingScale, HeadTeacherSignature, ResumptionDate, SchoolDays, TermComment
@@ -7,7 +6,6 @@ from .engine import ResultEngine
 
 
 def approve_workflow(
-        self,
         workflow,
         user,
         school_class_id,

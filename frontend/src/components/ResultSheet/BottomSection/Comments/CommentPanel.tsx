@@ -21,28 +21,34 @@ export default function CommentPanel({ snapshot }: CommentPanelProps) {
         flex
         flex-col
         justify-between
-        h-full
+        gap-4
         pr-4
-        text-[11px]
+       
       "
     >
-      {showTeacher && (
-        <CommentCard
-          title="Class Teacher's Comment"
-          comment={comments.teacher.text}
-          signature={comments.teacher.signature}
-        />
-      )}
-
-      {showTeacher && showPrincipal && <hr className="my-2 border-gray-300" />}
-
-      {showPrincipal && (
-        <CommentCard
-          title="HM/Principal's Comment"
-          comment={comments.principal.text}
-          signature={comments.principal.signature}
-        />
-      )}
+      <div className="">
+        {showTeacher && (
+          <CommentCard
+            title="Class Teacher's Comment"
+            comment={comments.teacher.text}
+            signature={comments.teacher.signature}
+          />
+        )}
+      </div>
+      <div className="">
+        {showTeacher && showPrincipal && (
+          <hr className="my-2 border-gray-300" />
+        )}
+      </div>
+      <div className="">
+        {showPrincipal && (
+          <CommentCard
+            title="HM/Principal's Comment"
+            comment={comments.principal.text}
+            signature={comments.principal.signature}
+          />
+        )}
+      </div>
     </div>
   );
 }

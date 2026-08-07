@@ -35,6 +35,7 @@ class NewsListSerializer(NewsBaseSerializer):
             "id",
             "title",
             "slug",
+            "content",
             "summary",
             "cover_image",
             "status",

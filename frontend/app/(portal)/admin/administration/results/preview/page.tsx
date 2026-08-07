@@ -43,30 +43,32 @@ export default function ResultsPreview() {
   const [allResultsSubmitted, setAllResultsSubmitted] = useState(false);
   const approved = workflow?.status === "Approved";
 
-  const released = workflow?.status === "Released";
 
   const selectedClassName = currentClass
     ? `${currentClass.name} ${currentClass.arm?.code ?? ""}`
     : "No Class Selected";
 
-  const loadAllResultsSubmitted = async () => {
-    if (!currentTerm) return;
-    const url = `${BASE_URL}/results/results/all-results-submitted/?term_id=${currentTerm?.id}`;
-    fetch(url, {
-      headers: apiHeaders(),
-    })
-      .then((resp) => resp.json())
-      .then((res) => {
-        setAllResultsSubmitted(res.all_results_submitted);
-      })
-      .catch((err) => {
-        console.error(err);
-      });
-  };
-
   useEffect(() => {
+    const loadAllResultsSubmitted = async () => {
+      if (!currentTerm) return;
+      let url = `${BASE_URL}/results/results/all-results-submitted/?term_id=${currentTerm?.id}`;
+      if (selectedClass) {
+        url += `&school_class=${selectedClass}`;
+      }
+
+      fetch(url, {
+        headers: apiHeaders(),
+      })
+        .then((resp) => resp.json())
+        .then((res) => {
+          setAllResultsSubmitted(res.all_results_submitted);
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+    };
     loadAllResultsSubmitted();
-  }, [currentTerm]);
+  }, [currentTerm, selectedClass]);
 
   useEffect(() => {
     loadClasses();
@@ -105,10 +107,12 @@ export default function ResultsPreview() {
       });
       const res = await resp.json();
       if (res && res.results.length > 0) {
-      setSubjects(res?.results || []);
-      setSelectedSubject(res?.results[0]?.id || null)}
-      else {
-        toast.error("No subjects registered for this class in the current term. Please ensure subjects are assigned to the class before proceeding.");
+        setSubjects(res?.results || []);
+        setSelectedSubject(res?.results[0]?.id || null);
+      } else {
+        toast.error(
+          "No subjects registered for this class in the current term. Please ensure subjects are assigned to the class before proceeding.",
+        );
       }
     } catch (err) {
       console.error(err);
@@ -140,6 +144,8 @@ export default function ResultsPreview() {
   };
 
   const loadWorkflow = async (classId: number) => {
+    if (!classId) return;
+
     try {
       const url = `${BASE_URL}/results/workflow/?school_class=${classId}&term=${currentTerm?.id}&session=${currentTerm?.session?.id}`;
       const resp = await fetch(url, {
@@ -148,6 +154,7 @@ export default function ResultsPreview() {
       const res = await resp.json();
 
       setWorkflow(res?.results?.[0] || null);
+      console.log("Workflow data:", res?.results?.[0]);
     } catch (err) {
       console.error(err);
     }
@@ -155,6 +162,7 @@ export default function ResultsPreview() {
 
   const handleApprove = async () => {
     if (!currentTerm) return;
+
     try {
       await createAction("results", "workflow/approve", {
         school_class_id: selectedClass,
@@ -297,7 +305,7 @@ export default function ResultsPreview() {
                 <span
                   className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold
                   ${
-                    released
+                    workflow?.status === "Released"
                       ? "bg-blue-100 text-blue-700"
                       : approved
                         ? "bg-amber-100 text-amber-700"
@@ -392,7 +400,7 @@ export default function ResultsPreview() {
               disabled={
                 workflow?.status === "Approved" ||
                 workflow?.status === "Released" ||
-                !allResultsSubmitted
+                !workflow?.all_results_submitted
               }
               className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-white transition hover:bg-emerald-700 disabled:bg-gray-300"
             >
@@ -431,6 +439,7 @@ export default function ResultsPreview() {
               Release All
             </button>
             <button
+              disabled={!workflow?.all_results_submitted}
               onClick={handleUnlockEdit}
               className="flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-white hover:bg-indigo-800 disabled:bg-gray-300"
             >
@@ -438,8 +447,8 @@ export default function ResultsPreview() {
               Unlock Results Edit
             </button>
             <button
+              disabled={!allResultsSubmitted}
               onClick={handleUnlockEditAll}
-              //   disabled={!allResultsSubmitted}
               className="flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-white hover:bg-indigo-800 disabled:bg-gray-300"
             >
               <Send size={18} />

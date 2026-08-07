@@ -151,7 +151,7 @@ export const apiAction = async (
 	});
 
 	if (!res) {
-		throw new Error("Failed to perform action");
+		throw alert("Failed to perform action");
 	}
 	const response = await res.json();
 	return response;

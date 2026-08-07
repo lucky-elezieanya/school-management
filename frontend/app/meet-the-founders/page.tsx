@@ -3,11 +3,11 @@ import Footer from "../components/sections/Footer";
 
 export default function MeetFounders() {
   const founders = [
-    { 
+    {
       title: "Proprietress",
-      name: "Mrs. Joy Akperi",
+      name: "Mrs. Mabel Akperi",
       email: "proprietress@cozzischools.com",
-      phone: "+234 800 123 4567",
+      phone: "+234 810 293 0441",
       image:
         "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=800", // Replace with real image
       bio: [
@@ -20,8 +20,8 @@ export default function MeetFounders() {
     {
       title: "Director",
       name: "Rev. Chris Akperi",
-      email: "director@cozzischools.com",
-      phone: "+234 800 765 4321",
+      email: "chrisakperi@gmail.com",
+      phone: "+234 802 862 8797",
       image:
         "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=800", // Replace with real image
       bio: [
@@ -29,7 +29,7 @@ export default function MeetFounders() {
         "With a strong background in administration and modern pedagogy, he focuses on equipping our facilities and curriculum to prepare students for the demands of the 21st century.",
       ],
       quote:
-        "Education must bridge tradition and innovation—preparing our students not just for today's exams, but for tomorrow's challenges.",
+        "Education must bridge tradition and innovation—preparing our students not just for today's exams, but for tomorrow's leadership challenges.",
     },
   ];
 
@@ -61,14 +61,14 @@ export default function MeetFounders() {
               />
             </div>
 
-            <span className="inline-block px-4 py-1.5 mb-6 text-xs font-semibold tracking-wider text-emerald-200 uppercase bg-emerald-800/80 rounded-full border border-emerald-600/50 shadow-sm backdrop-blur-md">
+            <span className="inline-block px-4 py-1.5 mb-6 text-sm font-semibold tracking-wider text-emerald-200 uppercase bg-emerald-800/80 rounded-full border border-emerald-600/50 shadow-sm backdrop-blur-md">
               Leadership & Vision
             </span>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight mb-6 leading-tight drop-shadow-sm">
               Meet Our Founders
             </h1>
-            <p className="text-lg md:text-xl text-emerald-100 font-light leading-relaxed max-w-2xl mx-auto drop-shadow-sm">
+            <p className="text-xl text-emerald-100 font-light leading-relaxed max-w-2xl mx-auto drop-shadow-sm">
               The visionary leaders behind Cozzi Schools, dedicated to fostering
               educational excellence, strong character, and a bright future for
               every child.
@@ -78,8 +78,8 @@ export default function MeetFounders() {
 
         {/* Main Content Area */}
         <div className="container mx-auto px-4 py-20 max-w-7xl">
-          {/* 2-Column Grid with increased column spacing (gap-14 lg:gap-16) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16">
+  
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-14 lg:gap-16">
             {founders.map((founder, index) => (
               <div
                 key={index}
@@ -115,7 +115,7 @@ export default function MeetFounders() {
                       {founder.bio.map((paragraph, idx) => (
                         <p
                           key={idx}
-                          className="text-gray-600 leading-relaxed text-sm sm:text-base"
+                          className="text-gray-600 leading-relaxed text-lg sm:text-base"
                         >
                           {paragraph}
                         </p>
@@ -124,8 +124,8 @@ export default function MeetFounders() {
 
                     {/* Quote Box */}
                     <div className="p-5 bg-emerald-50/70 rounded-2xl border border-emerald-100/80 relative">
-                      <Quote className="w-6 h-6 text-emerald-300 absolute top-3 right-3" />
-                      <p className="text-xs sm:text-sm italic text-emerald-950 leading-relaxed relative z-10 pr-6">
+                      <Quote className="w-8 h-8 text-emerald-300 absolute top-3 right-3" />
+                      <p className="text-md sm:text-sm italic text-emerald-950 leading-relaxed relative z-10 pr-6">
                         "{founder.quote}"
                       </p>
                     </div>
@@ -143,18 +143,18 @@ export default function MeetFounders() {
                       className="flex items-center gap-3 text-sm text-gray-600 hover:text-emerald-700 transition-colors"
                     >
                       <div className="p-2 bg-emerald-100/70 text-emerald-800 rounded-lg">
-                        <Mail className="w-4 h-4" />
+                        <Mail className="w-6 h-6" />
                       </div>
-                      <span>{founder.email}</span>
+                      <span className="text-lg">{founder.email}</span>
                     </a>
                     <a
                       href={`tel:${founder.phone.replace(/\s+/g, "")}`}
                       className="flex items-center gap-3 text-sm text-gray-600 hover:text-emerald-700 transition-colors"
                     >
                       <div className="p-2 bg-emerald-100/70 text-emerald-800 rounded-lg">
-                        <Phone className="w-4 h-4" />
+                        <Phone className="w-6 h-6" />
                       </div>
-                      <span>{founder.phone}</span>
+                      <span className="text-lg">{founder.phone}</span>
                     </a>
                   </div>
                 </div>

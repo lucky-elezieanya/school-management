@@ -29,11 +29,11 @@ export default function HomePage() {
             />
 
             <div className="flex flex-col">
-              <h1 className="text-lg sm:text-2xl font-extrabold text-emerald-900 leading-tight">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-emerald-900 leading-tight">
                 Cozzi Schools
               </h1>
 
-              <small className="text-[10px] sm:text-xs italic text-gray-500">
+              <small className="text-[12px] sm:text-sm italic text-gray-500">
                 ...children are the heritage of the Lord
               </small>
             </div>
@@ -43,7 +43,7 @@ export default function HomePage() {
           <nav className="flex items-center gap-2 sm:gap-4">
             <Link
               href="/portal"
-              className="px-4 sm:px-5 py-2 text-sm font-semibold bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition shadow-md"
+              className="px-4  py-2 text-lg font-semibold bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition shadow-md"
             >
               Portal
             </Link>
@@ -58,24 +58,24 @@ export default function HomePage() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-14 lg:py-24 grid lg:grid-cols-2 gap-12 items-center">
           {/* LEFT */}
           <div className="animate-in fade-in slide-in-from-left duration-700">
-            <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-800 px-4 py-2 rounded-full text-sm font-medium mb-6">
-              <Sparkles size={16} />
+            <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-800 px-4 py-2 rounded-full text-md font-medium mb-6">
+              <Sparkles size={20} />
               Christian Excellence & Academic Growth
             </div>
 
-            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-emerald-950 leading-tight">
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-emerald-950 leading-tight">
               Raising Future
               <span className="text-emerald-700 block">Leaders With</span>
               Godly Values
             </h2>
 
-            <p className="mt-6 text-gray-600 text-base sm:text-lg leading-relaxed max-w-xl">
+            <p className="mt-6 text-gray-600 text-base text-lg leading-relaxed max-w-xl">
               Cozzi Schools provides a safe, inspiring and faith-driven learning
               environment where students excel academically, morally and
               socially.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-4">
+            <div className="mt-8 flex flex-wrap gap-4 text-lg">
               <Link
                 href="/portal"
                 className="inline-flex items-center gap-2 bg-emerald-800 text-white px-7 py-3 rounded-xl font-semibold hover:bg-emerald-900 transition shadow-lg"
@@ -158,7 +158,7 @@ export default function HomePage() {
               Why Choose Cozzi Schools?
             </h3>
 
-            <p className="mt-4 text-gray-600 max-w-2xl mx-auto">
+            <p className="mt-4 text-lg text-gray-600 max-w-xl mx-auto">
               We combine academic excellence, discipline and spiritual growth to
               prepare students for greatness.
             </p>
@@ -171,11 +171,11 @@ export default function HomePage() {
                 <BookOpen className="text-emerald-700" />
               </div>
 
-              <h4 className="font-bold text-lg text-emerald-900 mb-2">
+              <h4 className="font-bold text-xl text-emerald-900 mb-2">
                 Result Checking
               </h4>
 
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-lg text-gray-600 leading-relaxed">
                 Students and parents can easily access academic results online
                 anytime.
               </p>
@@ -187,11 +187,11 @@ export default function HomePage() {
                 <Users className="text-blue-700" />
               </div>
 
-              <h4 className="font-bold text-lg text-emerald-900 mb-2">
+              <h4 className="font-bold text-xl text-emerald-900 mb-2">
                 Qualified Teachers
               </h4>
 
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-lg text-gray-600 leading-relaxed">
                 Experienced and passionate teachers dedicated to student
                 success.
               </p>
@@ -203,11 +203,11 @@ export default function HomePage() {
                 <School className="text-yellow-700" />
               </div>
 
-              <h4 className="font-bold text-lg text-emerald-900 mb-2">
+              <h4 className="font-bold text-xl text-emerald-900 mb-2">
                 Modern Learning
               </h4>
 
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-lg text-gray-600 leading-relaxed">
                 Conducive classrooms and digital tools for enhanced learning
                 experiences.
               </p>
@@ -219,11 +219,11 @@ export default function HomePage() {
                 <BadgeCheck className="text-purple-700" />
               </div>
 
-              <h4 className="font-bold text-lg text-emerald-900 mb-2">
+              <h4 className="font-bold text-xl text-emerald-900 mb-2">
                 Moral Excellence
               </h4>
 
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <p className="text-lg text-gray-600 leading-relaxed">
                 We nurture disciplined children with strong Christian values and
                 integrity.
               </p>
@@ -248,7 +248,7 @@ export default function HomePage() {
               A Place Where Students Grow Spiritually & Academically
             </h3>
 
-            <p className="mt-6 text-gray-600 leading-relaxed">
+            <p className="mt-6 text-lg text-gray-600 leading-relaxed">
               At Cozzi Schools, every child is valued and guided towards
               academic excellence while building strong character and leadership
               skills.
@@ -261,10 +261,10 @@ export default function HomePage() {
                 </div>
 
                 <div>
-                  <h4 className="font-semibold text-emerald-900">
+                  <h4 className="font-semibold text-emerald-900 text-xl">
                     Excellent Curriculum
                   </h4>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-lg text-gray-600">
                     Comprehensive learning programs for all levels.
                   </p>
                 </div>
@@ -276,10 +276,10 @@ export default function HomePage() {
                 </div>
 
                 <div>
-                  <h4 className="font-semibold text-emerald-900">
+                  <h4 className="font-semibold text-emerald-900 text-xl">
                     Parent Communication
                   </h4>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-lg text-gray-600">
                     Parents stay connected with teachers and student progress.
                   </p>
                 </div>
@@ -288,7 +288,7 @@ export default function HomePage() {
 
             <Link
               href="/portal"
-              className="inline-flex items-center gap-2 mt-8 bg-emerald-800 text-white px-7 py-3 rounded-xl font-semibold hover:bg-emerald-900 transition"
+              className="inline-flex text-lg items-center gap-2 mt-8 bg-emerald-800 text-white px-7 py-3 rounded-xl font-semibold hover:bg-emerald-900 transition"
             >
               Access School Portal
               <ChevronRight size={18} />
@@ -309,7 +309,7 @@ export default function HomePage() {
             Christian values.
           </p>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <div className="mt-8 flex flex-wrap text-lg justify-center gap-4">
             <Link
               href="/portal"
               className="bg-white text-emerald-900 px-8 py-3 rounded-xl font-bold hover:bg-gray-100 transition"

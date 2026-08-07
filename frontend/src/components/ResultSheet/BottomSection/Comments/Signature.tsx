@@ -10,26 +10,26 @@ export default function Signature({
   alt = "Signature",
 }: SignatureProps) {
   if (!image) {
-    return <div className="w-[120px] h-[60px]" />;
+    return <div className="w-[120px h-[80px]"  />;
   }
 
   return (
     <div
       className="
-        w-[120px]
+       w-[120px] h-[80px]
         flex
         justify-center
-        items-end
+     
       "
     >
-      <Image
+      <img
         src={image}
         alt={alt}
-        width={120}
-        height={100}
+        width={100}
+        height={50}
+        loading="eager"
         className="
-        h-auto w-auto
-          object-contai
+          object-contain
         "
       />
     </div>
