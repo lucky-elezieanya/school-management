@@ -8,7 +8,7 @@ from .models import News, NewsImage
 from .serializers import (
     AdminNewsSerializer,
     NewsDetailSerializer,
-    NewsImageSerializer,
+
     NewsListSerializer,
 )
 

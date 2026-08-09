@@ -130,7 +130,7 @@ export default function TermCommentEntryPage() {
       const [studentRes, commentRes, attendanceRes, behaviourRes] =
         await Promise.all([
           fetch(
-            `${BASE_URL}/academics/enrollments/?school_class=${classId}&session=${currentTerm.session.id}`,
+            `${BASE_URL}/academics/enrollments/?school_class=${classId}&session=${currentTerm.session.id}&is_current=true`,
             {
               headers: apiHeaders(),
             },

@@ -1,7 +1,7 @@
 from django.urls import path
 
 from rest_framework.routers import DefaultRouter
-from .views import (
+from .views_production import (
     AcademicSessionViewSet,
     ArmsViewSet,
     ClassViewSet,

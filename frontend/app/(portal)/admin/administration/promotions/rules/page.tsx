@@ -84,9 +84,9 @@ export default function PromotionRulesPage() {
 					<tbody>
 						{rules.map((r) => (
 							<tr key={r.id} className="border-t">
-								<td className="p-3">{r.from_class.name}</td>
+								<td className="p-3">{r.from_class.name} {r.from_class.arm.name}</td>
 
-								<td className="p-3">{r.to_class.name}</td>
+								<td className="p-3">{r.to_class.name} {r.to_class.arm.name}</td>
 
 								<td className="p-3">
 									{r.is_active ? (

@@ -440,18 +440,18 @@ export default function IndividualClassPage() {
                               Inactive
                             </button>
 
-                            {/* <button
-															onClick={() =>
-																handleToggleActiveStatus(
-																	student.id,
-																	"reactivate",
-																)
-															}
-															type="button"
-															className="bg-green-400 text-gray-50 px-4 py-2 outline-none rounded-lg border-gray-400"
-														>
-															Activate
-														</button> */}
+                            <button
+                              onClick={() =>
+                                handleToggleActiveStatus(
+                                  student.id,
+                                  "reactivate",
+                                )
+                              }
+                              type="button"
+                              className="bg-green-400 text-gray-50 px-4 py-2 outline-none rounded-lg border-gray-400"
+                            >
+                              Activate
+                            </button>
                           </div>
                         )}
                       </td>

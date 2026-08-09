@@ -1,5 +1,6 @@
 "use client";
 import { apiAction, apiHeaders, BASE_URL } from "@/app/lib/api";
+import { useAuth } from "@/app/lib/hooks/useAuth";
 
 import { ArmsType, ClassType, TeacherType } from "@/app/lib/types";
 import Link from "next/link";
@@ -8,6 +9,7 @@ import { useEffect, useState } from "react";
 
 export default function ClassesPage() {
   const router = useRouter();
+  const { currentTerm } = useAuth();
   const [arms, setArms] = useState<ArmsType[]>([]);
 
   const [loading, setLoading] = useState(false);

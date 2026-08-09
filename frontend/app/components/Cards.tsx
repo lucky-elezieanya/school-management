@@ -8,7 +8,7 @@ export function InfoCard({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: string | undefined;
 }) {
   return (
     <div className="bg-pink-50 rounded-2xl p-5 border border-pink-100">

@@ -26,8 +26,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SECRET_KEY = config("SECRET_KEY")
 
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
-PDF_RENDER_SECRET = config("PDF_RENDER_SECRET", default="")
-
 
 # ==============================================================================
 # APPLICATIONS
@@ -276,7 +274,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS":
         "rest_framework.pagination.PageNumberPagination",
 
-    "PAGE_SIZE": 1000,
+    "PAGE_SIZE": 100,
 
     "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.JSONParser",

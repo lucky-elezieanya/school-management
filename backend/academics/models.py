@@ -345,10 +345,6 @@ class Student(models.Model):
 
     @property
     def current_class(self):
-        """
-        Convenience property for backwards compatibility.
-        Does NOT store class information.
-        """
         enrollment = self.current_enrollment
         return enrollment.school_class if enrollment else None
 

@@ -26,7 +26,7 @@ class StudentFilter(filters.FilterSet):
         field_name="enrollments__session_id",
     )
 
-    current = filters.BooleanFilter(
+    is_current = filters.BooleanFilter(
         field_name="enrollments__is_current",
     )
 
@@ -37,5 +37,5 @@ class StudentFilter(filters.FilterSet):
             "admission_number",
             "school_class_id",
             "session_id",
-            "current",
+            "is_current",
         ]

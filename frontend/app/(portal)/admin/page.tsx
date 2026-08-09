@@ -231,7 +231,7 @@ const fetchResults = async (url?: string) => {
                 <h4 className="font-extrabold text-slate-800 text-sm leading-snug">
                   {user?.full_name}
                 </h4>
-                <p className="text-xs text-slate-500 mt-0.5">{user.username}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{user?.username}</p>
                 {currentTerm && (
                   <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600/10 text-emerald-700 rounded-lg text-xs font-bold">
                     <ClipboardList size={12} />
@@ -325,7 +325,7 @@ const fetchResults = async (url?: string) => {
               <h4 className="font-extrabold text-slate-800 text-sm leading-snug">
                 {user?.full_name}
               </h4>
-              <p className="text-xs text-slate-500 mt-0.5">{user.username}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{user?.username}</p>
               {currentTerm && (
                 <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600/10 text-emerald-700 rounded-lg text-xs font-bold">
                   <ClipboardList size={12} />

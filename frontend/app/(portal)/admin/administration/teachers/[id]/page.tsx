@@ -41,7 +41,7 @@ export default function Teacher() {
         setLoading(true);
 
         const data = await apiAction("academics", "teachers", teacherId);
-        setTeacher(data);
+        data && setTeacher(data);
       } catch (err) {
         console.error(err);
 
@@ -57,7 +57,7 @@ export default function Teacher() {
     if (teacher) {
       setLoading(false);
     }
-  }, []);
+  }, [teacherId]);
 
   /* ======================================
        LOADING STATE
@@ -120,7 +120,7 @@ export default function Teacher() {
 
           <div className="flex gap-3">
             <button
-              onClick={() => router.push(`/teachers/profile/${teacherId}/edit`)}
+              onClick={() => router.push(`/admin/administration/teachers/${teacherId}/edit`)}
               className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 transition px-5 py-3 rounded-xl font-medium shadow"
             >
               <Pencil size={18} />
@@ -211,28 +211,6 @@ export default function Teacher() {
               </div>
             </div>
 
-            {/* QUICK ACTIONS */}
-            <div className="bg-white rounded-3xl shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-5">
-                Quick Actions
-              </h3>
-
-              <div className="space-y-4">
-                <button
-                  className="w-full bg-emerald-700 hover:bg-emerald-800 transition text-white py-3 rounded-xl font-medium"
-                  onClick={() => router.push("/teachers/view-results")}
-                >
-                  View Results
-                </button>
-
-                <button
-                  className="w-full bg-pink-500 hover:bg-pink-600 transition text-white py-3 rounded-xl font-medium"
-                  onClick={() => router.push("/teachers/classes")}
-                >
-                  View Class
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* MAIN CONTENT */}
@@ -305,7 +283,7 @@ export default function Teacher() {
                 <InfoCard
                   icon={<Mail size={18} />}
                   label="Parent Email"
-                  value={teacher.user.email}
+                  value={teacher?.user?.email}
                 />
 
                 <InfoCard
@@ -324,12 +302,7 @@ export default function Teacher() {
               </div>
             </div>
 
-            {/* ACTIVITY SECTION */}
-            <div className="bg-white rounded-3xl shadow-lg p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-emerald-900 mb-8">
-                Academic Overview
-              </h2>
-            </div>
+        
           </div>
         </div>
       </div>

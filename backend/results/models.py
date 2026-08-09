@@ -791,3 +791,6 @@ class ActivateResultPortal(models.Model):
 
     def __str__(self):
         return f"{self.term} - {'Open' if self.open else 'Closed'}"
+    
+    class Meta:
+        ordering = ["term"]

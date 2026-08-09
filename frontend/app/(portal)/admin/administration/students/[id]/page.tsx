@@ -18,9 +18,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiAction } from "@/app/lib/api";
+import { apiAction, apiHeaders, BASE_URL } from "@/app/lib/api";
 import { StudentType } from "@/app/lib/types";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 
 export default function Student() {
   const params = useParams();
@@ -31,6 +32,27 @@ export default function Student() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [snapshot, setSnapshot] = useState<StudentResultSnapshot | null>(null);
+
+  useEffect(() => {
+    const fetchSnapshot = async () => {
+      const url = `${BASE_URL}/results/result-snapshots/?student=${studentId}&session=${currentTerm?.session.id}&term=${currentTerm?.id}`;
+      const res = await fetch(url, {
+        headers: apiHeaders(),
+      });
+
+      if (res.ok) {
+        const response = await res.json();
+        const data = response.results[0];
+        setSnapshot(data);
+      } else {
+        setSnapshot(null);
+        alert("Results for student not available yet");
+        return;
+      }
+    };
+    fetchSnapshot();
+  }, []);
   /* ======================================
 	   FETCH STUDENT
 	====================================== */
@@ -242,23 +264,20 @@ export default function Student() {
 
               <div className="space-y-4">
                 <button
-                  className="w-full bg-emerald-700 hover:bg-emerald-800 transition text-white py-3 rounded-xl font-medium"
                   onClick={() =>
-                    router.push(
-                      `/admin/administration/students/${studentId}/result?class_id=${student.current_enrollment.school_class.id}&term_id=${currentTerm?.id}&session_id=${currentTerm?.session.id}`,
-                    )
+                    router.push(`/results/preview/${snapshot?.id}`)
                   }
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 transition text-white py-3 rounded-xl font-medium"
                 >
                   View Results
                 </button>
 
-                <button className="w-full bg-pink-500 hover:bg-pink-600 transition text-white py-3 rounded-xl font-medium">
-                  View Attendance
-                </button>
-
-                <button className="w-full bg-gray-800 hover:bg-black transition text-white py-3 rounded-xl font-medium">
+                <Link
+                  href={`mailto:${student.parent_email || "parent@example.com"}`}
+                  className="flex items-center justify-center w-full bg-gray-800 hover:bg-black text-white font-medium py-3 px-4 rounded-xl transition-colors duration-200 shadow-sm"
+                >
                   Send Message
-                </button>
+                </Link>
               </div>
             </div>
           </div>

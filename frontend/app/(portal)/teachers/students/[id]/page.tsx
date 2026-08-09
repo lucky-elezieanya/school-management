@@ -1,104 +1,128 @@
 "use client";
 
 import {
-	User,
-	Mail,
-	Phone,
-	MapPin,
-	CalendarDays,
-	BookOpen,
-	ShieldCheck,
-	Users,
-	ArrowLeft,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  CalendarDays,
+  BookOpen,
+  ShieldCheck,
+  Users,
+  ArrowLeft,
 } from "lucide-react";
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiAction } from "@/app/lib/api";
+import { apiAction, apiHeaders, BASE_URL } from "@/app/lib/api";
 import { StudentType } from "@/app/lib/types";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { StudentResultSnapshot } from "@/app/types/result-snapshot";
+
 
 export default function Student() {
-	const params = useParams();
-	const router = useRouter();
-    const {currentTerm} = useAuth()
-	const studentId = Number(params.id);
-	const [student, setStudent] = useState<StudentType | null>(null);
-	const [loading, setLoading] = useState(true);
+  const params = useParams();
+  const router = useRouter();
+  const { currentTerm } = useAuth();
+  const studentId = Number(params.id);
+  const [student, setStudent] = useState<StudentType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState<StudentResultSnapshot | null>(null);
 
-	const [error, setError] = useState("");
+  const [error, setError] = useState("");
 
-	/* ======================================
+  /* ======================================
 	   FETCH STUDENT
 	====================================== */
-	useEffect(() => {
-		if (!studentId) return;
+  useEffect(() => {
+    if (!studentId) return;
 
-		const fetchStudent = async () => {
-			try {
-				setLoading(true);
+    const fetchStudent = async () => {
+      try {
+        setLoading(true);
 
-				const data = await apiAction(
-					"academics",
-					"students",
-					studentId,
-				);
-				setStudent(data);
-			} catch (err) {
-				console.error(err);
+        const data = await apiAction("academics", "students", studentId);
+        setStudent(data);
+      } catch (err) {
+        console.error(err);
 
-				setError("Failed to load student");
-			} finally {
-				setLoading(false);
-			}
-		};
+        setError("Failed to load student");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-		if (studentId) {
-			fetchStudent();
-		}
-		if (student) {
-			setLoading(false);
-		}
-	}, []);
+    if (studentId) {
+      fetchStudent();
+    }
+    if (student) {
+      setLoading(false);
+    }
+  }, []);
 
-	/* ======================================
+  const fetchSnapshot = async () => {
+    const url = `${BASE_URL}/results/result-snapshots/?student=${studentId}&session=${currentTerm?.session.id}&term=${currentTerm?.id}`;
+    const res = await fetch(url, {
+      headers: apiHeaders(),
+    });
+
+    if (res) {
+      const response = await res.json();
+      console.log("snapshot: ", response)
+
+      if (response && response.results.length > 0) {
+        const data = response.results[0];
+        setSnapshot(data);
+       
+      } else return;
+    } else {
+      setSnapshot(null);
+      alert("Results for student not available yet");
+      return;
+    }
+  };
+  useEffect(() => {
+    fetchSnapshot();
+  }, [currentTerm, studentId]);
+
+  /* ======================================
 	   LOADING STATE
 	====================================== */
-	if (loading) {
-		return (
-			<div className="min-h-screen flex items-center justify-center bg-gray-100">
-				<p className="text-lg font-medium text-gray-600">
-					Loading student details...
-				</p>
-			</div>
-		);
-	}
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <p className="text-lg font-medium text-gray-600">
+          Loading student details...
+        </p>
+      </div>
+    );
+  }
 
-	/* ======================================
+  /* ======================================
 	   ERROR STATE
 	====================================== */
-	if (error || !student) {
-		return (
-			<div className="min-h-screen flex items-center justify-center bg-gray-100">
-				<div className="bg-white p-8 rounded-2xl shadow-lg">
-					<p className="text-red-600 font-medium">
-						{error || "Student not found"}
-					</p>
+  if (error || !student) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-8 rounded-2xl shadow-lg">
+          <p className="text-red-600 font-medium">
+            {error || "Student not found"}
+          </p>
 
-					<Link
-						href="/teachers/students"
-						className="mt-4 inline-block text-blue-600 hover:underline"
-					>
-						<ArrowLeft size={22} /> Go Back
-					</Link>
-				</div>
-			</div>
-		);
-	}
+          <Link
+            href="/teachers/students"
+            className="mt-4 inline-block text-blue-600 hover:underline"
+          >
+            <ArrowLeft size={22} /> Go Back
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-	return (
+  return (
     <div className="min-h-screen bg-pink-50">
       {/* HEADER */}
       <div className="bg-linear-to-r from-emerald-700 to-emerald-500 text-white px-6 py-8 shadow-lg">
@@ -228,23 +252,22 @@ export default function Student() {
 
               <div className="space-y-4">
                 <button
-                  className="w-full bg-emerald-700 hover:bg-emerald-800 transition text-white py-3 rounded-xl font-medium"
                   onClick={() =>
-                    router.push(
-                      `/admin/administration/students/${studentId}/result?class_id=${student.current_enrollment.school_class.id}&term_id=${currentTerm?.id}&session_id=${currentTerm?.session.id}`,
-                    )
+                    snapshot?.id
+                      ? router.push(`/results/preview/${snapshot?.id}`)
+                      : alert("No results yet")
                   }
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 transition text-white py-3 rounded-xl font-medium"
                 >
                   View Results
                 </button>
 
-                <button className="w-full bg-pink-500 hover:bg-pink-600 transition text-white py-3 rounded-xl font-medium">
-                  View Attendance
-                </button>
-
-                <button className="w-full bg-gray-800 hover:bg-black transition text-white py-3 rounded-xl font-medium">
+                <Link
+                  href={`mailto:${student.parent_email || "parent@example.com"}`}
+                  className="flex items-center justify-center w-full bg-gray-800 hover:bg-black text-white font-medium py-3 px-4 rounded-xl transition-colors duration-200 shadow-sm"
+                >
                   Send Message
-                </button>
+                </Link>
               </div>
             </div>
           </div>
@@ -379,38 +402,38 @@ export default function Student() {
 	INFO CARD
 ========================================================= */
 function InfoCard({
-	icon,
-	label,
-	value,
+  icon,
+  label,
+  value,
 }: {
-	icon: React.ReactNode;
-	label: string;
-	value: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
 }) {
-	return (
-		<div className="bg-pink-50 rounded-2xl p-5 border border-pink-100">
-			<div className="flex items-center gap-2 text-emerald-800 mb-2">
-				{icon}
+  return (
+    <div className="bg-pink-50 rounded-2xl p-5 border border-pink-100">
+      <div className="flex items-center gap-2 text-emerald-800 mb-2">
+        {icon}
 
-				<p className="text-sm font-medium">{label}</p>
-			</div>
+        <p className="text-sm font-medium">{label}</p>
+      </div>
 
-			<p className="text-gray-800 font-semibold text-lg wrap-break-word">
-				{value || "N/A"}
-			</p>
-		</div>
-	);
+      <p className="text-gray-800 font-semibold text-lg wrap-break-word">
+        {value || "N/A"}
+      </p>
+    </div>
+  );
 }
 
 /* =========================================================
 	STAT CARD
 ========================================================= */
 function StatCard({ title, value }: { title: string; value: string }) {
-	return (
-		<div className="bg-linear-to-br from-emerald-700 to-emerald-900 text-white rounded-3xl p-6 shadow-lg">
-			<p className="text-emerald-100 text-sm">{title}</p>
+  return (
+    <div className="bg-linear-to-br from-emerald-700 to-emerald-900 text-white rounded-3xl p-6 shadow-lg">
+      <p className="text-emerald-100 text-sm">{title}</p>
 
-			<h3 className="text-4xl font-bold mt-3">{value}</h3>
-		</div>
-	);
+      <h3 className="text-4xl font-bold mt-3">{value}</h3>
+    </div>
+  );
 }

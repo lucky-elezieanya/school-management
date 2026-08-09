@@ -106,13 +106,12 @@ export type TeacherType = {
   assigned_classes?: AssignedClass[];
   user: UserType;
 };
-
 export type TeacherFormDataType = {
   qualification: string;
   address: string;
   phone_number: string;
   date_employed: string;
-  assigned_class?: string;
+  assigned_classes?: (number | string)[];
   first_name: string;
   last_name: string;
   username: string;
@@ -123,6 +122,7 @@ export type TeacherFormDataType = {
   email: string;
   password: string;
 };
+  
 
 export type ClassType = {
   id: number;
@@ -145,7 +145,7 @@ export type EnrollmentType = {
   };
   school_class: ClassType;
   is_current: boolean;
-  // enrolled_at: string
+
 };
 export type SubjectType = {
   id: number;
@@ -168,4 +168,5 @@ export type StudentFormDataType = {
   parent_last_name: string;
   parent_address: string;
   password: string;
+  current_class: string
 };

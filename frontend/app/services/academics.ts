@@ -28,9 +28,9 @@ export const getGrades = async () => {
   return res;
 };
 
-export const fetchStudents = (classId: number, sessionId: number) =>
+export const fetchStudents = (classId: number, sessionId: number, page?: number) =>
   request(
-    `/academics/enrollments/students/?school_class=${classId}&session=${sessionId}`,
+    `/academics/enrollments/students/?school_class=${classId}&session=${sessionId}&is_current=True&page=${page}`,
   );
 
 

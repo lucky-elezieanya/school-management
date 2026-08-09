@@ -342,21 +342,21 @@ class ClassUpdateSerializer(serializers.ModelSerializer):
 class TeacherCreateSerializer(serializers.ModelSerializer):
     # User fields
     first_name = serializers.CharField(write_only=True)
-    middle_name = serializers.CharField(write_only=True, required=False)
+    middle_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     last_name = serializers.CharField(write_only=True)
     username = serializers.CharField(write_only=True)
-    email = serializers.EmailField(write_only=True, required=False)
+    email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     password = serializers.CharField(write_only=True)
     gender = serializers.CharField(write_only=True)
-    date_of_birth = serializers.DateField(write_only=True)
-    profile_picture = serializers.ImageField(write_only=True, required=False)
+    date_of_birth = serializers.DateField(write_only=True, required=False)
+    profile_picture = serializers.ImageField(write_only=True, required=False, allow_null=True)
 
-    # Class assignment
-    assigned_class = serializers.PrimaryKeyRelatedField(
+    # Multi-class assignment
+    assigned_classes = serializers.PrimaryKeyRelatedField(
         queryset=Class.objects.all(),
         write_only=True,
         required=False,
-        allow_null=True
+        many=True
     )
 
     class Meta:
@@ -378,12 +378,12 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             "qualification",
             "date_employed",
             "phone_number",
-            # class
-            "assigned_class",
+            # classes
+            "assigned_classes",
         ]
 
     def create(self, validated_data):
-        assigned_class = validated_data.pop("assigned_class", None)
+        assigned_classes = validated_data.pop("assigned_classes", [])
 
         # Extract user fields
         user_data = {
@@ -393,7 +393,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             "username": validated_data.pop("username"),
             "email": validated_data.pop("email", ""),
             "gender": validated_data.pop("gender"),
-            "date_of_birth": validated_data.pop("date_of_birth"),
+            "date_of_birth": validated_data.pop("date_of_birth", None),
             "profile_picture": validated_data.pop("profile_picture", None),
             "role": "teacher",
         }
@@ -411,140 +411,73 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
 
-        # Assign class
-        if assigned_class:
-            assigned_class.class_teacher = teacher
-            assigned_class.save()
+        # Assign classes (ManyToMany)
+        if assigned_classes:
+            teacher.assigned_classes.set(assigned_classes)
 
-        return {teacher: teacher, user:user}
-
-# TEACHER UPDATE SERIALIZER
+        return teacher# TEACHER UPDATE SERIALIZER
 
 class TeacherUpdateSerializer(serializers.ModelSerializer):
-    first_name = serializers.CharField(
-        source="user.first_name",
-        required=False
-    )
-    middle_name = serializers.CharField(
-        source="user.middle_name",
-        required=False,
-        allow_blank=True
-    )
-
-    last_name = serializers.CharField(
-        source="user.last_name",
-        required=False
-    )
-
-    email = serializers.EmailField(
-        source="user.email",
-        required=False
-    )
-
-    username = serializers.CharField(
-        source="user.username",
-        required=False
-    )
-
-    gender = serializers.CharField(
-        source="user.gender",
-        required=False
-    )
-
-    date_of_birth = serializers.DateField(
-        source="user.date_of_birth",
-        required=False
-    )
-
-    profile_picture = serializers.ImageField(
-        source="user.profile_picture",
-        required=False,
-        allow_null=True
-    )
-
-    password = serializers.CharField(
-        write_only=True,
-        required=False
-    )
-
-    assigned_class = serializers.PrimaryKeyRelatedField(
+    # Allow passing an array of Class IDs
+    assigned_classes = serializers.PrimaryKeyRelatedField(
         queryset=Class.objects.all(),
-        write_only=True,
-        required=False,
-        allow_null=True
+        many=True,
+        required=False
     )
+    # Include nested user fields update if needed
+    first_name = serializers.CharField(source="user.first_name", required=False)
+    last_name = serializers.CharField(source="user.last_name", required=False)
+    middle_name = serializers.CharField(source="user.middle_name", required=False)
+    username = serializers.CharField(source="user.username", required=False)
+    email = serializers.EmailField(source="user.email", required=False)
+    gender = serializers.CharField(source="user.gender", required=False)
+    date_of_birth = serializers.DateField(source="user.date_of_birth", required=False)
 
     class Meta:
         model = Teacher
         fields = [
-            "first_name",
-            "middle_name",
-            "last_name",
-            "email",
-            "username",
-            "gender",
-            "date_of_birth",
-            "profile_picture",
-            "password",
-
+            "id",
             "address",
             "qualification",
             "date_employed",
             "phone_number",
-
-            "assigned_class",
+            "assigned_classes",
+            "first_name",
+            "last_name",
+            "middle_name",
+            "username",
+            "email",
+            "gender",
+            "date_of_birth",
         ]
 
     def update(self, instance, validated_data):
-
+        # Extract user data if present
         user_data = validated_data.pop("user", {})
+        
+        # Extract assigned_classes
+        assigned_classes = validated_data.pop("assigned_classes", None)
 
-        password = validated_data.pop("password", None)
-
-        # =========================
-        # UPDATE USER
-        # =========================
-        user = instance.user
-
-        for attr, value in user_data.items():
-            setattr(user, attr, value)
-
-        if password:
-            user.set_password(password)
-
-        user.save()
-
-        # =========================
-        # UPDATE TEACHER
-        # =========================
+        # Update Teacher fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
         instance.save()
 
-        # =========================
-        # CLASS ASSIGNMENT
-        # =========================
-        assigned_class = self.initial_data.get(
-            "assigned_class"
-        )
+        # Update User fields
+        if user_data:
+            user = instance.user
+            for attr, value in user_data.items():
+                setattr(user, attr, value)
+            user.save()
 
-        if assigned_class:
+        # Update ManyToMany assigned_classes relationship
+        if assigned_classes is not None:
+            # Check user permission to ensure non-admins cannot change assigned classes
+            request = self.context.get("request")
+            if request and (request.user.is_staff or request.user.is_superuser or request.user.role == "admin"):
+                instance.assigned_classes.set(assigned_classes)
 
-            # Remove old assignment
-            Class.objects.filter(
-                class_teacher=instance
-            ).update(class_teacher=None)
-
-            # Assign new class
-            new_class = Class.objects.get(
-                id=assigned_class
-            )
-
-            new_class.class_teacher = instance
-            new_class.save()
-
-        return instance  
+        return instance
 
 class StudentImportSerializer(serializers.ModelSerializer):
     class Meta:
@@ -627,14 +560,12 @@ class StudentSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "admission_number",
-
+            "is_active",
             "parent_first_name",
             "parent_last_name",
             "parent_email",
             "parent_phone",
             "parent_address",
-
-            "is_active",
             "date_admitted",
             "current_enrollment",
             "behaviour_exists",
@@ -780,105 +711,57 @@ class StudentUpdateSerializer(serializers.Serializer):
     # USER FIELDS
     # =========================
     first_name = serializers.CharField(required=False)
-
-    middle_name = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        allow_null=True,
-    )
-
+    middle_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     last_name = serializers.CharField(required=False, write_only=True)
-
     username = serializers.CharField(required=False, write_only=True)
-
-    password = serializers.CharField(
-        required=False,
-        write_only=True,
-    )
-
+    password = serializers.CharField(required=False, write_only=True)
     gender = serializers.CharField(required=False, write_only=True)
-
     date_of_birth = serializers.DateField(required=False, write_only=True)
-
-    profile_picture = serializers.ImageField(
-        required=False,
-        allow_null=True,
-        write_only=True
-    )
+    profile_picture = serializers.ImageField(required=False, allow_null=True, write_only=True)
 
     # =========================
     # STUDENT FIELDS
     # =========================
- 
+    admission_number = serializers.CharField(required=False)
+    parent_first_name = serializers.CharField(required=False)
+    parent_last_name = serializers.CharField(required=False)
+    parent_email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    parent_phone = serializers.CharField(required=False)
+    parent_address = serializers.CharField(required=False)
 
-    admission_number = serializers.CharField(
-        required=False
-    )
-
-    parent_first_name = serializers.CharField(
-        required=False
-    )
-
-    parent_last_name = serializers.CharField(
-        required=False
-    )
-
-    parent_email = serializers.EmailField(
+    # =========================
+    # ENROLLMENT / CLASS FIELD
+    # =========================
+    current_class = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all(),
         required=False,
-        allow_blank=True,
         allow_null=True,
-    )
-
-    parent_phone = serializers.CharField(
-        required=False
-    )
-
-    parent_address = serializers.CharField(
-        required=False
+        write_only=True,
     )
 
     # =========================
     # USERNAME VALIDATION
     # =========================
     def validate_username(self, value):
-
         student = self.instance
-
-        if User.objects.exclude(
-            id=student.user.id
-        ).filter(username=value).exists():
-
-            raise serializers.ValidationError(
-                "Username already exists"
-            )
-
+        if User.objects.exclude(id=student.user.id).filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists")
         return value
 
     # =========================
     # GLOBAL VALIDATION
     # =========================
     def validate(self, data):
-
         student = self.instance
+        admission_number = data.get("admission_number", student.admission_number)
 
-        admission_number = data.get(
-            "admission_number",
-            student.admission_number
-        )
-
-       
-
-        exists = Student.objects.exclude(
-            id=student.id
-        ).filter(
+        exists = Student.objects.exclude(id=student.id).filter(
             admission_number=admission_number,
         ).exists()
 
         if exists:
-
             raise serializers.ValidationError({
-                "admission_number":
-                    f"{admission_number} already exists in this class"
+                "admission_number": f"{admission_number} already exists"
             })
 
         return data
@@ -887,96 +770,57 @@ class StudentUpdateSerializer(serializers.Serializer):
     # UPDATE
     # =========================
     def update(self, instance, validated_data):
-
         user = instance.user
 
-        # =====================================
-        # UPDATE USER FIELDS
-        # =====================================
-        user.first_name = validated_data.get(
-            "first_name",
-            user.first_name,
-        )
+        # Extract current_class from payload
+        new_class = validated_data.pop("current_class", None)
 
-        user.middle_name = validated_data.get(
-            "middle_name",
-            user.middle_name,
-        )
+        # Update User fields
+        user.first_name = validated_data.get("first_name", user.first_name)
+        user.middle_name = validated_data.get("middle_name", user.middle_name)
+        user.last_name = validated_data.get("last_name", user.last_name)
+        user.username = validated_data.get("username", user.username)
+        user.gender = validated_data.get("gender", user.gender)
+        user.date_of_birth = validated_data.get("date_of_birth", user.date_of_birth)
 
-        user.last_name = validated_data.get(
-            "last_name",
-            user.last_name,
-        )
-
-        user.username = validated_data.get(
-            "username",
-            user.username,
-        )
-
-        user.gender = validated_data.get(
-            "gender",
-            user.gender,
-        )
-
-        user.date_of_birth = validated_data.get(
-            "date_of_birth",
-            user.date_of_birth,
-        )
-
-        # =====================================
-        # PROFILE PICTURE
-        # =====================================
         if "profile_picture" in validated_data:
+            user.profile_picture = validated_data.get("profile_picture")
 
-            user.profile_picture = validated_data.get(
-                "profile_picture"
-            )
-
-        # =====================================
-        # PASSWORD
-        # =====================================
         password = validated_data.get("password")
-
         if password:
             user.set_password(password)
 
         user.save()
 
-        # =====================================
-        # UPDATE STUDENT FIELDS
-        # =====================================
-        instance.admission_number = validated_data.get(
-            "admission_number",
-            instance.admission_number,
-        )
-        instance.parent_first_name = validated_data.get(
-            "parent_first_name",
-            instance.parent_first_name,
-        )
-
-        instance.parent_last_name = validated_data.get(
-            "parent_last_name",
-            instance.parent_last_name,
-        )
-
-        instance.parent_email = validated_data.get(
-            "parent_email",
-            instance.parent_email,
-        )
-
-        instance.parent_phone = validated_data.get(
-            "parent_phone",
-            instance.parent_phone,
-        )
-
-        instance.parent_address = validated_data.get(
-            "parent_address",
-            instance.parent_address,
-        )
+        # Update Student fields
+        instance.admission_number = validated_data.get("admission_number", instance.admission_number)
+        instance.parent_first_name = validated_data.get("parent_first_name", instance.parent_first_name)
+        instance.parent_last_name = validated_data.get("parent_last_name", instance.parent_last_name)
+        instance.parent_email = validated_data.get("parent_email", instance.parent_email)
+        instance.parent_phone = validated_data.get("parent_phone", instance.parent_phone)
+        instance.parent_address = validated_data.get("parent_address", instance.parent_address)
 
         instance.save()
 
+        # =====================================
+        # UPDATE CURRENT CLASS ENROLLMENT
+        # =====================================
+        if new_class is not None:
+            current_enrollment = instance.current_enrollment
+            if current_enrollment:
+                if current_enrollment.school_class != new_class:
+                    current_enrollment.school_class = new_class
+                    current_enrollment.save()
+            else:
+                # If student had no active enrollment, create one
+                StudentEnrollment.objects.create( 
+                    student=instance,
+                    school_class=new_class,
+                    is_current=True,
+                )
+
         return instance
+    
 # ==============================
 # SUBJECT SERIALIZER
 # ==============================

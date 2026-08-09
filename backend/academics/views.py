@@ -46,7 +46,7 @@ from .filters import StudentFilter
 
 User = get_user_model()
 class StandardResultsSetPagination(PageNumberPagination):
-    page_size = 40
+    page_size = 30
     page_query_param = 'page'
     page_size_query_param = 'page_size'
     max_page_size = 1000
@@ -92,7 +92,7 @@ class TermViewSet(viewsets.ModelViewSet):
         return queryset
 
 class AcademicSessionViewSet(viewsets.ModelViewSet):
-    queryset = AcademicSession.objects.all()
+    queryset = AcademicSession.objects.prefetch_related("terms").order_by("-name")
     serializer_class = AcademicSessionSerializer
     permission_classes = [IsAuthenticated]
 
@@ -218,7 +218,7 @@ class AcademicSessionViewSet(viewsets.ModelViewSet):
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.select_related(
             "user",
-        ).order_by("-id")
+        ).prefetch_related("enrollments").order_by("-id")
         
     serializer_class = StudentSerializer
     permission_classes = [
@@ -230,7 +230,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     ]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-  
+    
     filterset_class = StudentFilter
     
     search_fields = [
@@ -993,36 +993,32 @@ class ClassViewSet(viewsets.ModelViewSet):
 
 
 class TeacherViewSet(viewsets.ModelViewSet):
-    queryset = (Teacher.objects.select_related("user").prefetch_related(
-            "assigned_classes",
-            "assigned_classes__arm",
-        )
-)
+    queryset = Teacher.objects.select_related("user").prefetch_related(
+        "assigned_classes",
+        "assigned_classes__arm",
+    )
     permission_classes = [IsTeacherOrAdmin]
     parser_classes = [FormParser, MultiPartParser]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["user"]
-    
-    def get_serializer_class(self):
 
+    def get_serializer_class(self):
         if self.action == "create":
             return TeacherCreateSerializer
-
         elif self.action in ["update", "partial_update"]:
             return TeacherUpdateSerializer
-
         return TeacherSerializer
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         user = self.request.user
-        
+
         if user.is_staff or user.is_superuser or user.role == "admin":
             return queryset
         if user.role == "teacher":
             return queryset.filter(user=user)
-        
+
         if user.role == "student":
             student = Student.objects.select_related(
                 "current_enrollment__school_class__class_teacher__user"
@@ -1034,7 +1030,32 @@ class TeacherViewSet(viewsets.ModelViewSet):
                     return queryset.filter(pk=teacher.pk)
 
             return queryset.none()
-       
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+
+        # Prepare request data copy for form-data list handling
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+
+        # Handle assigned_classes list parsing for MultiPartParser / FormParser
+        if "assigned_classes" in request.data:
+            if hasattr(request.data, "getlist"):
+                # Get all array elements if sent as key-value pairs (e.g. assigned_classes=1&assigned_classes=2)
+                assigned_classes = request.data.getlist("assigned_classes")
+                if len(assigned_classes) == 1 and isinstance(assigned_classes[0], str) and "," in assigned_classes[0]:
+                    # Handle comma-separated strings if sent as "1,2,3"
+                    assigned_classes = [item.strip() for item in assigned_classes[0].split(",") if item.strip()]
+                data.setlist("assigned_classes", assigned_classes)
+
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # Return full TeacherSerializer response instead of update serializer
+        response_serializer = TeacherSerializer(instance, context=self.get_serializer_context())
+        return Response(response_serializer.data)
+
     @action(detail=False, methods=["get"], url_path="teacher")
     def teacher(self, request):
         user = request.user
@@ -1062,7 +1083,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(teacher)
         return Response(serializer.data)
-                                      
+
 # ==============================
 # SUBJECT VIEWSET
 # ==============================
@@ -1394,6 +1415,7 @@ class ClassSubjectViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK
         )
+  
     @action(detail=False, methods=["get"])
     def by_class_and_term(self, request):
 
@@ -1414,10 +1436,9 @@ class ClassSubjectViewSet(viewsets.ModelViewSet):
 
 class StudentEnrollmentViewSet(viewsets.ModelViewSet):
     queryset = StudentEnrollment.objects.select_related(
-            "student",
             "student__user",
             "session",
-            "school_class",
+   
             "school_class__arm",
         )
 
@@ -1479,17 +1500,18 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
         )   
     
     @action(detail=False, methods=["post"], url_path="bulk-enroll")
+    @transaction.atomic
     def bulk_enroll(self, request):
         """
         Bulk enroll students into a class/session.
 
-        Payload:
-        {
-            "student_ids": [1,2,3],
-            "session_id": 1,
-            "school_class_id": 2,
-            "is_current": true
-        }
+        Rules:
+        - A student can have only one enrollment record per session.
+        - If an enrollment exists but is_current=False, reactivate it.
+        - If an enrollment exists in another class for the same session,
+        move the student to the selected class.
+        - If no enrollment exists, create one.
+        - When enrolling a student as current, ensure Student.is_active=True.
         """
 
         session_id = request.data.get("session_id")
@@ -1500,33 +1522,26 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
         # ==========================
         # VALIDATIONS
         # ==========================
+
         if not student_ids:
             return Response(
                 {"detail": "student_ids is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not session_id:
+        if not session_id or not school_class_id:
             return Response(
-                {"detail": "session_id is required"},
+                {"detail": "session_id and school_class_id are required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not school_class_id:
-            return Response(
-                {"detail": "school_class_id is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Allow comma-separated string
+        # Allow comma-separated string if sent as string
         if isinstance(student_ids, str):
             student_ids = student_ids.split(",")
 
         try:
             student_ids = [
-                int(x)
-                for x in student_ids
-                if str(x).strip().isdigit()
+                int(x) for x in student_ids if str(x).strip().isdigit()
             ]
         except Exception:
             return Response(
@@ -1540,26 +1555,23 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Remove duplicate student IDs from the request
+        student_ids = list(dict.fromkeys(student_ids))
+
         # ==========================
-        # VERIFY SESSION
+        # VERIFY SESSION AND CLASS
         # ==========================
+
         try:
-            session = AcademicSession.objects.get(
-                id=session_id
-            )
+            session = AcademicSession.objects.get(id=session_id)
         except AcademicSession.DoesNotExist:
             return Response(
                 {"detail": "Session not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # ==========================
-        # VERIFY CLASS
-        # ==========================
         try:
-            school_class = Class.objects.get(
-                id=school_class_id
-            )
+            school_class = Class.objects.get(id=school_class_id)
         except Class.DoesNotExist:
             return Response(
                 {"detail": "Class not found"},
@@ -1567,97 +1579,250 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
             )
 
         # ==========================
-        # EXISTING ENROLLMENTS
+        # VERIFY STUDENTS
         # ==========================
-        existing = set(
+
+        students = Student.objects.filter(
+            id__in=student_ids
+        ).select_related("user")
+
+        existing_student_ids = set(
+            students.values_list("id", flat=True)
+        )
+
+        missing_student_ids = [
+            student_id
+            for student_id in student_ids
+            if student_id not in existing_student_ids
+        ]
+
+        if missing_student_ids:
+            return Response(
+                {
+                    "detail": "Some students were not found.",
+                    "student_ids": missing_student_ids,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_enrollments = {
+            enrollment.student_id: enrollment
+            for enrollment in StudentEnrollment.objects.filter(
+                student_id__in=student_ids,
+                session_id=session_id,
+            )
+        }
+
+        created_count = 0
+        reactivated_count = 0
+        moved_count = 0
+        skipped_count = 0
+
+        enrollments_to_create = []
+        enrollments_to_update = []
+
+        # ==========================
+        # PROCESS STUDENTS
+        # ==========================
+
+        for student_id in student_ids:
+
+            existing_enrollment = existing_enrollments.get(student_id)
+
+            # ----------------------------------
+            # NO ENROLLMENT FOR THIS SESSION
+            # ----------------------------------
+
+            if existing_enrollment is None:
+                enrollments_to_create.append(
+                    StudentEnrollment(
+                        student_id=student_id,
+                        session_id=session_id,
+                        school_class_id=school_class_id,
+                        is_current=is_current,
+                    )
+                )
+
+                created_count += 1
+
+                continue
+
+            # ----------------------------------
+            # ENROLLMENT ALREADY EXISTS
+            # ----------------------------------
+
+            if (
+                existing_enrollment.school_class_id == school_class_id
+                and existing_enrollment.is_current == is_current
+            ):
+                skipped_count += 1
+                continue
+
+            # ----------------------------------
+            # EXISTING ENROLLMENT IS INACTIVE
+            # ----------------------------------
+
+            if not existing_enrollment.is_current and is_current:
+                existing_enrollment.school_class_id = school_class_id
+                existing_enrollment.is_current = True
+
+                enrollments_to_update.append(existing_enrollment)
+
+                reactivated_count += 1
+
+                continue
+
+            # ----------------------------------
+            # EXISTING CURRENT ENROLLMENT
+            # IN ANOTHER CLASS
+            # ----------------------------------
+
+            if (
+                existing_enrollment.is_current
+                and existing_enrollment.school_class_id != school_class_id
+                and is_current
+            ):
+                existing_enrollment.school_class_id = school_class_id
+                existing_enrollment.is_current = True
+
+                enrollments_to_update.append(existing_enrollment)
+
+                moved_count += 1
+
+                continue
+
+            # ----------------------------------
+            # OTHER CASE
+            # ----------------------------------
+
+            existing_enrollment.school_class_id = school_class_id
+            existing_enrollment.is_current = is_current
+
+            enrollments_to_update.append(existing_enrollment)
+
+        # ==========================
+        # IF ENROLLING AS CURRENT
+        # ==========================
+
+        if is_current:
+            StudentEnrollment.objects.filter(
+                student_id__in=student_ids,
+                is_current=True,
+            ).exclude(
+                session_id=session_id,
+            ).update(
+                is_current=False
+            )
+
+            # Also handle any existing current enrollment
+            # in this same session before bulk updating.
+            #
+            # The selected session enrollment will be
+            # updated below.
             StudentEnrollment.objects.filter(
                 student_id__in=student_ids,
                 session_id=session_id,
+                is_current=True,
+            ).exclude(
+                school_class_id=school_class_id,
+            ).update(
+                is_current=False
+            )
+
+            # Make all selected students active.
+            Student.objects.filter(
+                id__in=student_ids,
+                is_active=False,
+            ).update(
+                is_active=True
+            )
+
+        # ==========================
+        # BULK CREATE NEW ENROLLMENTS
+        # ==========================
+
+        if enrollments_to_create:
+            StudentEnrollment.objects.bulk_create(
+                enrollments_to_create
+            )
+
+        # ==========================
+        # BULK UPDATE EXISTING
+        # ==========================
+
+        if enrollments_to_update:
+            StudentEnrollment.objects.bulk_update(
+                enrollments_to_update,
+                [
+                    "school_class",
+                    "is_current",
+                ],
+            )
+
+        # ==========================
+        # GET FINAL ENROLLMENTS
+        # ==========================
+
+        final_enrollments = StudentEnrollment.objects.filter(
+            student_id__in=student_ids,
+            session_id=session_id,
+        )
+
+        final_current_student_ids = set(
+            final_enrollments.filter(
+                is_current=True
             ).values_list(
                 "student_id",
                 flat=True,
             )
         )
 
-        new_student_ids = [
-            student_id
-            for student_id in student_ids
-            if student_id not in existing
-        ]
+        enrolled_students = Student.objects.filter(
+            id__in=final_current_student_ids
+        ).select_related("user")
 
-        created_count = 0
+        # ==========================
+        # RESPONSE
+        # ==========================
 
-        try:
-            with transaction.atomic():
+        total_processed = (
+            created_count
+            + reactivated_count
+            + moved_count
+        )
 
-                # Remove current enrollment flag
-                if is_current:
-                    StudentEnrollment.objects.filter(
-                        student_id__in=new_student_ids,
-                        is_current=True,
-                    ).update(
-                        is_current=False
-                    )
-                     # Activate students being enrolled
-                    Student.objects.filter(
-                            id__in=new_student_ids,
-                            is_active=False
-                        ).update(
-                            is_active=True
-                        )
-
-                enrollments = [
-                    StudentEnrollment(
-                        student_id=student_id,
-                        session=session,
-                        school_class=school_class,
-                        is_current=is_current,
-                    )
-                    for student_id in new_student_ids
-                ]
-
-                StudentEnrollment.objects.bulk_create(
-                    enrollments
-                )
-
-                created_count = len(enrollments)
-
-                enrolled_students = Student.objects.filter(
-                    id__in=new_student_ids
-                ).select_related(
-                    "user"
-                )
-
-            return Response(
-                {
-                    "created": created_count,
-                    "skipped": len(existing),
-                    "class": ClassSerializer(
-                        school_class,
-                        context={"request": request},
-                    ).data,
-                    "session": AcademicSessionSerializer(
-                        session,
-                        context={"request": request},
-                    ).data,
-                    "students": StudentSerializer(
-                        enrolled_students,
-                        many=True,
-                        context={"request": request},
-                    ).data,
-                    "message": (
-                        f"{created_count} enrollments created"
-                    ),
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
-        except Exception as e:
-            return Response(
-                {"detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        return Response(
+            {
+                "created": created_count,
+                "reactivated": reactivated_count,
+                "moved": moved_count,
+                "skipped": skipped_count,
+                "total_processed": total_processed,
+                "class": ClassSerializer(
+                    school_class,
+                    context={"request": request},
+                ).data,
+                "session": AcademicSessionSerializer(
+                    session,
+                    context={"request": request},
+                ).data,
+                "students": StudentSerializer(
+                    enrolled_students,
+                    many=True,
+                    context={"request": request},
+                ).data,
+                "message": (
+                    f"{total_processed} student enrollment(s) "
+                    f"processed successfully. "
+                    f"{created_count} created, "
+                    f"{reactivated_count} reactivated, "
+                    f"{moved_count} moved, "
+                    f"{skipped_count} skipped."
+                ),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+       
 class PromotionRecordViewSet(viewsets.ModelViewSet):
     queryset = PromotionRecord.objects.select_related(
         "student",
@@ -1699,7 +1864,8 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
             )
 
         enrollments = StudentEnrollment.objects.filter(
-            session=batch.from_session
+            session=batch.from_session,
+            is_current=True
         ).select_related(
             "student",
             "school_class"
@@ -1842,6 +2008,7 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
         return Response({
             "message": "Student graduated successfully"
         })
+        
     @action(detail=True, methods=["get"])
     def preview(self, request, pk=None):
 

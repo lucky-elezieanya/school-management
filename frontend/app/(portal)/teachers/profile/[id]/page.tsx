@@ -1,17 +1,17 @@
 "use client";
 
 import {
-	User,
-	Mail,
-	Phone,
-	MapPin,
-	CalendarDays,
-	BookOpen,
-	ShieldCheck,
-	Users,
-	ArrowLeft,
-	Pencil,
-	Trash2,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  CalendarDays,
+  BookOpen,
+  ShieldCheck,
+  Users,
+  ArrowLeft,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -23,82 +23,78 @@ import { TeacherType } from "@/app/lib/types";
 import { InfoCard } from "@/app/components/Cards";
 
 export default function Teacher() {
-	const params = useParams();
-	const router = useRouter();
-	const teacherId = Number(params.id);
-	const [teacher, setTeacher] = useState<TeacherType | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState("");
+  const params = useParams();
+  const router = useRouter();
+  const teacherId = Number(params.id);
+  const [teacher, setTeacher] = useState<TeacherType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-	/* ======================================
+  /* ======================================
        FETCH teacher
     ====================================== */
-	useEffect(() => {
-		if (!teacherId) return;
+  useEffect(() => {
+    if (!teacherId) return;
 
-		const fetchTeacher = async () => {
-			try {
-				setLoading(true);
+    const fetchTeacher = async () => {
+      try {
+        setLoading(true);
 
-				const data = await apiAction(
-					"academics",
-					"teachers",
-					teacherId,
-				);
-				setTeacher(data);
-			} catch (err) {
-				console.error(err);
+        const data = await apiAction("academics", "teachers", teacherId);
+        setTeacher(data);
+      } catch (err) {
+        console.error(err);
 
-				setError("Failed to load teacher");
-			} finally {
-				setLoading(false);
-			}
-		};
+        setError("Failed to load teacher");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-		if (teacherId) {
-			fetchTeacher();
-		}
-		if (teacher) {
-			setLoading(false);
-		}
-	}, []);
+    if (teacherId) {
+      fetchTeacher();
+    }
+    if (teacher) {
+      setLoading(false);
+    }
+  }, []);
 
-	/* ======================================
+  /* ======================================
        LOADING STATE
     ====================================== */
-	if (loading) {
-		return (
-			<div className="min-h-screen flex items-center justify-center bg-gray-100">
-				<p className="text-lg font-medium text-gray-600">
-					Loading teacher details...
-				</p>
-			</div>
-		);
-	}
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <p className="text-lg font-medium text-gray-600">
+          Loading teacher details...
+        </p>
+      </div>
+    );
+  }
 
-	/* ======================================
+  /* ======================================
        ERROR STATE
     ====================================== */
-	if (error || !teacher) {
-		return (
-			<div className="min-h-screen flex items-center justify-center bg-gray-100">
-				<div className="bg-white p-8 rounded-2xl shadow-lg">
-					<p className="text-red-600 font-medium">
-						{error || "teacher not found"}
-					</p>
+  if (error || !teacher) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-8 rounded-2xl shadow-lg">
+          <p className="text-red-600 font-medium">
+            {error || "teacher not found"}
+          </p>
 
-					<Link
-						href="/admin/administration/teachers"
-						className="mt-4 inline-block text-blue-600 hover:underline"
-					>
-						<ArrowLeft size={22} /> Go Back
-					</Link>
-				</div>
-			</div>
-		);
-	}
+          <Link
+            href="/admin/administration/teachers"
+            className="mt-4 inline-block text-blue-600 hover:underline"
+          >
+            <ArrowLeft size={22} /> Go Back
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-	return (
+  return (
     <div className="min-h-screen bg-pink-50">
       {/* HEADER */}
       <div className="bg-gradient-to-r from-emerald-700 to-emerald-500 text-white px-6 py-8 shadow-lg">
@@ -128,7 +124,7 @@ export default function Teacher() {
               className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 transition px-5 py-3 rounded-xl font-medium shadow"
             >
               <Pencil size={18} />
-              Edit teacher
+              Update profile
             </button>
           </div>
         </div>
@@ -326,13 +322,6 @@ export default function Teacher() {
                   />
                 </div>
               </div>
-            </div>
-
-            {/* ACTIVITY SECTION */}
-            <div className="bg-white rounded-3xl shadow-lg p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-emerald-900 mb-8">
-                Academic Overview
-              </h2>
             </div>
           </div>
         </div>

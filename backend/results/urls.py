@@ -1,8 +1,7 @@
 # urls.py
-from django.urls import path
-from rest_framework.routers import DefaultRouter
-from .views import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet, ResultComputationViewSet)
 
+from rest_framework.routers import DefaultRouter
+from .views_production import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet, ResultComputationViewSet)
 
 router = DefaultRouter()
 router.register(r'results', ResultViewSet, basename='results')
