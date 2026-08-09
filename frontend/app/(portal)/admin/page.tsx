@@ -61,6 +61,7 @@ const [resultsCount, setResultsCount] = useState(0)
   const [toggleSessionModal, setToggleSessionModal] = useState(false);
   const [addSession, setAddSession] = useState(false);
   const isLoggedInState = !!user;
+
   const fetchStudents = async (url?: string) => {
     try {
       const data = url
@@ -132,6 +133,7 @@ const fetchResults = async (url?: string) => {
       setUsersCount(data.count || 0);
     } catch (error) {
       console.log("Failed to fetch Users:", error);
+      toast.error(`Failed to fetch Users: ${error}`);
     }
   };
   const fetchSubjects = async (url?: string) => {
@@ -191,7 +193,7 @@ const fetchResults = async (url?: string) => {
   }, [isLoggedInState]);
 
   const [activeTab, setActiveTab] = useState("dashboard");
-  const hiddenLinks = ["dashboard", "teachers"];
+  const hiddenLinks = ["dashboard"];
 
   const tabs = [
     {
@@ -201,7 +203,7 @@ const fetchResults = async (url?: string) => {
     },
   ];
   return (
-    <div className="min-h-screen bg-transparent flex relative overflow-x-hidden">
+    <div className="min-h-screen bg-transparent flex relative overflow-x-hidden w-full">
       {/* Sidebar */}
       {/* ================= MOBILE MENU ====================== */}
       <div className="md:hidden fixed top-4 left-4 z-50">
@@ -306,8 +308,8 @@ const fetchResults = async (url?: string) => {
         </Sheet>
       </div>
       <div className="wrapper grid grid-cols-12">
-        <div className="col-span-3">
           {/* ======== DESKTOP SIDEBAR ============== */}
+        <div className="col-span-3">
           <aside className="w-64 fixed top-0 left-0 bg-white shadow-md hidden md:flex flex-col h-screen overflow-y-auto stick top-">
             <div className="bg-gradient-to-br hidden md:flex md:flex-col from-emerald-50 to-teal-50 border border-emerald-100/60 p-4 rounded-2xl mb-7">
               {user?.profile_picture ? (
@@ -399,8 +401,8 @@ const fetchResults = async (url?: string) => {
             </div>
           </aside>
         </div>
-        <div className="col-span-9">
           {/* Main Content */}
+        <div className="col-span-9">
           <main className="flex-1 p-4 pt-10 md:pt-6 overflow-x-hidden">
             <div className="w-full max-w-7xl mx-auto">
               {/* Header */}
@@ -505,7 +507,7 @@ const fetchResults = async (url?: string) => {
                 resultsCount={resultsCount}
               />
               {/* Dynamic Section */}
-              <div className="bg-transparent rounded-xl shadow p-6">
+              <div className="bg-transparent rounded-xl shadow p-6 w-full">
                 {activeTab === "dashboard" && (
                   <UsersSection
                     users={users}

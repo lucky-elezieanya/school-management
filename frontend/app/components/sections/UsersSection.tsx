@@ -5,78 +5,79 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
-	ChevronLeft,
-	ChevronRight,
-	Loader2,
-	Trash2,
-	Users,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Trash2,
+  Users,
 } from "lucide-react";
 
 import { UserType } from "@/app/lib/types";
 interface UsersSectionProps {
-	users: UserType[];
-	count: number;
-	next: string | null;
-	previous: string | null;
+  users: UserType[];
+  count: number;
+  next: string | null;
+  previous: string | null;
 
-	onNext: () => void;
-	onPrevious: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
 
-	handleDelete: (
-		route_base: string,
-		route_name: string,
-		id: number,
-		item_name: string,
-	) => Promise<boolean>;
+  handleDelete: (
+    route_base: string,
+    route_name: string,
+    id: number,
+    item_name: string,
+  ) => Promise<boolean>;
 
-	setUsers: Dispatch<SetStateAction<UserType[]>>;
+  setUsers: Dispatch<SetStateAction<UserType[]>>;
 }
 
 export default function UsersSection({
-	users,
-	count,
-	next,
-	previous,
-	onNext,
-	onPrevious,
-	handleDelete,
-	setUsers,
+  users,
+  count,
+  next,
+  previous,
+  onNext,
+  onPrevious,
+  handleDelete,
+  setUsers,
 }: UsersSectionProps) {
-	const router = useRouter();
-	const [deletingId, setDeletingId] = useState<number | null>(null);
-	const [search, setSearch] = useState("");
+  const router = useRouter();
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
 
-	const filteredUsers = users.filter((user) => {
-		return (
-			user.first_name?.toLowerCase().includes(search.toLowerCase()) ||
-			user.first_name?.toLowerCase().includes(search.toLowerCase()) ||
-			user.last_name?.toLowerCase().includes(search.toLowerCase()) ||
-			user.username?.toLowerCase().includes(search.toLowerCase()) ||
-			user.email?.toLowerCase().includes(search.toLowerCase()) ||
-			user.role?.toLowerCase().includes(search.toLowerCase())
-		);
-	});
+  const filteredUsers = users.filter((user) => {
+    return (
+      user.first_name?.toLowerCase().includes(search.toLowerCase()) ||
+      user.first_name?.toLowerCase().includes(search.toLowerCase()) ||
+      user.last_name?.toLowerCase().includes(search.toLowerCase()) ||
+      user.username?.toLowerCase().includes(search.toLowerCase()) ||
+      user.email?.toLowerCase().includes(search.toLowerCase()) ||
+      user.role?.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
-	const displayedUsers = filteredUsers;
-	const deleteUser = async (id: number) => {
-		try {
-			setDeletingId(id);
+  const displayedUsers = filteredUsers;
+  const deleteUser = async (id: number) => {
+    try {
+      setDeletingId(id);
 
-			await handleDelete("accounts", "users", id, "User");
+      const res = await handleDelete("accounts", "users", id, "User");
+      if (res) {
+        // Remove instantly from UI
+        setUsers((prev) => prev.filter((user) => user.id !== id));
 
-			// Remove instantly from UI
-			setUsers((prev) => prev.filter((user) => user.id !== id));
+        router.refresh();
+      } else return;
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
-			router.refresh();
-		} catch (error) {
-			console.error(error);
-		} finally {
-			setDeletingId(null);
-		}
-	};
-
-	return (
-    <div className="space-y-6">
+  return (
+    <div className="space-y-6 w-full">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -156,7 +157,10 @@ export default function UsersSection({
                   Role
                 </th>
 
-                <th className="text-center px-6 py-4 text-sm font-semibold text-gray-700" colSpan={2}>
+                <th
+                  className="text-center px-6 py-4 text-sm font-semibold text-gray-700"
+                  colSpan={2}
+                >
                   Actions
                 </th>
               </tr>

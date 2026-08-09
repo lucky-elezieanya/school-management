@@ -5,6 +5,7 @@ import { apiHeaders, BASE_URL } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { getClasses } from "@/app/services/academics";
 import { toast } from "sonner";
+import { getWorkFlowApprovedStatus } from "@/app/services/results";
 
 type BehaviourGrades = "A" | "B" | "C" | "D" | "E" | "F";
 
@@ -90,6 +91,36 @@ export default function TermCommentEntryPage() {
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const [approvedStatus, setApprovedStatus] = useState<string>("");
+
+  const getWorkFlowStatus = async (
+    school_class: number,
+    term: number,
+    session: number,
+  ) => {
+    try {
+      const res = await getWorkFlowApprovedStatus(school_class, term, session);
+      if (res?.results?.length) {
+        setApprovedStatus(res.results[0].status);
+      } else {
+        setApprovedStatus("");
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error);
+    }
+  };
+
+  useEffect(() => {
+    currentTerm &&
+      selectedClass &&
+      getWorkFlowStatus(
+        Number(selectedClass),
+        currentTerm?.id,
+        currentTerm?.session.id,
+      );
+  }, [selectedClass]);
 
   useEffect(() => {
     loadClasses();
@@ -326,12 +357,43 @@ export default function TermCommentEntryPage() {
       }),
     );
   };
+
+  // Check if all student fields are filled before enabling submission
+  const isFormComplete =
+    students.length > 0 &&
+    students.every((student) => {
+      const hasAttendance =
+        student.attendance !== "" &&
+        student.attendance !== null &&
+        student.attendance !== undefined &&
+        !isNaN(Number(student.attendance));
+
+      const hasTeacherComment =
+        typeof student.class_teacher_comment === "string" &&
+        student.class_teacher_comment.trim() !== "";
+
+      const hasPrincipalComment =
+        typeof student.principal_comment === "string" &&
+        student.principal_comment.trim() !== "";
+
+      const hasAllBehaviours = behaviourItems.every(
+        (item) => !!student.behaviour?.[item.key],
+      );
+
+      return (
+        hasAttendance &&
+        hasTeacherComment &&
+        hasPrincipalComment &&
+        hasAllBehaviours
+      );
+    });
+
   // =====================================================
   // SAVE
   // =====================================================
   const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
-    if (!selectedClass || !currentTerm) return;
+    if (!selectedClass || !currentTerm || !isFormComplete) return;
 
     try {
       setSubmitting(true);
@@ -502,8 +564,13 @@ export default function TermCommentEntryPage() {
 
             <button
               type="submit"
-              disabled={submitting}
-              className="rounded-xl bg-emerald-600 px-4 py-2  font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              disabled={
+                submitting ||
+                !isFormComplete ||
+                approvedStatus === "Approved" ||
+                approvedStatus === "Released"
+              }
+              className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               {submitting ? "Saving..." : "Save All"}
             </button>
@@ -530,13 +597,13 @@ export default function TermCommentEntryPage() {
               </div>
               <div
                 className="
-      overflow-x-auto
-      overscroll-x-contain
-      rounded-lg
-      border
-      border-slate-200
-      scrollbar-thin
-    "
+                overflow-x-auto
+                overscroll-x-contain
+                rounded-lg
+                border
+                border-slate-200
+                scrollbar-thin
+                "
               >
                 <table className="w-full min-w-[750px] table-fixed">
                   <thead className="sticky top-0 z-10 bg-slate-100">
@@ -727,7 +794,12 @@ export default function TermCommentEntryPage() {
               <div className="flex justify-end">
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={
+                    submitting ||
+                    !isFormComplete ||
+                    approvedStatus === "Approved" ||
+                    approvedStatus === "Released"
+                  }
                   className="rounded-xl bg-emerald-600 px-8 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
                   {submitting ? "Saving..." : "Save All Records"}
