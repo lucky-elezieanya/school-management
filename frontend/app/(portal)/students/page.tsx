@@ -85,7 +85,6 @@ export default function StudentDashboardPage() {
   const [comment, setComment] = useState<any>(null);
   const [schoolDays, setSchoolDays] = useState<any>(null);
   const [classFee, setClassFee] = useState<any>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   // Gating & loading states
   const [loading, setLoading] = useState(true);
@@ -127,11 +126,11 @@ export default function StudentDashboardPage() {
           setStudentData(studentProfile);
 
           // Set default selected session from current enrollment
-          if (studentProfile.current_enrollment) {
-            setSelectedSession(
-              studentProfile.current_enrollment.session.id.toString(),
-            );
-          }
+        //   if (studentProfile.current_enrollment) {
+        //     setSelectedSession(
+        //       studentProfile.current_enrollment.session.id.toString(),
+        //     );
+        //   }
         }
 
         // 2. Fetch Sessions list
@@ -198,7 +197,6 @@ export default function StudentDashboardPage() {
   };
 
   const currentClass = studentData?.current_enrollment?.school_class;
-  const activeSessionName = studentData?.current_enrollment?.session?.name;
   const currentClassTeacherName =
     currentClass?.class_teacher?.user?.full_name || "Unassigned";
 
@@ -214,6 +212,15 @@ export default function StudentDashboardPage() {
 
       try {
         // Fetch Subject Results, Summary, Comments, Behaviour, Attendance, School Days, Fees, and PDF
+        const safeJson = async (res: Response) => {
+          if (!res) return null;
+          try {
+            return await res.json();
+          } catch {
+            return null;
+          }
+        };
+
         const [
           resultsRes,
           summaryRes,
@@ -238,7 +245,7 @@ export default function StudentDashboardPage() {
             { headers },
           ),
           fetch(
-            `${BASE_URL}/results/classfees/?term=${selectedTerm}&session=${selectedSession}`,
+            `${BASE_URL}/results/classfees/?term=${selectedTerm}&session=${selectedSession}&school_class=${currentClass.id}`,
             { headers },
           ),
           fetch(
@@ -247,60 +254,29 @@ export default function StudentDashboardPage() {
           ),
         ]);
 
-        const resultsJson = await resultsRes.json();
-        const summaryJson = await summaryRes.json();
-        const behaviourJson = await behaviourRes.json();
-        const attendanceJson = await attendanceRes.json();
-        const commentJson = await commentRes.json();
-        const schoolDaysJson = await schoolDaysRes.json();
-        const feesJson = await feesRes.json();
-        const releaseStatusJson = await releaseRes.json();
-
+        const resultsJson = await safeJson(resultsRes);
+        const summaryJson = await safeJson(summaryRes);
+        const behaviourJson = await safeJson(behaviourRes);
+        const attendanceJson = await safeJson(attendanceRes);
+        const commentJson = await safeJson(commentRes);
+        const schoolDaysJson = await safeJson(schoolDaysRes);
+        const feesJson = await safeJson(feesRes);
+        const releaseStatusJson = await safeJson(releaseRes);
         // 1. Set Results Details
-        const fetchedResults = resultsJson.results || [];
+        const fetchedResults = resultsJson?.results || [];
         setResults(fetchedResults);
 
-        // 2. Set Summary Details
-        const fetchedSummary =
-          summaryJson.results && summaryJson.results.length > 0
-            ? summaryJson.results[0]
-            : null;
+        const fetchedSummary = summaryJson?.results?.[0] || null;
         setSummary(fetchedSummary);
 
-        // 3. check if results have been released
-        const isReleased =
-          releaseStatusJson.results && releaseStatusJson.results.length > 0
-            ? releaseStatusJson.results[0].status
-            : null;
-
+        const isReleased = releaseStatusJson?.results?.[0]?.status;
         setResultsReleased(isReleased === "Released");
 
-        // 4. Set other performance details (only populated fully if released)
-        setBehaviour(
-          behaviourJson.results && behaviourJson.results.length > 0
-            ? behaviourJson.results[0]
-            : null,
-        );
-        setAttendance(
-          attendanceJson.results && attendanceJson.results.length > 0
-            ? attendanceJson.results[0]
-            : null,
-        );
-        setComment(
-          commentJson.results && commentJson.results.length > 0
-            ? commentJson.results[0]
-            : null,
-        );
-        setSchoolDays(
-          schoolDaysJson.results && schoolDaysJson.results.length > 0
-            ? schoolDaysJson.results[0]
-            : null,
-        );
-        setClassFee(
-          feesJson.results && feesJson.results.length > 0
-            ? feesJson.results[0]
-            : null,
-        );
+        setBehaviour(behaviourJson?.results?.[0] || null);
+        setAttendance(attendanceJson?.results?.[0] || null);
+        setComment(commentJson?.results?.[0] || null);
+        setSchoolDays(schoolDaysJson?.results?.[0] || null);
+        setClassFee(feesJson?.results?.[0] || null);
       } catch (err) {
         console.error("Error loading student academic records:", err);
         setResultsReleased(false);
@@ -529,10 +505,10 @@ export default function StudentDashboardPage() {
               </h1>
             </div>
 
-            {activeSessionName && (
+            {currentTerm && (
               <div className="inline-flex items-center gap-2 px-4.5 py-2.5 bg-white border border-slate-100 shadow-sm text-slate-700 font-bold rounded-2xl text-xs md:text-sm">
                 <Calendar className="w-4 h-4 text-blue-600" />
-                <span>Active Year: {activeSessionName}</span>
+                <span>Active Session: {currentTerm?.session.name}</span>
               </div>
             )}
           </div>
@@ -698,7 +674,7 @@ export default function StudentDashboardPage() {
                         Current Academic Session
                       </span>
                       <p className="font-extrabold text-slate-800 text-sm mt-1">
-                        {activeSessionName || "N/A"}
+                        {currentTerm?.session.name || "N/A"}
                       </p>
                     </div>
                   </CardContent>
@@ -873,29 +849,6 @@ export default function StudentDashboardPage() {
                         >
                           View Results
                         </button>
-
-                        {/* {pdfUrl ? (
-                          <button
-                            onClick={handleDownloadPdf}
-                            disabled={isDownloading}
-                            className="w-full sm:w-auto min-w-[210px] inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-70"
-                          >
-                            <Download size={16} />
-                            <span>
-                              {isDownloading
-                                ? "Opening PDF..."
-                                : "View / Download PDF"}
-                            </span>
-                          </button>
-                        ) : (
-                          <button
-                            disabled
-                            className="w-full sm:w-auto min-w-[210px] inline-flex items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-6 py-3 text-sm font-medium text-blue-500"
-                          >
-                            <Clock size={16} />
-                            <span>Generating Report Sheet...</span>
-                          </button>
-                        )} */}
                       </div>
                     </div>
                   </div>

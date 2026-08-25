@@ -6,6 +6,7 @@ from .engine import ResultEngine
 
 
 def approve_workflow(
+    request,
         workflow,
         user,
         school_class_id,
@@ -101,7 +102,7 @@ def approve_workflow(
                 school_class=workflow.school_class,
                 session=workflow.session,
                 term=workflow.term,
-                request=self.request
+                request=request
             ).compute()
             
             return True

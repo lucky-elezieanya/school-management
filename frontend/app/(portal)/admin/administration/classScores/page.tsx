@@ -10,7 +10,7 @@ import {
   apiHeaders,
   handleResponse,
 } from "@/app/lib/api";
-import {toast} from "sonner"
+import { toast } from "sonner";
 
 import { Plus, Pencil, Trash2, X, ClipboardList, Save } from "lucide-react";
 
@@ -66,6 +66,7 @@ export default function MaxScoresComponent() {
 
   const [editingScore, setEditingScore] = useState<MaxScoreType | null>(null);
 
+  const [classCount, setClassCount] = useState<number | null>(null);
   // =========================================
   // FETCH DATA
   // =========================================
@@ -80,6 +81,7 @@ export default function MaxScoresComponent() {
 
       setScores(scoreRes.results || scoreRes);
       setClasses(classRes.results || classRes);
+      setClassCount(classRes?.count ?? null);
     } catch (error) {
       console.log(error);
     } finally {
@@ -137,12 +139,14 @@ export default function MaxScoresComponent() {
 
       if (existing) {
         res = await updateAction("results", "maxscores", existing.id, payload);
-  
-        loadData()
+
+        loadData();
 
         resetForm();
         setShowCreateModal(false);
-        toast.success(`Max scores for ${existing.school_class.name} updated successfully`);
+        toast.success(
+          `Max scores for ${existing.school_class.name} updated successfully`,
+        );
       } else {
         res = await createAction("results", "maxscores", payload, "POST");
         setScores((prev) => [...prev, res]);
@@ -277,6 +281,13 @@ export default function MaxScoresComponent() {
 
           <h2 className="text-3xl font-bold mt-2 text-gray-900">
             {scores.length}
+          </h2>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
+          <p className="text-sm text-gray-500">Available Classes</p>
+
+          <h2 className="text-3xl font-bold mt-2 text-gray-900">
+            {classCount && classCount}
           </h2>
         </div>
 

@@ -70,8 +70,6 @@ class ResultSnapshotContext:
 
             self.attach_subject_summaries()
 
-    
-
     def absolute_url(self, obj):
         if not obj:
             return None
@@ -92,7 +90,6 @@ class ResultSnapshotContext:
     def load_terms(self):
         self.terms = Term.objects.filter(session=self.session)
      
-        
     def load_signatures(self): 
         class_teacher_signature = ClassTeacherSignature.objects.filter(school_class=self.school_class, is_active=True).first()
         head_teacher_signature = HeadTeacherSignature.objects.filter(is_active=True).first()
@@ -221,13 +218,11 @@ class ResultSnapshotContext:
         }
         
     def load_attendance(self):
-
         attendance = Attendance.objects.filter(
             school_class=self.school_class,
             session=self.session,
             term=self.term,
         )
-
         self.attendance = {
             item.student_id: item
             for item in attendance

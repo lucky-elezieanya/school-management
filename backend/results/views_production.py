@@ -46,7 +46,6 @@ class StudentResultSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("-computed_at")
         )
 
-
 # ============================================================================
 # 2. RESULT CUSTOMIZATION VIEWSET
 # ============================================================================
@@ -148,7 +147,6 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
             serializer.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
-
 
 # ============================================================================
 # 3. SCHOOL DAYS VIEWSET
@@ -263,7 +261,6 @@ class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
 
         return Response(self.get_serializer(signature).data, status=status.HTTP_200_OK)
 
-
 # ============================================================================
 # 6. RESULT COMPUTATION VIEWSET
 # ============================================================================
@@ -323,7 +320,6 @@ class ResultComputationViewSet(viewsets.ViewSet):
             },
             status=status.HTTP_200_OK,
         )
-
 
 # ============================================================================
 # 7. ATTENDANCE VIEWSET (BULK OPTIMIZED)
@@ -607,8 +603,7 @@ class BehaviourViewSet(viewsets.ModelViewSet):
         
     def create(self, request, *args, **kwargs):
         return self.upsert(request)
- 
-    
+   
 class MaxScoreViewset(viewsets.ModelViewSet):
     serializer_class = MaxScoresSerializer
     permission_classes = [IsTeacherOrAdmin]
@@ -689,7 +684,6 @@ class GradingScaleViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
         
-
 class ResultViewSet(viewsets.ModelViewSet):
     queryset = Result.objects.select_related(
         "student",
@@ -1111,7 +1105,7 @@ class ResultViewSet(viewsets.ModelViewSet):
             school_class_id=school_class_id,
             term_id=term_id,
             session_id=session_id,
-            status__in=["Approved", "Released"],
+            status__in=["Approved", "Released", "Pending"],
         ).select_related(
             "school_class",
             "school_class__arm",
@@ -1153,7 +1147,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 )
 
             allowed = Class.objects.filter(id=school_class_id, class_teacher=teacher).exists()
-            if not allowed and not user.is_staff and not user.is_superuser:
+            if  not user.is_staff or not user.is_superuser or not user_role == "admin" or not allowed:
                 return None, Response(
                     {"detail": "You can only view results for your assigned classes."},
                     status=status.HTTP_403_FORBIDDEN,
@@ -1523,16 +1517,23 @@ class ClassFeesViewset(viewsets.ModelViewSet):
         user = self.request.user
         user_role = getattr(user, "role", None)
 
+        school_class_id = self.request.query_params.get("school_class")
+        term_id = self.request.query_params.get("term")
+        session_id = self.request.query_params.get("session")
+        
+        school_class = Class.objects.select_related("class_teacher").filter(id=school_class_id).first()
+    
         if user.is_staff or user.is_superuser or user_role == "admin":
             return queryset
 
         if user_role == "teacher":
-            return queryset.filter(school_class__class_teacher__user=user)
+            return queryset.filter(school_class__class_teacher_id=school_class.class_teacher.id)
 
         if user_role == "student":
             return queryset.filter(
-                school_class__enrollments__student__user=user,
-                school_class__enrollments__is_current=True,
+                school_class=school_class_id,
+                session_id=session_id,
+                term_id=term_id
             ).distinct()
 
         return queryset.none()
@@ -1614,17 +1615,24 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         user = self.request.user
         user_role = getattr(user, "role", None)
-
+        
+        school_class_id = self.request.query_params.get("school_class")
+        term_id = self.request.query_params.get("term")
+        session_id = self.request.query_params.get("session")
+        
+        school_class = Class.objects.select_related("class_teacher").filter(id=school_class_id).first()
+    
         if user.is_staff or user.is_superuser or user_role == "admin":
             return queryset
 
         if user_role == "teacher":
-            return queryset.filter(school_class__class_teacher__user=user)
+            return queryset.filter(school_class__class_teacher_id=school_class.class_teacher.id)
 
         if user_role == "student":
             return queryset.filter(
-                school_class__enrollments__student__user=user,
-                school_class__enrollments__is_current=True,
+                school_class_id=school_class_id,
+                session_id=session_id,
+                term_id=term_id,
                 status="Released",
             ).distinct()
 
@@ -1663,7 +1671,7 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        approve_workflow(workflow, request.user, school_class_id, session_id, term_id)
+        approve_workflow(request, workflow, request.user, school_class_id, session_id, term_id)
 
         serializer = self.get_serializer(workflow)
         return Response(serializer.data)
@@ -1750,7 +1758,7 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
                 )
                 continue
 
-            approve_workflow(workflow, request.user, workflow.school_class_id, session_id, term_id)
+            approve_workflow(request, workflow, request.user, workflow.school_class_id, session_id, term_id)
             approved.append(
                 {
                     "class_id": workflow.school_class_id,

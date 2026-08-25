@@ -282,6 +282,7 @@ export default function ResultEntryTable({
       )}
       {/* TABLE WRAPPER */}
       <section className="w-full overflow-x-auto border rounded-lg">
+        
         <table className="w-full min-w-150 border-collapse text-xs sm:text-sm">
           {/* HEADER */}
           <thead className="bg-gray-100 sticky  z-10">
@@ -465,7 +466,7 @@ export default function ResultEntryTable({
             ) : (
               <tr>
                 <td colSpan={6} className="p-4 text-center text-gray-500">
-                  No students found for this class.
+                  No students found for this class or students have been promoted!
                 </td>
               </tr>
             )}

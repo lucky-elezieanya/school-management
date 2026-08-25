@@ -300,7 +300,10 @@ export default function BulkEnrollments() {
                   <span>ADM NO: {student.admission_number}</span>
                   {student.current_enrollment &&
                   student.current_enrollment.is_current ? (
-                    <span>{student.current_enrollment.school_class.name}</span>
+                    <span>
+                      {student.current_enrollment.school_class.name}{" "}
+                      {student.current_enrollment.school_class.arm.name}
+                    </span>
                   ) : (
                     <span>Not Active</span>
                   )}
