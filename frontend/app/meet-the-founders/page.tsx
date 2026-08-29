@@ -5,11 +5,10 @@ export default function MeetFounders() {
   const founders = [
     {
       title: "Proprietress",
-      name: "Mrs. Mabel Akperi",
+      name: "Pastor Mrs. Mabel Ngozi Akperi",
       email: "proprietress@cozzischools.com",
       phone: "+234 810 293 0441",
-      image:
-        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=800", // Replace with real image
+      image: "/proprietress-cozzi.png", // Replace with real image
       bio: [
         "As the Proprietress of Cozzi Schools, she brings decades of educational vision, passion, and dedicated leadership. Her unwavering commitment to child development has been the driving force behind our school’s nurturing environment.",
         "She firmly believes that early guidance, strong foundational values, and academic excellence form the bedrock of a successful life. Under her stewardship, Cozzi Schools continues to set high standards in holistic education.",
@@ -19,11 +18,10 @@ export default function MeetFounders() {
     },
     {
       title: "Director",
-      name: "Rev. Chris Akperi",
+      name: "Rev. Chris Utienyin Akperi",
       email: "chrisakperi@gmail.com",
       phone: "+234 802 862 8797",
-      image:
-        "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=800", // Replace with real image
+      image: "/director-cozzi.jpg",
       bio: [
         "Serving as the Director, he oversees strategic development, operational excellence, and modern educational technology integration across Cozzi Schools.",
         "With a strong background in administration and modern pedagogy, he focuses on equipping our facilities and curriculum to prepare students for the demands of the 21st century.",
@@ -37,7 +35,7 @@ export default function MeetFounders() {
     <div className="min-h-screen bg-slate-50 text-gray-800 flex flex-col justify-between">
       <div>
         {/* Hero Section matching About Us Banner style */}
-        <section className="relative py-24 md:py-32 text-white overflow-hidden">
+        <section className="relative py-15 md:py-30 text-white overflow-hidden">
           {/* Background Cover Image */}
           <div className="absolute inset-0 z-0">
             <img
@@ -78,7 +76,6 @@ export default function MeetFounders() {
 
         {/* Main Content Area */}
         <div className="container mx-auto px-4 py-20 max-w-7xl">
-  
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-14 lg:gap-16">
             {founders.map((founder, index) => (
               <div
@@ -87,11 +84,11 @@ export default function MeetFounders() {
               >
                 <div>
                   {/* Image Header Section */}
-                  <div className="relative h-88 sm:h-96 w-full overflow-hidden bg-gray-100 group">
+                  <div className="relative h-[300px] md:h-[480px]  w-full overflow-hidden bg-gray-100 group">
                     <img
                       src={founder.image}
                       alt={founder.name}
-                      className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
+                      className="w-full  h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                     />
                     <div className="absolute top-4 left-4">
                       <span className="px-4 py-1.5 bg-emerald-800/90 backdrop-blur-md text-white text-xs font-bold rounded-full uppercase tracking-wider shadow-md">

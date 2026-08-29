@@ -44,7 +44,7 @@ export default function AboutUs() {
   const ourStatements = [
     {
       title: "Our Vision",
-      desc: "To be a premier institution recognized for raising well-rounded, innovative, and morally grounded leaders who excel globally and contribute positively to society.",
+      desc: "To be most preferred Christian School, To raise Children who will be joy to their parents. To raise Children of Integrity, vast in knowledge and skill for positive influence of the society",
       icon: Compass,
     },
     {

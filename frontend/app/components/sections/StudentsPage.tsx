@@ -47,11 +47,20 @@ export default function StudentsPage() {
   const [nextPage, setNextPage] = useState<string | null>(null);
   const [previousPage, setPreviousPage] = useState<string | null>(null);
   const [selectedFilterItem, setSelectedFilterItem] = useState("");
+  const [sessions, setSessions] = useState([]);
+  const [selectedSession, setSelectedSession] = useState(
+    currentTerm?.session.id.toString(),
+  );
+  const filterItems = [
+    { name: "class" },
+    { name: "Active Status" },
+    { name: "Session" },
+  ];
 
-  const filterItems = [{ name: "class" }, { name: "Active Status" }];
   const [filterForm, setFilterForm] = useState({
     school_class_id: "",
     is_active: "",
+    session_id: "",
   });
 
   const activeStatus = [
@@ -75,9 +84,9 @@ export default function StudentsPage() {
         params.append("is_active", filterForm.is_active);
       }
       if (currentTerm?.session) {
-        params.append("session_id", currentTerm?.session.id.toString());
-    }
-    params.append("is_current", String(true));
+        params.append("session_id", selectedSession!);
+      }
+      params.append("is_current", String(true));
 
       const url = `${BASE_URL}/academics/students/?${params.toString()}`;
       const res = await fetch(url, {
@@ -106,9 +115,23 @@ export default function StudentsPage() {
       setLoading(false);
     }
   };
+  const loadSessions = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${BASE_URL}/academics/sessions/`, {
+        headers: apiHeaders(),
+      });
+      const data = await res.json();
+      setSessions(data.results || []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
   useEffect(() => {
     loadClasses();
-    console.log("classes: ", classes);
+    loadSessions();
   }, []);
 
   useEffect(() => {
@@ -297,31 +320,68 @@ export default function StudentsPage() {
                     </p>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                      {classes.map((cls) => (
-                        <button
-                          key={cls.id}
-                          onClick={() => {
-                            setFilterForm((prev) => ({
-                              ...prev,
-                              school_class_id: cls.id.toString(),
-                            }));
-                          }}
-                          className={`rounded-lg border p-3 text-sm transition
+                      {classes &&
+                        classes.length > 0 &&
+                        classes.map((cls) => (
+                          <button
+                            key={cls.id}
+                            onClick={() => {
+                              setFilterForm((prev) => ({
+                                ...prev,
+                                school_class_id: cls.id.toString(),
+                              }));
+                            }}
+                            className={`rounded-lg border p-3 text-sm transition
                 ${
                   filterForm.school_class_id === cls.id.toString()
                     ? "bg-emerald-600 text-white border-emerald-600"
                     : "border-gray-200 hover:border-emerald-600 hover:bg-emerald-50"
                 }`}
-                        >
-                          {cls.name} {cls.arm.code}
-                        </button>
-                      ))}
+                          >
+                            {cls.name} {cls.arm.code}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              {/* Session Options */}
+              {selectedFilterItem === "Session" &&
+                !loading &&
+                sessions.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 mb-3">
+                      Select Enrolled Session
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {sessions &&
+                        sessions.length > 0 &&
+                        sessions.map((s: any) => (
+                          <button
+                            key={s.id}
+                            onClick={() => {
+                              setFilterForm((prev) => ({
+                                ...prev,
+                                session_id: s.id.toString(),
+                              }));
+                              setSelectedSession(String(s.id));
+                            }}
+                            className={`rounded-lg border p-3 text-sm transition
+                ${
+                  filterForm.session_id === s.id.toString()
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "border-gray-200 hover:border-emerald-600 hover:bg-emerald-50"
+                }`}
+                          >
+                            {s.name} {s.is_active && "(Active)"}
+                          </button>
+                        ))}
                     </div>
                   </div>
                 )}
 
               {/* Selected Filters */}
-              {(filterForm.school_class_id || filterForm.is_active) && (
+              {filterForm.school_class_id && (
                 <div className="flex flex-wrap gap-2 pt-2">
                   {filterForm.school_class_id && (
                     <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-sm">
@@ -336,6 +396,11 @@ export default function StudentsPage() {
                         : "Inactive Students"}
                     </span>
                   )}
+                  {filterForm.session_id && (
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-sm">
+                      {filterForm.session_id && "session selected"}
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -346,6 +411,7 @@ export default function StudentsPage() {
                     setFilterForm({
                       school_class_id: "",
                       is_active: "",
+                      session_id: "",
                     });
 
                     setSelectedFilterItem("");

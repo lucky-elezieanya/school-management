@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useRoleGuard } from "@/app/lib/hooks/useRoleGuard";
 import { logout } from "@/app/lib/auth";
-import { apiHeaders, BASE_URL } from "@/app/lib/api";
+import { apiAction, apiHeaders, BASE_URL } from "@/app/lib/api";
 import {
   LayoutDashboard,
   User,
@@ -48,8 +48,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getOrdinal } from "@/app/services/results";
-import { AcademicSession, TermSession } from "@/app/lib/types";
-import { sessionTerms } from "@/app/services/academics";
+import { AcademicSession, ClassType, TermSession } from "@/app/lib/types";
+import { getClasses, sessionTerms } from "@/app/services/academics";
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 import { renderPosition } from "@/app/components/sections/Broadsheet/BroadsheetTable";
 
@@ -76,9 +76,14 @@ export default function StudentDashboardPage() {
   const [selectedTerm, setSelectedTerm] = useState<string>(
     String(currentTerm?.id),
   );
+  const [selectedClass, setSelectedClass] = useState<string>(
+    String(studentData?.current_enrollment?.school_class.id || ""),
+  );
 
   // Results & performance metrics state
   const [results, setResults] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+
   const [summary, setSummary] = useState<any>(null);
   const [behaviour, setBehaviour] = useState<any>(null);
   const [attendance, setAttendance] = useState<any>(null);
@@ -105,6 +110,19 @@ export default function StudentDashboardPage() {
     }
   };
 
+  useEffect(() => {
+    const fetchClasses = async () => {
+      const res = await fetch(`${BASE_URL}/academics/classes/`, {
+        headers: apiHeaders(),
+      });
+      const data = await res.json();
+      if (data) {
+        setClasses(data.results);
+      }
+    };
+    fetchClasses();
+  }, []);
+
   // Fetch initial profile, sessions, and terms
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -126,11 +144,11 @@ export default function StudentDashboardPage() {
           setStudentData(studentProfile);
 
           // Set default selected session from current enrollment
-        //   if (studentProfile.current_enrollment) {
-        //     setSelectedSession(
-        //       studentProfile.current_enrollment.session.id.toString(),
-        //     );
-        //   }
+          //   if (studentProfile.current_enrollment) {
+          //     setSelectedSession(
+          //       studentProfile.current_enrollment.session.id.toString(),
+          //     );
+          //   }
         }
 
         // 2. Fetch Sessions list
@@ -1228,7 +1246,7 @@ export default function StudentDashboardPage() {
                     ))}
                   </select>
                 </div>
-
+                {/* select term */}
                 <div className="w-full sm:w-1/2 flex flex-col gap-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                     Select Term
@@ -1246,6 +1264,28 @@ export default function StudentDashboardPage() {
                         {t.name} {t.is_active ? "(Active)" : ""}
                       </option>
                     ))}
+                  </select>
+                </div>
+                {/* select class */}
+                <div className="w-full sm:w-1/2 flex flex-col gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Select Class
+                  </label>
+                  <select
+                    value={selectedClass}
+                    onChange={(e) => setSelectedClass(e.target.value)}
+                    className="w-full bg-slate-50/70 border border-slate-100 hover:border-slate-200 focus:border-blue-500 focus:outline-none px-4 py-3 rounded-2xl text-slate-800 text-sm font-semibold transition"
+                  >
+                    <option value="" disabled>
+                      Choose Class
+                    </option>
+                    {classes &&
+                      classes.length > 0 &&
+                      classes.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.name} {cls.arm.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>

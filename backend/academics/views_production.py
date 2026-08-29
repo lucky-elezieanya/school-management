@@ -217,17 +217,28 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        user_id = self.request.query_params.get("user")
         role = getattr(user, "role", None)
+        user_id = self.request.query_params.get("user")
+        is_active = self.request.query_params.get("is_current")
         session_id = self.request.query_params.get("session_id")
+        school_class_id = self.request.query_params.get("school_class_id")
+        
+        lookups = {}
+        
+        if session_id:
+            lookups["session_id"] = session_id
+        if is_active:
+            lookups["is_current"] = bool(is_active)
+        if school_class_id:
+            lookups["school_class_id"] = school_class_id
 
         current_enrollments_qs = None
-        if session_id:
+        if lookups:
             current_enrollments_qs = StudentEnrollment.objects.select_related(
                 "school_class",
                 "school_class__arm",
                 "session"
-            ).filter(is_current=True, session_id=session_id)
+            ).filter(**lookups)
         # Prefetch current enrollment with its nested FKs to completely stop N+1 queries during serialization
         current_enrollments_qs = StudentEnrollment.objects.select_related(
                         "school_class",
@@ -254,7 +265,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         elif role == "student":
             return queryset.filter(user=user)
 
-        return Student.objects.none()
+        return queryset.none()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -392,7 +403,7 @@ class ClassViewSet(viewsets.ModelViewSet):
             )
         )
 
-    permission_classes = [IsTeacherOrAdmin]
+    permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     serializer_class = ClassSerializer
 
@@ -413,7 +424,9 @@ class ClassViewSet(viewsets.ModelViewSet):
         if user_role == "teacher":
             return queryset.filter(class_teacher__user=user)
 
-        return queryset.none()
+        if user_role == "student":
+            student_classes = StudentEnrollment.objects.filter(student__user=user).values_list("school_class_id", flat=True) 
+            return queryset.filter(id__in=student_classes)
     
     # GET CLASS STUDENTS (WITH BEHAVIOUR STATUS)
     @action(detail=True, methods=["get"], url_path="students")
