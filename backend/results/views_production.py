@@ -1,9 +1,13 @@
 from decimal import Decimal
 
+from django.core.files.base import ContentFile
+
 import csv
 from django.db.models import Count, F, Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+
+from .utils.signature import process_signature
 from .utils.services.approve_workflow import approve_workflow
 from .utils.services.engine import ResultEngine
 
@@ -161,84 +165,468 @@ class SchoolDaysViewSet(viewsets.ModelViewSet):
 # ============================================================================
 # 4. CLASS TEACHER SIGNATURE VIEWSET
 # ============================================================================
-class ClassTeacherSignatureViewSet(viewsets.ModelViewSet):
-    queryset = ClassTeacherSignature.objects.select_related("teacher", "school_class").all()
-    serializer_class = ClassTeacherSignatureSerializer
-    permission_classes = [IsTeacherOrAdmin]
 
+class ClassTeacherSignatureViewSet(viewsets.ModelViewSet):
+
+    queryset = (
+        ClassTeacherSignature.objects
+        .select_related(
+            "teacher",
+            "school_class",
+        )
+        .all()
+    )
+
+    serializer_class = ClassTeacherSignatureSerializer
+
+    permission_classes = [
+        IsTeacherOrAdmin
+    ]
+
+    parser_classes = [
+        MultiPartParser,
+        FormParser,
+    ]
+
+    # ==========================================================
+    # CREATE
+    # ==========================================================
     @transaction.atomic
     def create(self, request, *args, **kwargs):
+
         teacher_id = request.data.get("teacher")
         signature_file = request.FILES.get("signature")
+        is_active = request.data.get("is_active")
 
+        # ------------------------------------------------------
+        # Validate teacher
+        # ------------------------------------------------------
         if not teacher_id:
-            return Response({"detail": "teacher is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        class_ids = list(Class.objects.filter(class_teacher_id=teacher_id).values_list("id", flat=True))
-
-        if not class_ids:
             return Response(
-                {"detail": "This teacher is not assigned to any class."},
+                {
+                    "detail": "teacher is required."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        signatures_to_create = [
-            ClassTeacherSignature(
-                teacher_id=teacher_id,
-                school_class_id=c_id,
-                signature=signature_file,
-                is_active=True
-            ) for c_id in class_ids
-        ]
+        # ------------------------------------------------------
+        # Validate signature
+        # ------------------------------------------------------
+        if not signature_file:
+            return Response(
+                {
+                    "detail": "signature file is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Bulk creation avoids loop iteration DRF save overhead
-        ClassTeacherSignature.objects.filter(school_class_id__in=class_ids, is_active=True).update(is_active=False)
-        created_objs = ClassTeacherSignature.objects.bulk_create(signatures_to_create)
+        # ------------------------------------------------------
+        # Get teacher's assigned classes
+        # ------------------------------------------------------
+        classes = list(
+            Class.objects.filter(
+                class_teacher_id=teacher_id
+            )
+        )
 
-        serializer = self.get_serializer(created_objs, many=True)
+        if not classes:
+            return Response(
+                {
+                    "detail": (
+                        "This teacher is not assigned "
+                        "to any class."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ------------------------------------------------------
+        # Process signature ONCE
+        # ------------------------------------------------------
+        processed_signature = process_signature(
+            signature_file
+        )
+
+        # ------------------------------------------------------
+        # Read processed image into memory.
+        #
+        # We need independent ContentFile objects because
+        # the same uploaded file should not be reused directly
+        # across multiple ImageField saves.
+        # ------------------------------------------------------
+        processed_bytes = processed_signature.read()
+
+        original_name = processed_signature.name
+
+        # ------------------------------------------------------
+        # Create/update ONE signature per class
+        # ------------------------------------------------------
+        results = []
+
+        for school_class in classes:
+
+
+            signature_file_copy = ContentFile(
+                processed_bytes,
+                name=original_name,
+            )
+
+            signature, created = (
+                ClassTeacherSignature.objects.update_or_create(
+                    school_class=school_class,
+                    defaults={
+                        "teacher_id": teacher_id,
+                        "is_active": True
+                    },
+                )
+            )
+
+            # Replace the actual image.
+            #
+            # save=False prevents an unnecessary intermediate
+            # database save.
+            signature.signature.save(
+                original_name,
+                signature_file_copy,
+                save=False,
+            )
+
+            signature.teacher_id = teacher_id
+            signature.save()
+
+            results.append(signature)
+
+        # ------------------------------------------------------
+        # Serialize
+        # ------------------------------------------------------
+        serializer = self.get_serializer(
+            results,
+            many=True,
+        )
+
         return Response(
             {
-                "message": f"Signature applied to {len(created_objs)} class(es).",
-                "count": len(created_objs),
+                "message": (
+                    f"Signature applied to "
+                    f"{len(results)} class(es)."
+                ),
+                "count": len(results),
                 "results": serializer.data,
             },
             status=status.HTTP_201_CREATED,
         )
 
+    # ==========================================================
+    # UPDATE
+    #
+    # Replace the teacher's signature across ALL classes
+    # currently assigned to that teacher.
+    # ==========================================================
     @transaction.atomic
     def update(self, request, *args, **kwargs):
+
         instance = self.get_object()
-        teacher_id = instance.teacher_id
-        signature_file = request.FILES.get("signature")
 
-        class_ids = Class.objects.filter(class_teacher_id=teacher_id).values_list("id", flat=True)
+        teacher = instance.teacher
 
-        for school_class_id in class_ids:
-            ClassTeacherSignature.objects.update_or_create(
-                teacher_id=teacher_id,
-                school_class_id=school_class_id,
-                defaults={"signature": signature_file, "is_active": True} if signature_file else {}
+        signature_file = request.FILES.get(
+            "signature"
+        )
+
+        # ------------------------------------------------------
+        # Get current classes for this teacher
+        # ------------------------------------------------------
+        classes = list(
+            Class.objects.filter(
+                class_teacher=teacher
+            )
+        )
+
+        if not classes:
+            return Response(
+                {
+                    "detail": (
+                        "This teacher is not assigned "
+                        "to any class."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        return Response({"message": "Teacher signatures updated across all assigned classes."}, status=status.HTTP_200_OK)
+        # ------------------------------------------------------
+        # A new signature MUST be supplied when replacing
+        # ------------------------------------------------------
+        if not signature_file:
+            return Response(
+                {
+                    "detail": (
+                        "A new signature file is required "
+                        "when updating the signature."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    @transaction.atomic
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        deleted_count, _ = ClassTeacherSignature.objects.filter(teacher_id=instance.teacher_id).delete()
+        # ------------------------------------------------------
+        # Process signature
+        # ------------------------------------------------------
+        processed_signature = process_signature(
+            signature_file
+        )
+
+        processed_bytes = processed_signature.read()
+
+        original_name = processed_signature.name
+
+        # ------------------------------------------------------
+        # Apply processed signature to every class
+        # ------------------------------------------------------
+        results = []
+
+        from django.core.files.base import ContentFile
+
+        for school_class in classes:
+
+            signature_file_copy = ContentFile(
+                processed_bytes,
+                name=original_name,
+            )
+
+            signature, created = (
+                ClassTeacherSignature.objects.update_or_create(
+                    school_class=school_class,
+                    defaults={
+                        "teacher": teacher,
+                    },
+                )
+            )
+
+            # Replace image
+            signature.signature.save(
+                original_name,
+                signature_file_copy,
+                save=False,
+            )
+
+            signature.teacher = teacher
+
+            signature.save()
+
+            results.append(signature)
+
+        # ------------------------------------------------------
+        # Response
+        # ------------------------------------------------------
+        serializer = self.get_serializer(
+            results,
+            many=True,
+        )
 
         return Response(
-            {"detail": f"{deleted_count} signature(s) deleted successfully."},
+            {
+                "message": (
+                    "Teacher signature updated across "
+                    "all assigned classes."
+                ),
+                "count": len(results),
+                "results": serializer.data,
+            },
             status=status.HTTP_200_OK,
         )
 
-# ============================================================================
+    # ==========================================================
+    # PARTIAL UPDATE
+    #
+    # Treat PATCH the same way as PUT for signature replacement.
+    # ==========================================================
+    def partial_update(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+        return self.update(
+            request,
+            *args,
+            **kwargs,
+        )
+
+    # ==========================================================
+    # DELETE
+    #
+    # Delete all signature records belonging to the teacher.
+    # ==========================================================
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+
+        instance = self.get_object()
+
+        teacher = instance.teacher
+
+        deleted_count, _ = (
+            ClassTeacherSignature.objects
+            .filter(
+                teacher=teacher
+            )
+            .delete()
+        )
+
+        return Response(
+            {
+                "detail": (
+                    f"{deleted_count} signature(s) "
+                    "deleted successfully."
+                )
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # ==========================================================
+    # ACTIVATE
+    #
+    # Since we now have ONLY ONE signature per class,
+    # "activate" simply means:
+    #
+    # Take the selected signature image and propagate it
+    # to every class currently belonging to its teacher.
+    #
+    # There is NO is_active anymore.
+    # ==========================================================
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="activate",
+    )
+    @transaction.atomic
+    def activate(
+        self,
+        request,
+        pk=None,
+    ):
+
+        # ------------------------------------------------------
+        # 1. Get selected signature
+        # ------------------------------------------------------
+        selected_signature = self.get_object()
+
+        teacher = selected_signature.teacher
+
+        # ------------------------------------------------------
+        # 2. Get all classes belonging to this teacher
+        # ------------------------------------------------------
+        classes = list(
+            Class.objects.filter(
+                class_teacher=teacher
+            )
+        )
+
+        if not classes:
+            return Response(
+                {
+                    "detail": (
+                        "This teacher is not assigned "
+                        "to any class."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ------------------------------------------------------
+        # 3. Read the selected signature file
+        # ------------------------------------------------------
+        if not selected_signature.signature:
+            return Response(
+                {
+                    "detail": (
+                        "The selected signature does not "
+                        "have an image."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        selected_signature.signature.open(
+            "rb"
+        )
+
+        signature_bytes = (
+            selected_signature.signature.read()
+        )
+
+        selected_signature.signature.close()
+
+        original_name = (
+            selected_signature.signature.name
+            .split("/")[-1]
+        )
+
+        # ------------------------------------------------------
+        # 4. Propagate signature to every class
+        # ------------------------------------------------------
+
+        updated_signatures = []
+
+        for school_class in classes:
+
+            signature_file = ContentFile(
+                signature_bytes,
+                name=original_name,
+            )
+
+            signature, created = (
+                ClassTeacherSignature.objects.update_or_create(
+                    school_class=school_class,
+                    defaults={
+                        "teacher": teacher,
+                    },
+                )
+            )
+
+            # Replace image
+            signature.signature.save(
+                original_name,
+                signature_file,
+                save=False,
+            )
+
+            signature.teacher = teacher
+
+            signature.save()
+
+            updated_signatures.append(
+                signature
+            )
+
+        # ------------------------------------------------------
+        # 5. Return updated signatures
+        # ------------------------------------------------------
+        serializer = self.get_serializer(
+            updated_signatures,
+            many=True,
+        )
+
+        return Response(
+            {
+                "message": (
+                    f"Signature activated across "
+                    f"{len(updated_signatures)} class(es)."
+                ),
+                "count": len(updated_signatures),
+                "results": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 # 5. HEAD TEACHER SIGNATURE VIEWSET
 # ============================================================================
 class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
     queryset = HeadTeacherSignature.objects.all()
     serializer_class = HeadTeacherSignatureSerializer
     permission_classes = [IsAdminUser]
+    parser_classes = [
+    MultiPartParser,
+    FormParser,
+    ]
 
     @transaction.atomic
     def perform_create(self, serializer):

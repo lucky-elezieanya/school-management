@@ -473,28 +473,25 @@ class ClassTeacherSignature(models.Model):
         related_name="signatures",
     )
 
-    school_class = models.ForeignKey(
+    school_class = models.OneToOneField(
         "academics.Class",
         on_delete=models.CASCADE,
-        related_name="teacher_signatures",
+        related_name="teacher_signature",
     )
 
     signature = models.ImageField(
         upload_to="signatures/class_teachers/",
     )
 
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+    
     is_active = models.BooleanField(default=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["school_class"],
-                condition=Q(is_active=True),
-                name="one_active_signature_per_class",
-            )
-        ]
 
     def __str__(self):
         return f"{self.teacher} - {self.school_class}"

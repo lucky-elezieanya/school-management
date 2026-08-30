@@ -1,5 +1,4 @@
 
-from results.models import Behaviour
 from rest_framework import serializers
 from .models import Arms, Class, PromotionBatch, PromotionRecord, PromotionRule, SchoolAsset, StudentEnrollment, StudentImport, Teacher, Student, Subject, ClassSubject, Term, AcademicSession
 from django.contrib.auth import get_user_model
@@ -8,7 +7,7 @@ from rest_framework.validators import UniqueTogetherValidator
 from django.db import transaction
 
 User = get_user_model()
-
+   
 class SchoolAssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolAsset
@@ -349,14 +348,14 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     gender = serializers.CharField(write_only=True)
     date_of_birth = serializers.DateField(write_only=True, required=False)
+    date_employed = serializers.DateField(write_only=True, required=False)
     profile_picture = serializers.ImageField(write_only=True, required=False, allow_null=True)
 
-    # Multi-class assignment
     assigned_classes = serializers.PrimaryKeyRelatedField(
-        queryset=Class.objects.all(),
-        write_only=True,
-        required=False,
-        many=True
+    queryset=Class.objects.all(),
+    many=True,
+    write_only=True,
+    required=False,
     )
 
     class Meta:
@@ -381,10 +380,13 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             # classes
             "assigned_classes",
         ]
-
+ 
     def create(self, validated_data):
-        assigned_classes = validated_data.pop("assigned_classes", [])
-
+        # Get actual Class objects
+        assigned_classes = validated_data.pop(
+            "assigned_classes",
+            []
+        )
         # Extract user fields
         user_data = {
             "first_name": validated_data.pop("first_name"),
@@ -411,11 +413,10 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
 
-        # Assign classes (ManyToMany)
         if assigned_classes:
             teacher.assigned_classes.set(assigned_classes)
 
-        return teacher# TEACHER UPDATE SERIALIZER
+        return teacher # TEACHER UPDATE SERIALIZER
 
 class TeacherUpdateSerializer(serializers.ModelSerializer):
     # Allow passing an array of Class IDs
@@ -470,12 +471,15 @@ class TeacherUpdateSerializer(serializers.ModelSerializer):
                 setattr(user, attr, value)
             user.save()
 
-        # Update ManyToMany assigned_classes relationship
+        # Update assigned_classes (Class.class_teacher relationship)
         if assigned_classes is not None:
             # Check user permission to ensure non-admins cannot change assigned classes
             request = self.context.get("request")
             if request and (request.user.is_staff or request.user.is_superuser or request.user.role == "admin"):
-                instance.assigned_classes.set(assigned_classes)
+                # Remove this teacher from previously assigned classes
+                Class.objects.filter(class_teacher=instance).update(class_teacher=None)
+                # Assign to new classes
+                Class.objects.filter(id__in=[c.id for c in assigned_classes]).update(class_teacher=instance)
 
         return instance
 

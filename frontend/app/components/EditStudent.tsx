@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { updateAction as updateStudent, apiAction } from "@/app/lib/api";
+import { updateAction as updateStudent, apiAction, apiHeaders, BASE_URL } from "@/app/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClassType, StudentFormDataType, StudentType } from "@/app/lib/types";
@@ -90,15 +90,13 @@ export default function EditStudent({ studentId }: { studentId: number }) {
       }
     });
     try {
-      const res = await updateStudent(
-        "academics",
-        "students",
-        studentId,
-        payload,
-        "PUT",
-      );
+      const res  = await fetch(`${BASE_URL}/academics/students/${studentId}/`, {
+		method: "PUT",
+		headers: apiHeaders(),
+		body: payload,
+	})
 
-      if (res) {
+      if (res.ok) {
         alert("Student updated successfully");
         router.push(`/admin/administration/students/${studentId}`);
       }

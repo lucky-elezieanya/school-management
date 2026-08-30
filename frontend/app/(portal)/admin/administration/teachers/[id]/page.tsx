@@ -101,7 +101,7 @@ export default function Teacher() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="flex items-center gap-4">
             <Link
-              href="/teachers"
+              href="/admin/administration/teachers"
               className="bg-white/10 hover:bg-white/20 transition p-3 rounded-xl"
             >
               <ArrowLeft size={22} />
@@ -120,7 +120,9 @@ export default function Teacher() {
 
           <div className="flex gap-3">
             <button
-              onClick={() => router.push(`/admin/administration/teachers/${teacherId}/edit`)}
+              onClick={() =>
+                router.push(`/admin/administration/teachers/${teacherId}/edit`)
+              }
               className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 transition px-5 py-3 rounded-xl font-medium shadow"
             >
               <Pencil size={18} />
@@ -210,7 +212,6 @@ export default function Teacher() {
                 </div>
               </div>
             </div>
-
           </div>
 
           {/* MAIN CONTENT */}
@@ -301,8 +302,6 @@ export default function Teacher() {
                 </div>
               </div>
             </div>
-
-        
           </div>
         </div>
       </div>

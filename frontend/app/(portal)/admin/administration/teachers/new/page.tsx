@@ -26,7 +26,7 @@ export default function NewteacherPage() {
     qualification: "",
     address: "",
     phone_number: "",
-    date_employed: "",
+    date_employed: new Date().toISOString().split("T")[0],
     assigned_classes: [] as (number | string)[],
     email: "",
   });
@@ -76,10 +76,14 @@ export default function NewteacherPage() {
     setLoading(true);
 
     try {
-      const payload = { ...formData };
+      const payload = {
+        ...formData,
+        assigned_classes: formData.assigned_classes || [],
+      };
       if (!payload.profile_picture) {
         delete (payload as any).profile_picture;
       }
+
 
       const res = await createAction("academics", "teachers", payload);
 

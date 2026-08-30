@@ -275,7 +275,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         return StudentSerializer
 
     def get_permissions(self):
-        if self.action in ["create", "destroy"]:
+        if self.action in ["create", "destroy", "update", "partial_update"]:
             return [IsTeacherOrAdmin()]
         return [IsAuthenticated()]
 
@@ -863,9 +863,9 @@ class TeacherViewSet(viewsets.ModelViewSet):
             if student and student.current_class and student.current_class.class_teacher_id:
                 return queryset.filter(pk=student.current_class.class_teacher_id)
 
-            return Teacher.objects.none()
+            return Teacher.queryset.none()
 
-        return Teacher.objects.none()
+        return Teacher.queryset.none()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -873,6 +873,47 @@ class TeacherViewSet(viewsets.ModelViewSet):
         elif self.action in ["update", "partial_update"]:
             return TeacherUpdateSerializer
         return TeacherSerializer
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+
+        if "assigned_classes" in request.data:
+            if hasattr(request.data, "getlist"):
+                assigned_classes = request.data.getlist(
+                    "assigned_classes"
+                )
+
+                # Remove empty values
+                assigned_classes = [
+                    class_id
+                    for class_id in assigned_classes
+                    if str(class_id).strip()
+                ]
+
+                data.setlist(
+                    "assigned_classes",
+                    assigned_classes
+                )
+
+        serializer = self.get_serializer(
+            data=data
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        self.perform_create(serializer)
+
+        headers = self.get_success_headers(
+            serializer.data
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)

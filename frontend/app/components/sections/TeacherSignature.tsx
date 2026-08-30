@@ -1,5 +1,5 @@
 "use client";
-
+import { toast } from "sonner";
 import TeacherSignatureUploadComponent from "@/app/components/sections/TeacherSignatureUploadComponent";
 import { apiAction, fetchClasses, handleUserDelete } from "@/app/lib/api";
 import { ClassType } from "@/app/lib/types";
@@ -11,6 +11,8 @@ export default function TeacherSignaturePage() {
   const [selectedClass, setSelectedClass] = useState<number | null>(null);
   const [classTeacherId, setClassTeacherId] = useState<number | null>(null);
   const [teacherSignature, setTeacherSignature] = useState<any[]>([]);
+  const [activatingId, setActivatingId] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -49,14 +51,45 @@ export default function TeacherSignaturePage() {
       );
 
       if (deleted) {
-        alert(`Signature deleted successfully, kindly reupload`)
+        alert(`Signature deleted successfully, kindly reupload`);
         setTeacherSignature([]);
-        return
+        return;
       }
     } catch (err) {
       console.error("Delete failed:", err);
     }
   };
+
+  async function handleActivate(id: number) {
+    if (!selectedClass) {
+      toast.error("Please select a class first.");
+      return;
+    }
+
+    try {
+      setActivatingId(id);
+
+      await apiAction(
+        "results",
+        `teacher-signatures/${id}/activate`,
+        undefined,
+        "POST",
+      );
+
+      toast.success(
+        "Signature activated for all classes assigned to this teacher.",
+      );
+
+      // Reload signatures for the currently selected class
+      await getTeacherSignature(selectedClass);
+    } catch (error: any) {
+      console.error("Failed to activate signature:", error);
+
+      toast.error(error?.message || "Failed to activate signature.");
+    } finally {
+      setActivatingId(null);
+    }
+  }
 
   useEffect(() => {
     getClasses();
@@ -136,13 +169,47 @@ export default function TeacherSignaturePage() {
 
                   {/* ACTIVE BADGE */}
                   {sig.is_active ? (
-                    <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-600" />
                       Active
                     </span>
                   ) : (
-                    <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-                      Inactive
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
+                        Inactive
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => handleActivate(sig.id)}
+                        disabled={activatingId === sig.id}
+                        className="
+                        inline-flex
+                        items-center
+                        justify-center
+                        rounded-md
+                        bg-green-700
+                        px-3
+                        py-1.5
+                        text-xs
+                        font-medium
+                        text-white
+                        shadow-sm
+                        transition
+                        hover:bg-green-800
+                        focus:outline-none
+                        focus:ring-2
+                        focus:ring-green-500
+                        focus:ring-offset-1
+                        disabled:cursor-not-allowed
+                        disabled:opacity-60
+                      "
+                      >
+                        {activatingId === sig.id
+                          ? "Activating..."
+                          : "Make active"}
+                      </button>
+                    </div>
                   )}
                 </div>
 
