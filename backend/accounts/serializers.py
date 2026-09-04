@@ -7,7 +7,6 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
-    # profile_picture = serializers.SerializerMethodField()
 
     password = serializers.CharField(
         write_only=True,

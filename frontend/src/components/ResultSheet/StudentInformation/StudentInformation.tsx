@@ -29,7 +29,7 @@ export default function StudentInformation({ snapshot }: Props) {
           <td
             rowSpan={7}
             className="  border-[0.5px]
-        border-gray-400
+            border-gray-400
         "
           >
             <SchoolLogo logo={assets.logo} fallback={"/logo.png"} />
@@ -38,8 +38,8 @@ export default function StudentInformation({ snapshot }: Props) {
           <td
             colSpan={4}
             className="  border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+            border-gray-400
+            px-2 py-1"
           >
             <StudentMetric label="Name:" value={student.fullName} />
           </td>
@@ -47,11 +47,13 @@ export default function StudentInformation({ snapshot }: Props) {
           <td
             rowSpan={7}
             className="  border-[0.5px]
-        border-gray-400
+            border-gray-400
        "
           >
             <StudentPhoto
-              image={student?.profilePicture? student.profilePicture : "/avatar.png"}
+              image={
+                student?.profilePicture ? student.profilePicture : "/avatar.png"
+              }
               gender={student.gender}
               fallback={"/avatar.png"}
             />

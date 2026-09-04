@@ -246,21 +246,23 @@ export default function AdminViewResults() {
     }
   };
 
-  const downloadClassCsv = async () => {
+const downloadClassCsv = async () => {
     if (!selectedClass || !termId || !sessionId) return;
-
+  
     try {
       setDownloading("csv");
       const url = `${BASE_URL}/results/results/class-broadsheet-csv/?class_id=${selectedClass.id}&term_id=${termId}&session_id=${sessionId}`;
       const res = await fetch(url, { headers: apiHeaders() });
-
+  
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         toast.error(data?.detail || "Unable to download class result sheet.");
+        return; // Stop execution if request fails
       }
-
+  
       const blob = await res.blob();
-      const label = `${selectedClass.name}_${selectedClass.arm?.code || "class"}_${currentTerm?.name || "term"}_results.csv`;
+      // Updated file extension to .xlsx for styled Excel files
+      const label = `${selectedClass.name}_${selectedClass.arm?.code || "class"}_${currentTerm?.name || "term"}_results.xlsx`;
       saveBlob(blob, label.replace(/\s+/g, "_"));
     } catch (err: any) {
       setError(err?.message || "Unable to download class result sheet.");

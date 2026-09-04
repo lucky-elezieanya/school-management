@@ -2,11 +2,13 @@ import os
 import traceback
 from uuid import uuid4
 import pandas as pd
-
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q, Subquery
 from django.utils.dateparse import parse_date
+
+from .services.student_history import create_student_history
 
 from .tasks import import_students_task
 from rest_framework import filters, status, viewsets
@@ -34,6 +36,7 @@ from .models import (
     SchoolAsset,
     Student,
     StudentEnrollment,
+    StudentHistory,
     StudentImport,
     Subject,
     Teacher,
@@ -53,6 +56,7 @@ from .serializers import (
     SessionTermSerializer,
     StudentCreateSerializer,
     StudentEnrollmentSerializer,
+    StudentHistorySerializer,
     StudentImportSerializer,
     StudentSerializer,
     StudentUpdateSerializer,
@@ -1288,82 +1292,329 @@ class StudentEnrollmentViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )   
     
-
     @action(detail=False, methods=["post"], url_path="bulk-enroll")
     @transaction.atomic
     def bulk_enroll(self, request):
+
         session_id = request.data.get("session_id")
         school_class_id = request.data.get("school_class_id")
-        is_current = bool(request.data.get("is_current", True))
+        is_current = request.data.get("is_current", True)
         student_ids = request.data.get("student_ids", [])
 
+        # ==========================================================
+        # VALIDATE INPUT
+        # ==========================================================
+
         if not student_ids or not session_id or not school_class_id:
-            return Response({"detail": "Missing parameters"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "detail": (
+                        "session_id, school_class_id and "
+                        "student_ids are required."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
+        # Convert string input:
+        # "1,2,3" -> [1, 2, 3]
         if isinstance(student_ids, str):
-            student_ids = [int(x) for x in student_ids.split(",") if x.strip().isdigit()]
+            student_ids = [
+                int(x)
+                for x in student_ids.split(",")
+                if x.strip().isdigit()
+            ]
 
+        # Remove duplicates
         student_ids = list(set(student_ids))
 
-        session = AcademicSession.objects.filter(id=session_id).first()
-        school_class = Class.objects.select_related("arm").filter(id=school_class_id).first()
+        if not student_ids:
+            return Response(
+                {"detail": "No valid student IDs provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        if not session or not school_class:
-            return Response({"detail": "Session or Class not found"}, status=status.HTTP_404_NOT_FOUND)
+        # ==========================================================
+        # GET SESSION + CLASS
+        # ==========================================================
 
-        # Vectorized database operations (Replaces N+1 iteration completely)
-        existing_enrollments = {
-            e.student_id: e
-            for e in StudentEnrollment.objects.filter(student_id__in=student_ids, session_id=session_id)
-        }
-
-        to_create, to_update = [], []
-        created_count, reactivated_count, moved_count, skipped_count = 0, 0, 0, 0
-
-        for student_id in student_ids:
-            enrollment = existing_enrollments.get(student_id)
-            if not enrollment:
-                to_create.append(StudentEnrollment(
-                    student_id=student_id, session_id=session_id,
-                    school_class_id=school_class_id, is_current=is_current
-                ))
-                created_count += 1
-            elif enrollment.school_class_id == school_class_id and enrollment.is_current == is_current:
-                skipped_count += 1
-            else:
-                if not enrollment.is_current and is_current:
-                    reactivated_count += 1
-                elif enrollment.school_class_id != school_class_id:
-                    moved_count += 1
-                enrollment.school_class_id = school_class_id
-                enrollment.is_current = is_current
-                to_update.append(enrollment)
-
-        if is_current:
-            # Batch update all existing currents to False across other sessions
-            StudentEnrollment.objects.filter(student_id__in=student_ids, is_current=True).exclude(session_id=session_id).update(is_current=False)
-            Student.objects.filter(id__in=student_ids, is_active=False).update(is_active=True)
-
-        if to_create:
-            StudentEnrollment.objects.bulk_create(to_create)
-        if to_update:
-            StudentEnrollment.objects.bulk_update(to_update, ["school_class", "is_current"])
-
-        current_enrollments_qs = StudentEnrollment.objects.select_related("school_class", "school_class__arm", "session").filter(is_current=True)
-        enrolled_students = Student.objects.filter(id__in=student_ids).select_related("user").prefetch_related(
-            Prefetch("enrollments", queryset=current_enrollments_qs, to_attr="prefetched_current_enrollment")
+        session = (
+            AcademicSession.objects
+            .filter(id=session_id)
+            .first()
         )
 
-        return Response({
-            "created": created_count,
-            "reactivated": reactivated_count,
-            "moved": moved_count,
-            "skipped": skipped_count,
-            "total_processed": created_count + reactivated_count + moved_count,
-            "class": ClassSerializer(school_class, context={"request": request}).data,
-            "session": AcademicSessionSerializer(session, context={"request": request}).data,
-            "students": StudentSerializer(enrolled_students, many=True, context={"request": request}).data,
-        }, status=status.HTTP_201_CREATED)
+        school_class = (
+            Class.objects
+            .select_related("arm")
+            .filter(id=school_class_id)
+            .first()
+        )
+
+        if not session:
+            return Response(
+                {"detail": "Academic session not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not school_class:
+            return Response(
+                {"detail": "Class not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ==========================================================
+        # VERIFY STUDENTS EXIST
+        # ==========================================================
+
+        students = {
+            student.id: student
+            for student in Student.objects
+            .select_related("user")
+            .filter(id__in=student_ids)
+        }
+
+        missing_students = [
+            student_id
+            for student_id in student_ids
+            if student_id not in students
+        ]
+
+        if missing_students:
+            return Response(
+                {
+                    "detail": "Some students do not exist.",
+                    "missing_student_ids": missing_students,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ==========================================================
+        # LOCK ENROLLMENTS
+        #
+        # Prevent concurrent enrollment operations from modifying
+        # the same student's records at the same time.
+        # ==========================================================
+
+        existing_enrollments = {
+            enrollment.student_id: enrollment
+            for enrollment in (
+                StudentEnrollment.objects
+                .select_for_update()
+                .filter(
+                    student_id__in=student_ids,
+                    session_id=session_id,
+                )
+            )
+        }
+
+        # ==========================================================
+        # RESULT COLLECTIONS
+        # ==========================================================
+
+        created = []
+        skipped = []
+        conflicts = []
+
+        # ==========================================================
+        # PROCESS EACH STUDENT
+        # ==========================================================
+
+        for student_id in student_ids:
+
+            existing = existing_enrollments.get(student_id)
+
+            # ------------------------------------------------------
+            # CASE 1:
+            # Student has NO enrollment for this session.
+            # ------------------------------------------------------
+
+            if existing is None:
+
+                enrollment = StudentEnrollment.objects.create(
+                    student_id=student_id,
+                    session_id=session_id,
+                    school_class_id=school_class_id,
+                    is_current=is_current,
+                )
+
+                # --------------------------------------------------
+                # CREATE IMMUTABLE HISTORY
+                # --------------------------------------------------
+
+                create_student_history(
+                    enrollment=enrollment,
+                    status="ENROLLED",
+                )
+
+                created.append({
+                    "student_id": student_id,
+                    "enrollment_id": enrollment.id,
+                })
+
+                continue
+
+            # ------------------------------------------------------
+            # CASE 2:
+            # Enrollment already exists for this session and class.
+            # ------------------------------------------------------
+
+            if existing.school_class_id == school_class_id:
+
+                # If it is already in the requested state,
+                # nothing needs to happen.
+
+                if existing.is_current == is_current:
+
+                    skipped.append({
+                        "student_id": student_id,
+                        "reason": "Already enrolled in this class.",
+                    })
+
+                    continue
+
+                # --------------------------------------------------
+                # Same session + same class, but current state differs.
+                #
+                # This is NOT a new academic placement.
+                # We can safely change current status.
+                # --------------------------------------------------
+
+                existing.is_current = is_current
+                existing.save(update_fields=["is_current"])
+
+                if is_current:
+                    Student.objects.filter(
+                        id=student_id,
+                        is_active=False,
+                    ).update(is_active=True)
+
+                skipped.append({
+                    "student_id": student_id,
+                    "reason": "Enrollment status updated.",
+                })
+
+                continue
+
+            # ------------------------------------------------------
+            # CASE 3:
+            # Enrollment exists for this session but different class.
+            #
+            # DO NOT silently move the student.
+            # ------------------------------------------------------
+
+            conflicts.append({
+                "student_id": student_id,
+                "existing_enrollment_id": existing.id,
+                "existing_class_id": existing.school_class_id,
+                "requested_class_id": school_class_id,
+                "reason": (
+                    "Student already has an enrollment for this "
+                    "academic session in another class. "
+                    "Use the dedicated transfer/reassignment flow."
+                ),
+            })
+
+        # ==========================================================
+        # HANDLE CURRENT ENROLLMENTS
+        # ==========================================================
+        #
+        # Only students that were actually newly enrolled into the
+        # requested class should become current here.
+        #
+        # IMPORTANT:
+        # The new enrollment has already been created above.
+        # We now deactivate current enrollments from OTHER sessions.
+        # ==========================================================
+
+        if is_current and created:
+
+            created_student_ids = [
+                item["student_id"]
+                for item in created
+            ]
+
+            StudentEnrollment.objects.filter(
+                student_id__in=created_student_ids,
+                is_current=True,
+            ).exclude(
+                session_id=session_id
+            ).update(
+                is_current=False
+            )
+
+            Student.objects.filter(
+                id__in=created_student_ids,
+                is_active=False,
+            ).update(
+                is_active=True
+            )
+
+        # ==========================================================
+        # REFRESH STUDENTS FOR RESPONSE
+        # ==========================================================
+
+        current_enrollments_qs = (
+            StudentEnrollment.objects
+            .select_related(
+                "school_class",
+                "school_class__arm",
+                "session",
+            )
+            .filter(is_current=True)
+        )
+
+        enrolled_students = (
+            Student.objects
+            .filter(id__in=student_ids)
+            .select_related("user")
+            .prefetch_related(
+                Prefetch(
+                    "enrollments",
+                    queryset=current_enrollments_qs,
+                    to_attr="prefetched_current_enrollment",
+                )
+            )
+        )
+
+        # ==========================================================
+        # RESPONSE
+        # ==========================================================
+
+        return Response(
+            {
+                "message": "Bulk enrollment processed successfully.",
+
+                "created_count": len(created),
+
+                "skipped_count": len(skipped),
+
+                "conflict_count": len(conflicts),
+
+                "created": created,
+
+                "skipped": skipped,
+
+                "conflicts": conflicts,
+
+                "class": ClassSerializer(
+                    school_class,
+                    context={"request": request},
+                ).data,
+
+                "session": AcademicSessionSerializer(
+                    session,
+                    context={"request": request},
+                ).data,
+
+                "students": StudentSerializer(
+                    enrolled_students,
+                    many=True,
+                    context={"request": request},
+                ).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 class StudentFileUploadView(APIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -1427,311 +1678,1073 @@ class StudentFileUploadView(APIView):
             status=status.HTTP_200_OK,
         )
 
-# ==========================================
+# ============================================================
 # PROMOTION RECORD VIEWSET
-# ==========================================
+# ============================================================
+
 class PromotionRecordViewSet(viewsets.ModelViewSet):
-    queryset = PromotionRecord.objects.select_related(
-        "student",
-        "student__user",
-        "from_class",
-        "to_class",
-        "batch"
+    queryset = (
+        PromotionRecord.objects
+        .select_related(
+            "student",
+            "student__user",
+            "from_class",
+            "from_class__arm",
+            "to_class",
+            "to_class__arm",
+            "batch",
+            "batch__from_session",
+            "batch__to_session",
+        )
+        .order_by("-id")
     )
+
     serializer_class = PromotionRecordSerializer
     permission_classes = [IsAdminUser]
 
-# ==========================================
+
+# ============================================================
 # PROMOTION RULE VIEWSET
-# ==========================================
+# ============================================================
+
 class PromotionRuleViewSet(viewsets.ModelViewSet):
-    queryset = PromotionRule.objects.select_related(
-        "from_class",
-        "from_class__arm",
-        "to_class",
-        "to_class__arm"
+    queryset = (
+        PromotionRule.objects
+        .select_related(
+            "from_class",
+            "from_class__arm",
+            "to_class",
+            "to_class__arm",
+        )
+        .order_by("from_class__name")
     )
+
     serializer_class = PromotionRuleSerializer
     permission_classes = [IsAdminUser]
 
-# ==========================================
+
+# ============================================================
 # PROMOTION BATCH VIEWSET
-# ==========================================
+# ============================================================
+
 class PromotionBatchViewSet(viewsets.ModelViewSet):
-    queryset = PromotionBatch.objects.select_related(
-        "from_session",
-        "to_session",
-        "promoted_by"
+
+    queryset = (
+        PromotionBatch.objects
+        .select_related(
+            "from_session",
+            "to_session",
+            "promoted_by",
+        )
+        .order_by("-id")
     )
+
     serializer_class = PromotionBatchSerializer
     permission_classes = [IsAdminUser]
 
-    # ==========================================
-    # BATCH EXECUTION (OPTIMIZED O(1) DB QUERIES)
-    # ==========================================
+    # ========================================================
+    # HELPER
+    # ========================================================
+
+    def _get_batch(self, pk, lock=False):
+        """
+        Get the promotion batch.
+
+        When lock=True, select_for_update() prevents two
+        concurrent requests from executing the same batch.
+        """
+
+        queryset = PromotionBatch.objects.select_related(
+            "from_session",
+            "to_session",
+            "promoted_by",
+        )
+
+        if lock:
+            queryset = queryset.select_for_update()
+
+        return get_object_or_404(queryset, pk=pk)
+
+    # ========================================================
+    # EXECUTE PROMOTION
+    # ========================================================
+
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def execute(self, request, pk=None):
-        batch = self.get_object()
+        # --------------------------------------------------------
+        # Lock the promotion batch.
+        # Prevent two admins from executing the same batch
+        # concurrently.
+        # --------------------------------------------------------
+
+        batch = self._get_batch(pk, lock=True)
 
         if batch.completed:
             return Response(
-                {"detail": "Promotion already executed"},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "detail": (
+                        "This promotion batch has already been executed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        enrollments = StudentEnrollment.objects.filter(
-            session=batch.from_session,
-            is_current=True
-        ).select_related("student", "school_class")
+        # --------------------------------------------------------
+        # Get all current source-session enrollments.
+        # --------------------------------------------------------
 
-        # Map active promotion rules: {from_class_id: to_class_id}
-        rules_map = dict(
-            PromotionRule.objects.filter(is_active=True).values_list("from_class_id", "to_class_id")
+        enrollments = list(
+            StudentEnrollment.objects
+            .select_for_update()
+            .filter(
+                session=batch.from_session,
+                is_current=True,
+            )
+            .select_related(
+                "student",
+                "student__user",
+                "school_class",
+                "school_class__arm",
+            )
         )
 
-        records_to_create = []
-        new_enrollments = []
-        promoted_student_ids = []
-        promoted_count, failed_count = 0, 0
+        # --------------------------------------------------------
+        # Get active promotion rules.
+        # --------------------------------------------------------
+
+        rules = (
+            PromotionRule.objects
+            .filter(is_active=True)
+            .values_list(
+                "from_class_id",
+                "to_class_id",
+            )
+        )
+
+        rules_map = dict(rules)
+
+        # --------------------------------------------------------
+        # Pre-flight validation.
+        #
+        # We do this BEFORE changing any enrollment.
+        # --------------------------------------------------------
+
+        students_without_rule = []
+        target_conflicts = []
 
         for enrollment in enrollments:
-            to_class_id = rules_map.get(enrollment.school_class_id)
+
+            to_class_id = rules_map.get(
+                enrollment.school_class_id
+            )
 
             if not to_class_id:
-                records_to_create.append(PromotionRecord(
-                    batch=batch,
-                    student_id=enrollment.student_id,
-                    from_class_id=enrollment.school_class_id,
-                    to_class_id=None,
-                    status="FAILED"
-                ))
-                failed_count += 1
+                students_without_rule.append(
+                    {
+                        "student_id": enrollment.student_id,
+                        "from_class_id": enrollment.school_class_id,
+                    }
+                )
                 continue
 
-            promoted_student_ids.append(enrollment.student_id)
-            new_enrollments.append(StudentEnrollment(
-                student_id=enrollment.student_id,
+            # ----------------------------------------------------
+            # A student can only have one enrollment per session.
+            #
+            # Do not silently overwrite an existing target
+            # enrollment.
+            # ----------------------------------------------------
+
+            existing_target = (
+                StudentEnrollment.objects
+                .filter(
+                    student_id=enrollment.student_id,
+                    session=batch.to_session,
+                )
+                .first()
+            )
+
+            if existing_target:
+                target_conflicts.append(
+                    {
+                        "student_id": enrollment.student_id,
+                        "existing_enrollment_id": existing_target.id,
+                        "existing_class_id": (
+                            existing_target.school_class_id
+                        ),
+                    }
+                )
+
+        # --------------------------------------------------------
+        # Do NOT partially execute a promotion batch.
+        #
+        # If there are students without rules or target conflicts,
+        # stop and let the admin resolve them first.
+        # --------------------------------------------------------
+
+        if students_without_rule or target_conflicts:
+
+            return Response(
+                {
+                    "detail": (
+                        "Promotion batch cannot be executed until "
+                        "all students are resolved."
+                    ),
+                    "students_without_rule": students_without_rule,
+                    "target_conflicts": target_conflicts,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Process promotions.
+        # --------------------------------------------------------
+
+        promoted_count = 0
+
+        for enrollment in enrollments:
+
+            student_id = enrollment.student_id
+            from_class_id = enrollment.school_class_id
+            to_class_id = rules_map[from_class_id]
+
+            # ----------------------------------------------------
+            # Deactivate the student's current enrollment.
+            # ----------------------------------------------------
+
+            enrollment.is_current = False
+            enrollment.save(
+                update_fields=["is_current", "updated_at"]
+            )
+
+            # ----------------------------------------------------
+            # Create target-session enrollment.
+            # ----------------------------------------------------
+
+            target_enrollment = StudentEnrollment.objects.create(
+                student_id=student_id,
                 session=batch.to_session,
                 school_class_id=to_class_id,
-                is_current=True
-            ))
-            records_to_create.append(PromotionRecord(
+                is_current=True,
+            )
+
+            # ----------------------------------------------------
+            # Create promotion record.
+            # ----------------------------------------------------
+
+            PromotionRecord.objects.create(
                 batch=batch,
-                student_id=enrollment.student_id,
-                from_class_id=enrollment.school_class_id,
+                student_id=student_id,
+                from_class_id=from_class_id,
                 to_class_id=to_class_id,
-                status="PROMOTED"
-            ))
+                status="PROMOTED",
+            )
+
+            # ----------------------------------------------------
+            # Create immutable academic history.
+            #
+            # IMPORTANT:
+            # This is the student's history for the TARGET session.
+            # ----------------------------------------------------
+
+            create_student_history(
+                enrollment=target_enrollment,
+                status="PROMOTED",
+            )
+
             promoted_count += 1
 
-        # 1. Deactivate old current enrollments for promoted students
-        if promoted_student_ids:
-            StudentEnrollment.objects.filter(
-                student_id__in=promoted_student_ids,
-                is_current=True
-            ).update(is_current=False)
+        # --------------------------------------------------------
+        # Only mark the batch completed after every student has
+        # been successfully processed.
+        # --------------------------------------------------------
 
-        # 2. Bulk insert new enrollments & logs in bulk
-        if new_enrollments:
-            StudentEnrollment.objects.bulk_create(new_enrollments, ignore_conflicts=True)
-        if records_to_create:
-            PromotionRecord.objects.bulk_create(records_to_create)
-
-        # 3. Mark batch as completed
         batch.completed = True
         batch.save(update_fields=["completed"])
 
-        return Response({
-            "message": "Promotion execution completed",
-            "students_promoted": promoted_count,
-            "students_failed": failed_count
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "message": (
+                    "Promotion execution completed successfully."
+                ),
+                "students_processed": len(enrollments),
+                "students_promoted": promoted_count,
+                "students_failed": 0,
+            },
+            status=status.HTTP_200_OK,
+        )  
+    # ========================================================
+    # PREVIEW
+    # ========================================================
 
-    # ==========================================
-    # PREVIEW (SINGLE GROUP-BY QUERY)
-    # ==========================================
     @action(detail=True, methods=["get"])
     def preview(self, request, pk=None):
+
         batch = self.get_object()
 
-        # Group enrollments by class in 1 single SQL query
+        # ----------------------------------------------------
+        # ONLY current enrollments.
+        # ----------------------------------------------------
+
         class_counts = dict(
-            StudentEnrollment.objects.filter(session=batch.from_session)
-            .values_list("school_class_id")
+            StudentEnrollment.objects
+            .filter(
+                session=batch.from_session,
+                is_current=True,
+            )
+            .values("school_class_id")
             .annotate(total=Count("id"))
+            .values_list("school_class_id", "total")
         )
 
-        rules = PromotionRule.objects.select_related("from_class", "to_class")
+        # ----------------------------------------------------
+        # Active promotion rules only.
+        # ----------------------------------------------------
+
+        rules = (
+            PromotionRule.objects
+            .filter(is_active=True)
+            .select_related(
+                "from_class",
+                "from_class__arm",
+                "to_class",
+                "to_class__arm",
+            )
+        )
+
         preview_data = []
         total_students = 0
+        students_without_rule = 0
+
+        # Track classes which have rules.
+        rule_class_ids = set()
 
         for rule in rules:
-            count = class_counts.get(rule.from_class_id, 0)
+
+            rule_class_ids.add(rule.from_class_id)
+
+            count = class_counts.get(
+                rule.from_class_id,
+                0,
+            )
+
             total_students += count
-            preview_data.append({
-                "from_class": str(rule.from_class),
-                "to_class": str(rule.to_class),
-                "students": count
-            })
 
-        return Response({
-            "total_students": total_students,
-            "promotions": preview_data
-        })
+            preview_data.append(
+                {
+                    "from_class_id": rule.from_class_id,
+                    "from_class": str(rule.from_class),
+                    "to_class_id": rule.to_class_id,
+                    "to_class": str(rule.to_class),
+                    "students": count,
+                }
+            )
 
-    # ==========================================
-    # GET BATCH STUDENTS (NO N+1)
-    # ==========================================
+        # ----------------------------------------------------
+        # Find current students whose classes have no rule.
+        # ----------------------------------------------------
+
+        for class_id, count in class_counts.items():
+
+            if class_id not in rule_class_ids:
+                students_without_rule += count
+
+        return Response(
+            {
+                "batch_id": batch.id,
+                "from_session": batch.from_session_id,
+                "to_session": batch.to_session_id,
+                "total_students": total_students,
+                "students_without_rule": students_without_rule,
+                "promotions": preview_data,
+            }
+        )
+
+    # ========================================================
+    # GET BATCH STUDENTS
+    # ========================================================
+
     @action(detail=True, methods=["get"])
     def students(self, request, pk=None):
+
         batch = self.get_object()
 
         data = list(
-            StudentEnrollment.objects.filter(session=batch.from_session)
+            StudentEnrollment.objects
+            .filter(
+                session=batch.from_session,
+                is_current=True,
+            )
             .values(
                 "student_id",
                 "student__user__full_name",
                 "student__user__username",
+                "school_class_id",
                 "school_class__name",
-                "school_class__arm__name"
+                "school_class__arm__name",
+            )
+            .order_by(
+                "school_class__name",
+                "school_class__arm__name",
+                "student__user__full_name",
             )
         )
 
-        formatted_data = [
-            {
-                "student_id": item["student_id"],
-                "name": item["student__user__full_name"] or item["student__user__username"],
-                "current_class": f"{item['school_class__name']} {item['school_class__arm__name'] or ''}".strip(),
-            }
-            for item in data
-        ]
+        formatted_data = []
+
+        for item in data:
+
+            name = (
+                item["student__user__full_name"]
+                or item["student__user__username"]
+            )
+
+            class_name = item["school_class__name"] or ""
+
+            arm_name = item["school_class__arm__name"] or ""
+
+            current_class = (
+                f"{class_name} {arm_name}"
+            ).strip()
+
+            formatted_data.append(
+                {
+                    "student_id": item["student_id"],
+                    "name": name,
+                    "current_class": current_class,
+                    "school_class_id": item["school_class_id"],
+                }
+            )
 
         return Response(formatted_data)
 
-    # ==========================================
-    # REPEAT STUDENT ACTION
-    # ==========================================
+    # ========================================================
+    # REPEAT STUDENT
+    # ========================================================
+
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def repeat_student(self, request, pk=None):
-        batch = self.get_object()
+
+        batch = self._get_batch(pk, lock=True)
+
+        if batch.completed:
+            return Response(
+                {
+                    "detail": (
+                        "This promotion batch has already been executed. "
+                        "Students can no longer be modified."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         student_id = request.data.get("student")
 
         if not student_id:
-            return Response({"detail": "student is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "student is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        enrollment = StudentEnrollment.objects.filter(
+        # --------------------------------------------------------
+        # Prevent duplicate processing.
+        # --------------------------------------------------------
+
+        if PromotionRecord.objects.filter(
+            batch=batch,
             student_id=student_id,
-            session=batch.from_session
-        ).first()
+        ).exists():
+
+            return Response(
+                {
+                    "detail": (
+                        "This student has already been processed "
+                        "in this promotion batch."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Lock the source enrollment.
+        # --------------------------------------------------------
+
+        enrollment = (
+            StudentEnrollment.objects
+            .select_for_update()
+            .select_related(
+                "student",
+                "student__user",
+                "school_class",
+                "school_class__arm",
+            )
+            .filter(
+                student_id=student_id,
+                session=batch.from_session,
+                is_current=True,
+            )
+            .first()
+        )
 
         if not enrollment:
-            return Response({"detail": "Enrollment not found for this session"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {
+                    "detail": (
+                        "Current enrollment not found for "
+                        "this student in the source session."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        # Deactivate current active enrollment
-        StudentEnrollment.objects.filter(student_id=student_id, is_current=True).update(is_current=False)
+        # --------------------------------------------------------
+        # A student cannot have another enrollment in the target
+        # session.
+        # --------------------------------------------------------
 
-        # Create or update target session enrollment
-        StudentEnrollment.objects.update_or_create(
+        if StudentEnrollment.objects.filter(
             student_id=student_id,
             session=batch.to_session,
-            defaults={
-                "school_class_id": enrollment.school_class_id,
-                "is_current": True,
-            }
+        ).exists():
+
+            return Response(
+                {
+                    "detail": (
+                        "This student already has an enrollment "
+                        "in the target session."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Deactivate source/current enrollment.
+        # --------------------------------------------------------
+
+        enrollment.is_current = False
+        enrollment.save(
+            update_fields=["is_current", "updated_at"]
         )
+
+        # --------------------------------------------------------
+        # Create target enrollment in the SAME class.
+        # --------------------------------------------------------
+
+        target_enrollment = StudentEnrollment.objects.create(
+            student_id=student_id,
+            session=batch.to_session,
+            school_class_id=enrollment.school_class_id,
+            is_current=True,
+        )
+
+        # --------------------------------------------------------
+        # Promotion record.
+        # --------------------------------------------------------
 
         PromotionRecord.objects.create(
             batch=batch,
             student_id=student_id,
             from_class_id=enrollment.school_class_id,
             to_class_id=enrollment.school_class_id,
-            status="REPEATED"
+            status="REPEATED",
         )
 
-        return Response({"message": "Student marked as repeater successfully"}, status=status.HTTP_200_OK)
+        # --------------------------------------------------------
+        # Immutable target-session history.
+        # --------------------------------------------------------
 
-    # ==========================================
-    # GRADUATE STUDENT ACTION
-    # ==========================================
+        create_student_history(
+            enrollment=target_enrollment,
+            status="REPEATED",
+        )
+
+        return Response(
+            {
+                "message": (
+                    "Student has been marked as a repeater "
+                    "successfully."
+                )
+            },
+            status=status.HTTP_200_OK,
+        )
+    # ========================================================
+    # GRADUATE STUDENT
+    # ========================================================
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def graduate_student(self, request, pk=None):
-        batch = self.get_object()
+
+        batch = self._get_batch(pk, lock=True)
+
+        if batch.completed:
+            return Response(
+                {
+                    "detail": (
+                        "This promotion batch has already been executed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         student_id = request.data.get("student")
 
         if not student_id:
-            return Response({"detail": "student is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "student is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        enrollment = StudentEnrollment.objects.filter(
+        # --------------------------------------------------------
+        # Prevent duplicate processing.
+        # --------------------------------------------------------
+
+        if PromotionRecord.objects.filter(
+            batch=batch,
             student_id=student_id,
-            session=batch.from_session
-        ).first()
+        ).exists():
+
+            return Response(
+                {
+                    "detail": (
+                        "This student has already been processed "
+                        "in this promotion batch."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Lock source enrollment.
+        # --------------------------------------------------------
+
+        enrollment = (
+            StudentEnrollment.objects
+            .select_for_update()
+            .filter(
+                student_id=student_id,
+                session=batch.from_session,
+                is_current=True,
+            )
+            .first()
+        )
 
         if not enrollment:
-            return Response({"detail": "Enrollment not found for this session"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {
+                    "detail": (
+                        "Current enrollment not found for "
+                        "this student in the source session."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        # Deactivate all active current enrollments
-        StudentEnrollment.objects.filter(student_id=student_id, is_current=True).update(is_current=False)
+        # --------------------------------------------------------
+        # Graduation means the student has no current enrollment
+        # going forward.
+        # --------------------------------------------------------
+
+        StudentEnrollment.objects.filter(
+            student_id=student_id,
+            is_current=True,
+        ).update(
+            is_current=False,
+        )
+
+        # --------------------------------------------------------
+        # Record the graduation outcome.
+        # --------------------------------------------------------
 
         PromotionRecord.objects.create(
             batch=batch,
             student_id=student_id,
             from_class_id=enrollment.school_class_id,
-            to_class=None,
-            status="GRADUATED"
+            to_class_id=None,
+            status="GRADUATED",
         )
 
-        return Response({"message": "Student graduated successfully"}, status=status.HTTP_200_OK)
+        # --------------------------------------------------------
+        # IMPORTANT:
+        #
+        # DO NOT create another StudentHistory row here.
+        #
+        # The source-session history already exists and is
+        # immutable. Graduation is an outcome recorded by
+        # PromotionRecord.
+        # --------------------------------------------------------
 
-    # ==========================================
-    # TRANSFER STUDENT ACTION
-    # ==========================================
+        return Response(
+            {
+                "message": "Student graduated successfully."
+            },
+            status=status.HTTP_200_OK,
+        )
+    # ========================================================
+    # TRANSFER STUDENT
+    # ========================================================
+
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def transfer_student(self, request, pk=None):
-        batch = self.get_object()
+
+        batch = self._get_batch(pk, lock=True)
+
+        if batch.completed:
+            return Response(
+                {
+                    "detail": (
+                        "This promotion batch has already been executed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         student_id = request.data.get("student")
         new_class_id = request.data.get("new_class")
 
         if not student_id or not new_class_id:
             return Response(
-                {"detail": "student and new_class are required"},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "detail": (
+                        "student and new_class are required"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not Class.objects.filter(id=new_class_id).exists():
-            return Response({"detail": "Target class does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        # --------------------------------------------------------
+        # Validate target class.
+        # --------------------------------------------------------
 
-        enrollment = StudentEnrollment.objects.filter(
+        target_class = (
+            Class.objects
+            .select_related("arm")
+            .filter(id=new_class_id)
+            .first()
+        )
+
+        if not target_class:
+            return Response(
+                {
+                    "detail": "Target class does not exist."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # --------------------------------------------------------
+        # Prevent duplicate processing.
+        # --------------------------------------------------------
+
+        if PromotionRecord.objects.filter(
+            batch=batch,
             student_id=student_id,
-            session=batch.from_session
-        ).first()
+        ).exists():
+
+            return Response(
+                {
+                    "detail": (
+                        "This student has already been processed "
+                        "in this promotion batch."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Lock source enrollment.
+        # --------------------------------------------------------
+
+        enrollment = (
+            StudentEnrollment.objects
+            .select_for_update()
+            .select_related(
+                "student",
+                "student__user",
+                "school_class",
+                "school_class__arm",
+            )
+            .filter(
+                student_id=student_id,
+                session=batch.from_session,
+                is_current=True,
+            )
+            .first()
+        )
 
         if not enrollment:
-            return Response({"detail": "Enrollment not found for this session"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {
+                    "detail": (
+                        "Current enrollment not found for "
+                        "this student in the source session."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        # Deactivate current active enrollment across all sessions
-        StudentEnrollment.objects.filter(student_id=student_id, is_current=True).update(is_current=False)
+        # --------------------------------------------------------
+        # Prevent target-session conflict.
+        # --------------------------------------------------------
 
-        # Single atomic update/create call
-        StudentEnrollment.objects.update_or_create(
+        if StudentEnrollment.objects.filter(
             student_id=student_id,
             session=batch.to_session,
-            defaults={
-                "school_class_id": new_class_id,
-                "is_current": True,
-            }
+        ).exists():
+
+            return Response(
+                {
+                    "detail": (
+                        "This student already has an enrollment "
+                        "in the target session."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Deactivate old current enrollment.
+        # --------------------------------------------------------
+
+        enrollment.is_current = False
+        enrollment.save(
+            update_fields=["is_current", "updated_at"]
         )
+
+        # --------------------------------------------------------
+        # Create target enrollment.
+        # --------------------------------------------------------
+
+        target_enrollment = StudentEnrollment.objects.create(
+            student_id=student_id,
+            session=batch.to_session,
+            school_class_id=new_class_id,
+            is_current=True,
+        )
+
+        # --------------------------------------------------------
+        # Promotion record.
+        # --------------------------------------------------------
 
         PromotionRecord.objects.create(
             batch=batch,
             student_id=student_id,
             from_class_id=enrollment.school_class_id,
             to_class_id=new_class_id,
-            status="TRANSFERRED"
+            status="TRANSFERRED",
         )
 
-        return Response({"message": "Student transferred successfully"}, status=status.HTTP_200_OK)
-   
+        # --------------------------------------------------------
+        # Immutable target-session history.
+        # --------------------------------------------------------
+
+        create_student_history(
+            enrollment=target_enrollment,
+            status="TRANSFERRED",
+        )
+
+        return Response(
+            {
+                "message": "Student transferred successfully.",
+                "target_class": str(target_class),
+            },
+            status=status.HTTP_200_OK,
+        )
+  
+class StudentHistoryViewSet(viewsets.ModelViewSet):
+    queryset = (
+        StudentHistory.objects
+        .select_related(
+            "student",
+            "student__user",
+            "session",
+            "term",
+            "school_class",
+            "school_class__arm",
+            "enrollment",
+        )
+        .order_by("-recorded_at")
+    )
+
+    serializer_class = StudentHistorySerializer
+
+    permission_classes = [IsAuthenticated]
+
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+
+    filterset_fields = [
+        "student",
+        "session",
+        "term",
+        "school_class",
+        "status",
+    ]
+
+    search_fields = [
+        "student__admission_number",
+
+        "student_snapshot__admission_number",
+        "student_snapshot__user__username",
+        "student_snapshot__user__full_name",
+
+        "session_snapshot__name",
+
+        "class_snapshot__name",
+        "class_snapshot__display_name",
+
+        "term_snapshot__name",
+    ]
+
+    ordering_fields = [
+        "recorded_at",
+        "session",
+        "term",
+        "school_class",
+        "status",
+    ]
+
+    ordering = [
+        "-recorded_at",
+    ]
+
+    def get_queryset(self):
+
+        queryset = super().get_queryset()
+
+        user = self.request.user
+
+        role = getattr(
+            user,
+            "role",
+            None,
+        )
+
+        # ------------------------------------------
+        # ADMIN
+        # ------------------------------------------
+
+        if (
+            user.is_staff
+            or user.is_superuser
+            or role == "admin"
+        ):
+            return queryset
+
+        # ------------------------------------------
+        # TEACHER
+        # ------------------------------------------
+
+        if role == "teacher":
+
+            return queryset.filter(
+                school_class__class_teacher__user=user
+            )
+
+        # ------------------------------------------
+        # STUDENT
+        # ------------------------------------------
+
+        if role == "student":
+
+            return queryset.filter(
+                student__user=user
+            )
+
+        return queryset.none()
+
+    # ==========================================================
+    # DISABLE WRITE OPERATIONS
+    # ==========================================================
+
+    def create(self, request, *args, **kwargs):
+
+        return Response(
+            {
+                "detail": (
+                    "Student history is created automatically "
+                    "when an enrollment is created."
+                )
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def update(self, request, *args, **kwargs):
+
+        return Response(
+            {
+                "detail": (
+                    "Student history records are immutable."
+                )
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def partial_update(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+
+        return Response(
+            {
+                "detail": (
+                    "Student history records are immutable."
+                )
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+
+        return Response(
+            {
+                "detail": (
+                    "Student history records cannot be deleted."
+                )
+            },
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    # ==========================================================
+    # STUDENT HISTORY
+    # ==========================================================
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path=r"student/(?P<student_id>[^/.]+)",
+    )
+    def student_history(
+        self,
+        request,
+        student_id=None,
+    ):
+
+        history = (
+            self.get_queryset()
+            .filter(
+                student_id=student_id
+            )
+            .order_by(
+                "-session__name",
+                "-recorded_at",
+            )
+        )
+
+        serializer = self.get_serializer(
+            history,
+            many=True,
+        )
+
+        return Response(
+            {
+                "student_id": student_id,
+                "count": history.count(),
+                "history": serializer.data,
+            }
+        ) 

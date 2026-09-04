@@ -21,7 +21,7 @@ export default function SchoolLogo({ logo, fallback }: Props) {
         width={70}
         height={80}
    
-        className="object-contai w-[70px] h-[80px]"
+        className="w-[70px] h-[80px]"
       />
     </div>
   );

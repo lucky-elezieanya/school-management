@@ -23,8 +23,8 @@ export default function Watermark({ logo }: Props) {
         alt=""
         width={500}
         height={500}
-        className="object-contain"
-        loading="eager"
+        className="object-contain w-auto h-auto"
+        priority
       />
     </div>
   );

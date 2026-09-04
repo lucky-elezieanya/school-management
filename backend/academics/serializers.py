@@ -1,6 +1,7 @@
 
+from .services.student_history import create_student_history
 from rest_framework import serializers
-from .models import Arms, Class, PromotionBatch, PromotionRecord, PromotionRule, SchoolAsset, StudentEnrollment, StudentImport, Teacher, Student, Subject, ClassSubject, Term, AcademicSession
+from .models import Arms, Class, PromotionBatch, PromotionRecord, PromotionRule, SchoolAsset, StudentEnrollment, StudentHistory, StudentImport, Teacher, Student, Subject, ClassSubject, Term, AcademicSession
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.validators import UniqueTogetherValidator
@@ -102,14 +103,21 @@ class SessionTermSerializer(serializers.Serializer):
         # ==========================================
         # HANDLE ACTIVE TERM
         # ==========================================
+
         if is_active:
 
-            Term.objects.exclude(
+            Term.objects.filter(
+                session=session
+            ).exclude(
                 id=term.id
-            ).update(is_active=False)
+            ).update(
+                is_active=False
+            )
 
             term.is_active = True
-            term.save()
+            term.save(
+                update_fields=["is_active"]
+            )
 
         return {
             "session": session,
@@ -576,14 +584,15 @@ class StudentSerializer(serializers.ModelSerializer):
             "behaviour_id",
         ]
 
-
 class StudentCreateSerializer(serializers.Serializer):
 
     # ======================
     # USER
     # ======================
 
-    first_name = serializers.CharField(write_only=True)
+    first_name = serializers.CharField(
+        write_only=True
+    )
 
     middle_name = serializers.CharField(
         required=False,
@@ -592,15 +601,21 @@ class StudentCreateSerializer(serializers.Serializer):
         write_only=True
     )
 
-    last_name = serializers.CharField(write_only=True)
+    last_name = serializers.CharField(
+        write_only=True
+    )
 
-    username = serializers.CharField(write_only=True)
+    username = serializers.CharField(
+        write_only=True
+    )
 
     password = serializers.CharField(
         write_only=True
     )
 
-    gender = serializers.CharField(write_only=True)
+    gender = serializers.CharField(
+        write_only=True
+    )
 
     date_of_birth = serializers.DateField(
         required=False
@@ -614,6 +629,7 @@ class StudentCreateSerializer(serializers.Serializer):
     # ======================
     # CLASS
     # ======================
+
     class_id = serializers.PrimaryKeyRelatedField(
         queryset=Class.objects.all(),
         write_only=True
@@ -639,57 +655,107 @@ class StudentCreateSerializer(serializers.Serializer):
 
     parent_address = serializers.CharField()
 
+    # ======================
+    # VALIDATION
+    # ======================
+
     def validate_username(self, value):
+        value = value.strip()
 
         if User.objects.filter(
-            username=value
+            username__iexact=value
         ).exists():
-
             raise serializers.ValidationError(
-                "Username already exists"
+                "Username already exists."
             )
 
         return value
 
     def validate_admission_number(self, value):
+        value = value.strip()
 
         if Student.objects.filter(
-            admission_number=value
+            admission_number__iexact=value
         ).exists():
-
             raise serializers.ValidationError(
-                "Admission number already exists"
+                "Admission number already exists."
             )
 
         return value
 
+    # ======================
+    # CREATE
+    # ======================
+
     @transaction.atomic
     def create(self, validated_data):
-        school_class = validated_data.pop("class_id")  # ✅ FIXED
-        password = validated_data.pop("password")
-        admission_number = validated_data.pop("admission_number")
-        parent_first_name = validated_data.pop("parent_first_name")
-        parent_last_name = validated_data.pop("parent_last_name")
-        parent_email = validated_data.pop("parent_email", "")
-        parent_phone = validated_data.pop("parent_phone")
-        parent_address = validated_data.pop("parent_address")
 
-        active_session = AcademicSession.objects.filter(is_active=True).first()
+        school_class = validated_data.pop(
+            "class_id"
+        )
+
+        password = validated_data.pop(
+            "password"
+        )
+
+        admission_number = validated_data.pop(
+            "admission_number"
+        )
+
+        parent_first_name = validated_data.pop(
+            "parent_first_name"
+        )
+
+        parent_last_name = validated_data.pop(
+            "parent_last_name"
+        )
+
+        parent_email = validated_data.pop(
+            "parent_email",
+            ""
+        )
+
+        parent_phone = validated_data.pop(
+            "parent_phone"
+        )
+
+        parent_address = validated_data.pop(
+            "parent_address"
+        )
+
+        # -----------------------------------------
+        # ACTIVE SESSION
+        # -----------------------------------------
+
+        active_session = (
+            AcademicSession.objects
+            .filter(is_active=True)
+            .first()
+        )
 
         if not active_session:
             raise serializers.ValidationError(
                 "No active academic session found."
             )
 
-        # ✅ USER FIELDS ONLY
+        # -----------------------------------------
+        # CREATE USER
+        # -----------------------------------------
+
         user = User.objects.create(
             **validated_data,
             role="student",
         )
-        user.set_password(password)
-        user.save()
 
-        # ✅ STUDENT DATA ONLY
+        user.set_password(password)
+        user.save(
+            update_fields=["password"]
+        )
+
+        # -----------------------------------------
+        # CREATE STUDENT
+        # -----------------------------------------
+
         student = Student.objects.create(
             user=user,
             admission_number=admission_number,
@@ -700,15 +766,50 @@ class StudentCreateSerializer(serializers.Serializer):
             parent_address=parent_address,
         )
 
-        StudentEnrollment.objects.create(
-            student=student,
-            session=active_session,
-            school_class=school_class,
-            is_current=True,
+        # -----------------------------------------
+        # CREATE ENROLLMENT
+        # -----------------------------------------
+
+        # A brand-new student should not normally
+        # have another current enrollment.
+        #
+        # We still lock current enrollments so
+        # concurrent operations cannot create
+        # conflicting current records.
+
+        current_enrollments = (
+            StudentEnrollment.objects
+            .select_for_update()
+            .filter(
+                student=student,
+                is_current=True,
+            )
+        )
+
+        current_enrollments.update(
+            is_current=False
+        )
+
+        enrollment = (
+            StudentEnrollment.objects.create(
+                student=student,
+                session=active_session,
+                school_class=school_class,
+                is_current=True,
+            )
+        )
+
+        # -----------------------------------------
+        # CREATE IMMUTABLE HISTORY
+        # -----------------------------------------
+
+        create_student_history(
+            enrollment=enrollment,
+            status="ENROLLED",
         )
 
         return student
-  
+ 
 class StudentUpdateSerializer(serializers.Serializer):
 
     # =========================
@@ -1012,3 +1113,86 @@ class PromotionBatchSerializer(serializers.ModelSerializer):
         "records",
          ]
 
+
+class StudentHistorySerializer(serializers.ModelSerializer):
+
+    student_details = serializers.SerializerMethodField()
+    class_details = serializers.SerializerMethodField()
+    session_details = serializers.SerializerMethodField()
+    term_details = serializers.SerializerMethodField()
+    enrollment_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentHistory
+
+        fields = [
+            "id",
+
+            "student",
+            "enrollment",
+            "session",
+            "term",
+            "school_class",
+
+            "student_details",
+            "enrollment_details",
+            "class_details",
+            "session_details",
+            "term_details",
+
+            "status",
+            "remarks",
+
+            "student_snapshot",
+            "class_snapshot",
+            "session_snapshot",
+            "term_snapshot",
+
+            "recorded_at",
+        ]
+
+        read_only_fields = fields
+
+    def get_student_details(self, obj):
+        snapshot = obj.student_snapshot or {}
+        user = snapshot.get("user") or {}
+
+        return {
+            "id": obj.student_id,
+            "admission_number": snapshot.get(
+                "admission_number"
+            ),
+            "full_name": user.get(
+                "full_name"
+            ),
+            "username": user.get(
+                "username"
+            ),
+            "email": user.get(
+                "email"
+            ),
+            "gender": user.get(
+                "gender"
+            ),
+        }
+
+    def get_enrollment_details(self, obj):
+
+        if not obj.enrollment:
+            return None
+
+        return {
+            "id": obj.enrollment.id,
+            "is_current": obj.enrollment.is_current,
+            "enrolled_at": obj.enrollment.enrolled_at,
+            "updated_at": obj.enrollment.updated_at,
+        }
+
+    def get_class_details(self, obj):
+        return obj.class_snapshot
+
+    def get_session_details(self, obj):
+        return obj.session_snapshot
+
+    def get_term_details(self, obj):
+        return obj.term_snapshot

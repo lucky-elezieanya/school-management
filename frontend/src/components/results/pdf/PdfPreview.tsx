@@ -4,7 +4,6 @@ import PdfActions from "./PdfActions";
 import PdfContainer from "./PdfContainer";
 
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
-import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useRef } from "react";
 
 interface Props {

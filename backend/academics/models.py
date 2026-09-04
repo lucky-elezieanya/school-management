@@ -113,7 +113,13 @@ class Term(models.Model):
     def save(self, *args, **kwargs):
         # If this session is being set active
         if self.is_active:
-            Term.objects.exclude(id=self.id).update(is_active=False)
+            Term.objects.filter(
+                    session=self.session
+                ).exclude(
+                    id=self.id
+                ).update(
+                    is_active=False
+                )
 
         super().save(*args, **kwargs)
 
@@ -556,5 +562,187 @@ class PromotionRecord(models.Model):
             "student"
         ]
 
+class StudentHistory(models.Model):
+    """
+    Immutable academic snapshot.
 
-   
+    Exactly one record exists for a student in an academic session.
+
+    StudentHistory is NOT an event log.
+
+    It represents:
+        "What did this student's academic record look like
+         during this academic session?"
+
+    PromotionRecord represents transitions between sessions.
+    """
+
+    STATUS_CHOICES = (
+        ("ENROLLED", "Enrolled"),
+        ("PROMOTED", "Promoted"),
+        ("REPEATED", "Repeated"),
+        ("TRANSFERRED", "Transferred"),
+        ("GRADUATED", "Graduated"),
+        ("WITHDRAWN", "Withdrawn"),
+        ("DEACTIVATED", "Deactivated"),
+    )
+
+    # ==========================================================
+    # REFERENCES
+    # ==========================================================
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="history_records",
+    )
+
+    enrollment = models.ForeignKey(
+        StudentEnrollment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="history_records",
+    )
+
+    session = models.ForeignKey(
+        AcademicSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_history_records",
+    )
+
+    term = models.ForeignKey(
+        Term,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_history_records",
+    )
+
+    school_class = models.ForeignKey(
+        Class,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_history_records",
+    )
+
+    # ==========================================================
+    # STATUS
+    # ==========================================================
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="ENROLLED",
+        db_index=True,
+    )
+
+    # ==========================================================
+    # SNAPSHOTS
+    # ==========================================================
+
+    student_snapshot = models.JSONField(
+        default=dict,
+    )
+
+    class_snapshot = models.JSONField(
+        default=dict,
+    )
+
+    session_snapshot = models.JSONField(
+        default=dict,
+    )
+
+    term_snapshot = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    # ==========================================================
+    # EXTRA
+    # ==========================================================
+
+    remarks = models.TextField(
+        blank=True,
+    )
+
+    recorded_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+    )
+
+    # ==========================================================
+    # META
+    # ==========================================================
+
+    class Meta:
+        ordering = ["-recorded_at"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "session"],
+                name="unique_student_history_per_session",
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=["student", "session"],
+            ),
+            models.Index(
+                fields=["session", "school_class"],
+            ),
+            models.Index(
+                fields=["session", "status"],
+            ),
+            models.Index(
+                fields=["term"],
+            ),
+            models.Index(
+                fields=["recorded_at"],
+            ),
+        ]
+
+    def __str__(self):
+        student_name = (
+            (self.student_snapshot or {})
+            .get("user", {})
+            .get("full_name")
+            or (self.student_snapshot or {}).get("admission_number")
+            or "Unknown Student"
+        )
+
+        session_name = (
+            (self.session_snapshot or {}).get("name")
+            or "Unknown Session"
+        )
+
+        class_name = (
+            (self.class_snapshot or {}).get("display_name")
+            or (self.class_snapshot or {}).get("name")
+            or "Unknown Class"
+        )
+
+        return f"{student_name} - {class_name} - {session_name}"
+
+    def save(self, *args, **kwargs):
+        """
+        Prevent updates to an existing history record.
+        """
+
+        if self.pk:
+            raise ValueError(
+                "StudentHistory records are immutable and cannot be modified."
+            )
+
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError(
+            "StudentHistory records are immutable and cannot be deleted."
+        )

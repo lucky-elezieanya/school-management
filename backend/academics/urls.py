@@ -8,6 +8,7 @@ from .views_production import (
     SchoolAssetViewSet,
     StudentEnrollmentViewSet,
     StudentFileUploadView,
+    StudentHistoryViewSet,
     StudentImportViewSet,
     TeacherViewSet,
     StudentViewSet,
@@ -35,7 +36,8 @@ router.register('promotion-rules', PromotionRuleViewSet, basename="promotion-rul
 router.register('promotion-record', PromotionRecordViewSet, basename="promotion-record")
 router.register('promotion-batch', PromotionBatchViewSet, basename="promotion-batch")
 router.register(r'student-imports', StudentImportViewSet, basename="student-imports")
-
+router.register(r"student-history", StudentHistoryViewSet, basename="student-history"
+)
 urlpatterns = [
     path('upload/', StudentFileUploadView.as_view(), name='file-upload'),
 ]

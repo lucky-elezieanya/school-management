@@ -7,6 +7,7 @@ from .models import (
     AcademicSession,
     SchoolAsset,
     StudentEnrollment,
+    StudentHistory,
     StudentImport,
     Term,
     Teacher,
@@ -453,7 +454,6 @@ class PromotionBatchAdmin(admin.ModelAdmin):
         PromotionRecordInline,
     ]
 
-
 # ==========================================
 # PROMOTION RECORD
 # ==========================================
@@ -605,3 +605,233 @@ class ClassSubjectAdmin(admin.ModelAdmin):
         "school_class",
         "subject",
     )
+
+# ==========================================
+# STUDENT HISTORY ADMIN
+# ==========================================
+@admin.register(StudentHistory)
+class StudentHistoryAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for StudentHistory.
+    StudentHistory records are immutable:
+    - Admins can view them
+    - Admins cannot edit them
+    - Admins cannot delete them
+    - Admins cannot manually create them
+    Records should be created by the academic-history/promotion
+    service logic.
+    """
+    # ==========================================================
+    # LIST DISPLAY
+    # ==========================================================
+    list_display = (
+        "student_name",
+        "admission_number",
+        "session_name",
+        "class_name",
+        "status",
+        "recorded_at",
+    )
+
+    # ==========================================================
+    # FILTERS
+    # ==========================================================
+
+    list_filter = (
+        "status",
+        "session",
+        "school_class",
+        "term",
+        "recorded_at",
+    )
+
+    # ==========================================================
+    # SEARCH
+    # ==========================================================
+
+    search_fields = (
+        "student__user__full_name",
+        "student__admission_number",
+        "session__name",
+        "school_class__name",
+    )
+
+    # ==========================================================
+    # DEFAULT ORDERING
+    # ==========================================================
+
+    ordering = (
+        "-recorded_at",
+    )
+
+    # ==========================================================
+    # READ-ONLY FIELDS
+    # ==========================================================
+
+    readonly_fields = (
+        "student",
+        "enrollment",
+        "session",
+        "term",
+        "school_class",
+        "status",
+        "student_snapshot",
+        "class_snapshot",
+        "session_snapshot",
+        "term_snapshot",
+        "remarks",
+        "recorded_at",
+    )
+
+    # ==========================================================
+    # FIELDSETS
+    # ==========================================================
+
+    fieldsets = (
+        (
+            "Academic Record",
+            {
+                "fields": (
+                    "student",
+                    "enrollment",
+                    "session",
+                    "term",
+                    "school_class",
+                    "status",
+                    "remarks",
+                    "recorded_at",
+                )
+            },
+        ),
+        (
+            "Student Snapshot",
+            {
+                "fields": (
+                    "student_snapshot",
+                ),
+                "classes": (
+                    "collapse",
+                ),
+            },
+        ),
+        (
+            "Class Snapshot",
+            {
+                "fields": (
+                    "class_snapshot",
+                ),
+                "classes": (
+                    "collapse",
+                ),
+            },
+        ),
+        (
+            "Session Snapshot",
+            {
+                "fields": (
+                    "session_snapshot",
+                ),
+                "classes": (
+                    "collapse",
+                ),
+            },
+        ),
+        (
+            "Term Snapshot",
+            {
+                "fields": (
+                    "term_snapshot",
+                ),
+                "classes": (
+                    "collapse",
+                ),
+            },
+        ),
+    )
+
+    # ==========================================================
+    # CUSTOM DISPLAY METHODS
+    # ==========================================================
+
+    @admin.display(
+        description="Student",
+        ordering="student__user__full_name",
+    )
+    def student_name(self, obj):
+        if obj.student and obj.student.user:
+            return obj.student.user.full_name
+
+        return (
+            (obj.student_snapshot or {})
+            .get("user", {})
+            .get("full_name")
+            or "Unknown Student"
+        )
+
+    @admin.display(
+        description="Admission Number",
+    )
+    def admission_number(self, obj):
+        if obj.student:
+            return obj.student.admission_number
+
+        return (
+            (obj.student_snapshot or {})
+            .get("admission_number")
+            or "—"
+        )
+
+    @admin.display(
+        description="Session",
+        ordering="session__name",
+    )
+    def session_name(self, obj):
+        if obj.session:
+            return obj.session.name
+
+        return (
+            (obj.session_snapshot or {})
+            .get("name")
+            or "Unknown Session"
+        )
+
+    @admin.display(
+        description="Class",
+        ordering="school_class__name",
+    )
+    def class_name(self, obj):
+        if obj.school_class:
+            return obj.school_class.name
+
+        snapshot = obj.class_snapshot or {}
+
+        return (
+            snapshot.get("display_name")
+            or snapshot.get("name")
+            or "Unknown Class"
+        )
+
+    # ==========================================================
+    # IMMUTABILITY
+    # ==========================================================
+
+    def has_add_permission(self, request):
+        """
+        Prevent admins from manually creating history records.
+
+        History should be created automatically by the application
+        when a student's academic state is recorded.
+        """
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """
+        Prevent modification of existing history records.
+        """
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """
+        Prevent deletion of history records.
+        """
+        return False

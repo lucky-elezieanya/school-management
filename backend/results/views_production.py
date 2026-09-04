@@ -7,6 +7,8 @@ from django.db.models import Count, F, Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 
+from .utils.services.calculations import format_position
+
 from .utils.signature import process_signature
 from .utils.services.approve_workflow import approve_workflow
 from .utils.services.engine import ResultEngine
@@ -28,6 +30,11 @@ from django.db import transaction
 from .utils.services.update_workflow import  update_result_workflow
 
 from django.http import HttpResponse
+
+import openpyxl
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+
 
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
 # ============================================================================
@@ -1501,6 +1508,7 @@ class ResultViewSet(viewsets.ModelViewSet):
             "session",
         ).first()
 
+    
     def _require_broadsheet_params(self, request):
         user = request.user
         user_role = getattr(user, "role", None)
@@ -1525,23 +1533,30 @@ class ResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if user_role == "teacher":
+        # Allow admins and superusers to bypass class assignment checks
+        if user_role == "teacher" and not (user.is_staff or user.is_superuser or user_role == "admin"):
             try:
-                teacher = Teacher.objects.select_related("user").get(user=user)
+                teacher = Teacher.objects.select_related("user").get(user_id=user.id)
             except Teacher.DoesNotExist:
                 return None, Response(
                     {"detail": "Teacher profile not found."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            allowed = Class.objects.filter(id=school_class_id, class_teacher=teacher).exists()
-            if  not user.is_staff or not user.is_superuser or not user_role == "admin" or not allowed:
+            # Check if the requested class has this teacher as its class_teacher
+            is_assigned = Class.objects.filter(
+                id=school_class_id, 
+                class_teacher=teacher
+            ).exists()
+
+            if not is_assigned:
                 return None, Response(
                     {"detail": "You can only view results for your assigned classes."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
         workflow = self._get_approved_workflow(school_class_id, term_id, session_id)
+  
         if not workflow:
             return None, Response(
                 {"detail": "Results for this class can only be viewed or downloaded after approval."},
@@ -1679,46 +1694,129 @@ class ResultViewSet(viewsets.ModelViewSet):
             return error_response
 
         data = self._build_class_broadsheet(request=request, **params)
-        response = HttpResponse(content_type="text/csv")
-        
-        filename = (
-            f"{data['class']['name']}_{data['class']['arm']}_"
-            f"{data['term']['name']}_{data['session']['name']}_results.csv"
-        ).replace(" ", "_")
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
-        writer = csv.writer(response)
+        # 1. Initialize Workbook and Sheet
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Broadsheet"
+
+        # 2. Define Styles & Colors
+        header_fill_dark = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")  # Navy Blue
+        header_fill_accent = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")  # Light Blue
+        zebra_fill = PatternFill(start_color="F9FAFB", end_color="F9FAFB", fill_type="solid")  # Very Light Gray
+
+        header_font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
+        data_font = Font(name="Segoe UI", size=10)
+
+        center_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left_alignment = Alignment(horizontal="left", vertical="center")
+
+        thin_border = Border(
+            left=Side(style="thin", color="E5E7EB"),
+            right=Side(style="thin", color="E5E7EB"),
+            top=Side(style="thin", color="E5E7EB"),
+            bottom=Side(style="thin", color="E5E7EB"),
+        )
+
+        # 3. Build Headers
         first_header = ["Student", "ADM No."]
         second_header = ["", ""]
 
         for subject in data["subjects"]:
-            first_header.extend(["", subject["code"], ""])
+            first_header.extend([subject["code"], "", ""])  # Will merge 3 columns for CA, Total, Grade
             second_header.extend(["CA", "Total", "Grade"])
 
         first_header.extend(["Overall Total", "Average", "Position"])
         second_header.extend(["", "", ""])
-        
-        writer.writerow(first_header)
-        writer.writerow(second_header)
 
-        for row in data["rows"]:
+        ws.append(first_header)
+        ws.append(second_header)
+
+        # 4. Merge Header Cells
+        # Merge "Student" & "ADM No." vertically across rows 1 and 2
+        ws.merge_cells("A1:A2")
+        ws.merge_cells("B1:B2")
+
+        col_idx = 3  # Column C
+        for _ in data["subjects"]:
+            # Merge subject code horizontally across CA, Total, Grade
+            ws.merge_cells(start_row=1, start_column=col_idx, end_row=1, end_column=col_idx + 2)
+            col_idx += 3
+
+        # Merge overall summary columns vertically
+        ws.merge_cells(start_row=1, start_column=col_idx, end_row=2, end_column=col_idx)
+        ws.merge_cells(start_row=1, start_column=col_idx + 1, end_row=2, end_column=col_idx + 1)
+        ws.merge_cells(start_row=1, start_column=col_idx + 2, end_row=2, end_column=col_idx + 2)
+
+        # 5. Apply Styles to Header Rows
+        for col_num in range(1, len(first_header) + 1):
+            cell1 = ws.cell(row=1, column=col_num)
+            cell2 = ws.cell(row=2, column=col_num)
+
+            cell1.fill = header_fill_dark
+            cell1.font = header_font
+            cell1.alignment = center_alignment
+            cell1.border = thin_border
+
+            cell2.fill = header_fill_accent
+            cell2.font = header_font
+            cell2.alignment = center_alignment
+            cell2.border = thin_border
+
+        # 6. Populate Data Rows & Format Cells
+        for row_idx, row in enumerate(data["rows"], start=3):
             csv_row = [row["student_name"], row["admission_number"]]
-            for result in row["subjects"]:
-                ca_score = (result["first_test"] or 0) + (result["second_test"] or 0)
-                csv_row.extend([
-                    ca_score if (result["first_test"] is not None or result["second_test"] is not None) else "",
-                    result["total_score"] or "",
-                    result["grade"],
-                ])
-            csv_row.extend([
-                row["total_score"] or "",
-                row["average_score"] or "",
-                row["position"] or "",
-            ])
-            writer.writerow(csv_row)
 
+            for result in row["subjects"]:
+                first = result.get("first_test")
+                second = result.get("second_test")
+
+                if first is not None or second is not None:
+                    ca_score = (first or 0) + (second or 0)
+                else:
+                    ca_score = ""
+
+                total_score = result["total_score"] if result["total_score"] is not None else ""
+                csv_row.extend([ca_score, total_score, result["grade"] or ""])
+
+            csv_row.extend([
+                row["total_score"] if row["total_score"] is not None else "",
+                row["average_score"] if row["average_score"] is not None else "",
+                format_position(row["position"]) if row["position"] is not None else "",
+            ])
+
+            ws.append(csv_row)
+
+            # Style data row
+            is_even = row_idx % 2 == 0
+            for col_num in range(1, len(csv_row) + 1):
+                cell = ws.cell(row=row_idx, column=col_num)
+                cell.font = data_font
+                cell.border = thin_border
+                cell.alignment = left_alignment if col_num <= 2 else center_alignment
+                if is_even:
+                    cell.fill = zebra_fill
+
+        # 7. Auto-fit Column Widths
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 10)
+
+        # 8. Return HTTP Response as Excel spreadsheet (.xlsx)
+        filename = (
+            f"{data['class']['name']}_{data['class']['arm']}_"
+            f"{data['term']['name']}_{data['session']['name']}_results.xlsx"
+        ).replace(" ", "_")
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        wb.save(response)
         return response
-    
+     
 # =============================================================================
 # 1. TERM COMMENT VIEWSET
 # =============================================================================
