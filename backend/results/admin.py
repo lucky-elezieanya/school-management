@@ -488,7 +488,6 @@ class ResumptionDateAdmin(admin.ModelAdmin):
         "-current_session",
     )
 
-
 # COMPUTATION STATUS ADMIN
 # ==========================================
 @admin.register(ComputationStatus)
@@ -662,6 +661,7 @@ class ResultWorkflowAdmin(
         "unlocked_at",
         "unlocked_by"
     ]
+
 @admin.register(ActivateResultPortal)
 class ActivateResultPortalAdmin(admin.ModelAdmin):
 

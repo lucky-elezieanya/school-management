@@ -17,7 +17,7 @@ from .permissions import IsAdminUser, IsTeacherOrAdmin
 from rest_framework import viewsets, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import ( Attendance, Behaviour, ClassFees, ClassTeacherSignature, GradingScale, HeadTeacherSignature, MaxScores, Result, ResultCustomization, SchoolDays, StudentResultSnapshot,  SubjectResultStatus, TermComment, ResultSummary, ResumptionDate, ActivateResultPortal, ResultWorkflow, SubjectSummary)
-from .serializers import (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassTeacherSignatureSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, StudentResultSnapshotSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
+from .serializers import (AttendanceSerializer, BehaviourSerializer, ClassFeeSerializer, ClassFeesBulkItemSerializer, ClassTeacherSignatureSerializer, GradingScaleBulkItemSerializer,  GradingScaleSerializer, HeadTeacherSignatureSerializer, MaxScoresBulkItemSerializer, MaxScoresSerializer, ResultCustomizationSerializer, ResultSerializer, ResultSummarySerializer, SchoolDaysSerializer, StudentResultSnapshotSerializer, SubjectResultStatusSerializer, TermCommentSerializer, ResumptionDateSerializer, ActivateResultPortalSerializer, ResultWorkflowSerializer, SubjectSummarySerializer,)
 
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -35,11 +35,10 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-
 from .defaults import DEFAULT_RESULT_CUSTOMIZATION
 # ============================================================================
 # 1. STUDENT RESULT SNAPSHOT VIEWSET
-# ============================================================================
+# ========================================================
 class StudentResultSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = StudentResultSnapshotSerializer
     permission_classes = [IsAuthenticated]
@@ -1002,83 +1001,533 @@ class BehaviourViewSet(viewsets.ModelViewSet):
 class MaxScoreViewset(viewsets.ModelViewSet):
     serializer_class = MaxScoresSerializer
     permission_classes = [IsTeacherOrAdmin]
+
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["school_class"]
 
     def get_queryset(self):
-        queryset = MaxScores.objects.select_related("school_class")
-
-        class_id = self.request.query_params.get("school_class")
-
-        if class_id:
-            queryset = queryset.filter(school_class_id=class_id)
-
-        return queryset
-
-class GradingScaleViewSet(viewsets.ModelViewSet):
-    queryset = GradingScale.objects.all().order_by(
-        "grading_type",
-        "-upper_limit",
-    )
-    serializer_class = GradingScaleSerializer
-    permission_classes = [IsTeacherOrAdmin]
-
-    @transaction.atomic
-    def create(self, request, *args, **kwargs):
-        """
-        - If a grading scale with the same grading_type + grade exists,
-          update it.
-
-        - If a grading scale with the same grading_type +
-          lower_limit + upper_limit exists,
-          update it.
-        - Otherwise create a new grading scale.
-        """
-
-        grading_type = request.data.get("grading_type")
-        grade = request.data.get("grade")
-        lower_limit = request.data.get("lower_limit")
-        upper_limit = request.data.get("upper_limit")
-
-        existing = (
-            GradingScale.objects.filter(
-                grading_type=grading_type,
+        return (
+            MaxScores.objects
+            .select_related(
+                "school_class",
+                "school_class__arm",
             )
-            .filter(
-                Q(grade__iexact=grade)
-                | Q(
-                    lower_limit=lower_limit,
-                    upper_limit=upper_limit,
-                )
-            )
-            .first()
+            .order_by("school_class_id")
         )
 
-        if existing:
-            serializer = self.get_serializer(
-                existing,
-                data=request.data,
-                partial=False,
-            )
+    # =========================================================
+    # BULK UPSERT
+    # =========================================================
 
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-upsert",
+    )
+    def bulk_upsert(self, request):
 
-            return Response(
-                serializer.data,
-                status=status.HTTP_200_OK,
-            )
-
-        serializer = self.get_serializer(data=request.data)
+        serializer = MaxScoresBulkItemSerializer(
+            data=request.data,
+            many=True,
+        )
 
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+
+        items = serializer.validated_data
+
+        # -----------------------------------------------------
+        # Extract class IDs
+        # -----------------------------------------------------
+
+        class_ids = [
+            item["school_class"].id
+            for item in items
+        ]
+
+        # -----------------------------------------------------
+        # Prevent duplicate classes in the same request
+        # -----------------------------------------------------
+
+        if len(class_ids) != len(set(class_ids)):
+            return Response(
+                {
+                    "detail": (
+                        "A class appears more than once "
+                        "in the submission."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # -----------------------------------------------------
+        # Everything happens atomically
+        # -----------------------------------------------------
+
+        with transaction.atomic():
+
+            existing = {
+                obj.school_class_id: obj
+                for obj in MaxScores.objects.filter(
+                    school_class_id__in=class_ids
+                )
+            }
+
+            to_create = []
+            to_update = []
+
+            for item in items:
+
+                class_id = item["school_class"].id
+
+                if class_id in existing:
+
+                    obj = existing[class_id]
+
+                    obj.first_test = item["first_test"]
+                    obj.second_test = item["second_test"]
+                    obj.exam = item["exam"]
+
+                    to_update.append(obj)
+
+                else:
+
+                    to_create.append(
+                        MaxScores(
+                            school_class=item["school_class"],
+                            first_test=item["first_test"],
+                            second_test=item["second_test"],
+                            exam=item["exam"],
+                        )
+                    )
+
+            # -------------------------------------------------
+            # Create missing records
+            # -------------------------------------------------
+
+            if to_create:
+                MaxScores.objects.bulk_create(to_create)
+
+            # -------------------------------------------------
+            # Update existing records
+            # -------------------------------------------------
+
+            if to_update:
+                MaxScores.objects.bulk_update(
+                    to_update,
+                    [
+                        "first_test",
+                        "second_test",
+                        "exam",
+                    ],
+                )
+
+        # -----------------------------------------------------
+        # Return resulting configurations
+        # -----------------------------------------------------
+
+        result = (
+            MaxScores.objects
+            .select_related(
+                "school_class",
+                "school_class__arm",
+            )
+            .filter(
+                school_class_id__in=class_ids
+            )
+            .order_by("school_class_id")
+        )
 
         return Response(
-            serializer.data,
-            status=status.HTTP_201_CREATED,
+            MaxScoresSerializer(
+                result,
+                many=True,
+            ).data,
+            status=status.HTTP_200_OK,
         )
-        
+
+class GradingScaleViewSet(
+    viewsets.ModelViewSet
+):
+
+    queryset = (
+        GradingScale.objects
+        .all()
+        .order_by(
+            "grading_type",
+            "-upper_limit",
+        )
+    )
+
+    serializer_class = GradingScaleSerializer
+
+    permission_classes = [
+        IsTeacherOrAdmin
+    ]
+
+    # ==========================================================
+    # BULK UPSERT
+    # ==========================================================
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-upsert",
+    )
+    def bulk_upsert(
+        self,
+        request,
+    ):
+
+        # ------------------------------------------------------
+        # Validate request
+        # ------------------------------------------------------
+
+        serializer = (
+            GradingScaleBulkItemSerializer(
+                data=request.data,
+                many=True,
+            )
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        items = serializer.validated_data
+
+        if not items:
+            return Response(
+                {
+                    "detail": (
+                        "No grading scales "
+                        "were submitted."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ------------------------------------------------------
+        # Check duplicate grades INSIDE request
+        # ------------------------------------------------------
+
+        grade_keys = []
+
+        for item in items:
+
+            grade_keys.append(
+                (
+                    item["grading_type"],
+                    item["grade"].strip().upper(),
+                )
+            )
+
+        if len(grade_keys) != len(
+            set(grade_keys)
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "A grade appears more than "
+                        "once for the same grading type."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ------------------------------------------------------
+        # Check overlapping ranges INSIDE request
+        # ------------------------------------------------------
+
+        for i, current in enumerate(items):
+
+            current_type = (
+                current["grading_type"]
+            )
+
+            current_lower = (
+                current["lower_limit"]
+            )
+
+            current_upper = (
+                current["upper_limit"]
+            )
+
+            for j, other in enumerate(items):
+
+                if i == j:
+                    continue
+
+                if (
+                    other["grading_type"]
+                    != current_type
+                ):
+                    continue
+
+                other_lower = (
+                    other["lower_limit"]
+                )
+
+                other_upper = (
+                    other["upper_limit"]
+                )
+
+                if (
+                    current_lower
+                    <= other_upper
+                    and current_upper
+                    >= other_lower
+                ):
+                    return Response(
+                        {
+                            "detail": (
+                                f"Grading ranges for "
+                                f"{current_type} overlap."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        # ------------------------------------------------------
+        # TRANSACTION
+        # ------------------------------------------------------
+
+        with transaction.atomic():
+
+            ids = [
+                item.get("id")
+                for item in items
+                if item.get("id")
+            ]
+
+            existing = {
+                obj.id: obj
+                for obj in GradingScale.objects.filter(
+                    id__in=ids
+                )
+            }
+
+            to_create = []
+            to_update = []
+
+            submitted_ids = set()
+
+            # --------------------------------------------------
+            # Process items
+            # --------------------------------------------------
+
+            for item in items:
+
+                item_id = item.get("id")
+
+                # ----------------------------------------------
+                # UPDATE
+                # ----------------------------------------------
+
+                if item_id:
+
+                    if item_id not in existing:
+
+                        return Response(
+                            {
+                                "detail": (
+                                    f"Grading scale "
+                                    f"with id {item_id} "
+                                    f"does not exist."
+                                )
+                            },
+                            status=(
+                                status.HTTP_400_BAD_REQUEST
+                            ),
+                        )
+
+                    obj = existing[item_id]
+
+                    obj.grade = (
+                        item["grade"]
+                        .strip()
+                        .upper()
+                    )
+
+                    obj.grading_type = (
+                        item["grading_type"]
+                    )
+
+                    obj.lower_limit = (
+                        item["lower_limit"]
+                    )
+
+                    obj.upper_limit = (
+                        item["upper_limit"]
+                    )
+
+                    obj.remark = (
+                        item["remark"]
+                        .strip()
+                    )
+
+                    to_update.append(obj)
+
+                    submitted_ids.add(
+                        item_id
+                    )
+
+                # ----------------------------------------------
+                # CREATE
+                # ----------------------------------------------
+
+                else:
+
+                    to_create.append(
+                        GradingScale(
+                            grade=(
+                                item["grade"]
+                                .strip()
+                                .upper()
+                            ),
+                            grading_type=(
+                                item["grading_type"]
+                            ),
+                            lower_limit=(
+                                item["lower_limit"]
+                            ),
+                            upper_limit=(
+                                item["upper_limit"]
+                            ),
+                            remark=(
+                                item["remark"]
+                                .strip()
+                            ),
+                        )
+                    )
+
+            # --------------------------------------------------
+            # Validate updates against OTHER database rows
+            # --------------------------------------------------
+
+            for obj in to_update:
+
+                overlap = (
+                    GradingScale.objects
+                    .filter(
+                        grading_type=obj.grading_type,
+                        lower_limit__lte=obj.upper_limit,
+                        upper_limit__gte=obj.lower_limit,
+                    )
+                    .exclude(
+                        pk=obj.pk
+                    )
+                )
+
+                # ----------------------------------------------
+                # Don't consider another submitted update
+                # as an existing conflicting row.
+                # ----------------------------------------------
+
+                if submitted_ids:
+
+                    overlap = overlap.exclude(
+                        pk__in=submitted_ids
+                    )
+
+                if overlap.exists():
+
+                    return Response(
+                        {
+                            "detail": (
+                                f"Range "
+                                f"{obj.lower_limit}-"
+                                f"{obj.upper_limit} "
+                                f"for grade {obj.grade} "
+                                f"overlaps with an "
+                                f"existing grading scale."
+                            )
+                        },
+                        status=(
+                            status.HTTP_400_BAD_REQUEST
+                        ),
+                    )
+
+            # --------------------------------------------------
+            # Validate new rows against database
+            # --------------------------------------------------
+
+            for obj in to_create:
+
+                overlap = (
+                    GradingScale.objects
+                    .filter(
+                        grading_type=obj.grading_type,
+                        lower_limit__lte=obj.upper_limit,
+                        upper_limit__gte=obj.lower_limit,
+                    )
+                )
+
+                if overlap.exists():
+
+                    return Response(
+                        {
+                            "detail": (
+                                f"Range "
+                                f"{obj.lower_limit}-"
+                                f"{obj.upper_limit} "
+                                f"for grade {obj.grade} "
+                                f"overlaps with an "
+                                f"existing grading scale."
+                            )
+                        },
+                        status=(
+                            status.HTTP_400_BAD_REQUEST
+                        ),
+                    )
+
+            # --------------------------------------------------
+            # CREATE
+            # --------------------------------------------------
+
+            if to_create:
+
+                GradingScale.objects.bulk_create(
+                    to_create
+                )
+
+            # --------------------------------------------------
+            # UPDATE
+            # --------------------------------------------------
+
+            if to_update:
+
+                GradingScale.objects.bulk_update(
+                    to_update,
+                    [
+                        "grade",
+                        "grading_type",
+                        "lower_limit",
+                        "upper_limit",
+                        "remark",
+                    ],
+                )
+
+        # ------------------------------------------------------
+        # Return complete grading configuration
+        # ------------------------------------------------------
+
+        result = (
+            GradingScale.objects
+            .all()
+            .order_by(
+                "grading_type",
+                "-upper_limit",
+            )
+        )
+
+        return Response(
+            GradingScaleSerializer(
+                result,
+                many=True,
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+                
 class ResultViewSet(viewsets.ModelViewSet):
     queryset = Result.objects.select_related(
         "student",
@@ -1474,7 +1923,7 @@ class ResultViewSet(viewsets.ModelViewSet):
         # Trigger workflow evaluation synchronously (No Celery)
         update_result_workflow(school_class, term, session)
         workflow = ResultWorkflow.objects.filter(school_class=school_class, term=term, session=session).first()
-        
+     
         if workflow and workflow.all_results_submitted:
             ResultEngine(
                 school_class=school_class,
@@ -1985,61 +2434,417 @@ class SubjectResultStatusViewSet(viewsets.ModelViewSet):
 
 # =============================================================================
 # 4. CLASS FEES VIEWSET
-# =============================================================================
+# ================
 class ClassFeesViewset(viewsets.ModelViewSet):
-    queryset = ClassFees.objects.select_related("school_class", "session", "term")
     serializer_class = ClassFeeSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["term", "session", "school_class"]
-
-    def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
-            return [IsTeacherOrAdmin()]
-        return [IsAuthenticated()]
-
+    filterset_fields = [
+        "term",
+        "session",
+        "school_class",
+    ]
+    # ============================================================
+    # QUERYSET
+    # ============================================================
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = (
+            ClassFees.objects
+            .select_related(
+                "school_class",
+                "school_class__arm",
+                "school_class__class_teacher",
+                "session",
+                "term",
+            )
+            .order_by(
+                "-session_id",
+                "school_class_id",
+            )
+        )
         user = self.request.user
         user_role = getattr(user, "role", None)
 
-        school_class_id = self.request.query_params.get("school_class")
-        term_id = self.request.query_params.get("term")
-        session_id = self.request.query_params.get("session")
-        
-        school_class = Class.objects.select_related("class_teacher").filter(id=school_class_id).first()
-    
-        if user.is_staff or user.is_superuser or user_role == "admin":
+        # --------------------------------------------------------
+        # ADMIN
+        # --------------------------------------------------------
+        if (
+            user.is_staff
+            or user.is_superuser
+            or user_role == "admin"
+        ):
             return queryset
 
+        # --------------------------------------------------------
+        # TEACHER
+        # --------------------------------------------------------
+
         if user_role == "teacher":
-            return queryset.filter(school_class__class_teacher_id=school_class.class_teacher.id)
+            return queryset.filter(
+                school_class__class_teacher=user
+            )
+
+        # --------------------------------------------------------
+        # STUDENT
+        # --------------------------------------------------------
 
         if user_role == "student":
+
+            school_class_id = (
+                self.request.query_params.get(
+                    "school_class"
+                )
+            )
+
+            term_id = (
+                self.request.query_params.get(
+                    "term"
+                )
+            )
+
+            session_id = (
+                self.request.query_params.get(
+                    "session"
+                )
+            )
+
+            if not all([
+                school_class_id,
+                term_id,
+                session_id,
+            ]):
+                return queryset.none()
+
             return queryset.filter(
-                school_class=school_class_id,
+                school_class_id=school_class_id,
                 session_id=session_id,
-                term_id=term_id
-            ).distinct()
+                term_id=term_id,
+            )
 
         return queryset.none()
+    # ============================================================
+    # PERMISSIONS
+    # ============================================================
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+    def get_permissions(self):
+
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "bulk_upsert",
+        ]:
+            return [IsTeacherOrAdmin()]
+
+        return [IsAuthenticated()]
+
+    # ============================================================
+    # NORMAL CREATE
+    # ============================================================
+
+    def create(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+
+        serializer = self.get_serializer(
+            data=request.data
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
 
         try:
+
             self.perform_create(serializer)
+
         except IntegrityError:
+
             return Response(
-                {"non_field_errors": ["Fee already exists for this class, session, and term."]},
+                {
+                    "non_field_errors": [
+                        "Fee already exists for this class, session, and term."
+                    ]
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        headers = self.get_success_headers(
+            serializer.data
+        )
 
-# =============================================================================
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
+
+    # ============================================================
+    # BULK UPSERT
+    # ============================================================
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-upsert",
+    )
+    def bulk_upsert(
+        self,
+        request,
+    ):
+
+        # --------------------------------------------------------
+        # Validate incoming array
+        # --------------------------------------------------------
+
+        serializer = ClassFeesBulkItemSerializer(
+            data=request.data,
+            many=True,
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        items = serializer.validated_data
+
+        if not items:
+            return Response(
+                {
+                    "detail": "No class fees were submitted."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Prevent duplicate class/session/term combinations
+        # inside the SAME request
+        # --------------------------------------------------------
+
+        combinations = [
+            (
+                item["school_class"].id,
+                item["session"].id,
+                item["term"].id,
+            )
+            for item in items
+        ]
+
+        if len(combinations) != len(
+            set(combinations)
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "A class/session/term combination "
+                        "appears more than once in the submission."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --------------------------------------------------------
+        # Make sure teacher is only modifying their classes
+        # --------------------------------------------------------
+
+        user = request.user
+        user_role = getattr(
+            user,
+            "role",
+            None,
+        )
+
+        if (
+            not user.is_staff
+            and not user.is_superuser
+            and user_role != "admin"
+        ):
+
+            if user_role == "teacher":
+
+                class_ids = [
+                    item["school_class"].id
+                    for item in items
+                ]
+
+                allowed_class_ids = set(
+                    Class.objects.filter(
+                        id__in=class_ids,
+                        class_teacher=user,
+                    ).values_list(
+                        "id",
+                        flat=True,
+                    )
+                )
+
+                submitted_class_ids = set(
+                    class_ids
+                )
+
+                unauthorized = (
+                    submitted_class_ids
+                    - allowed_class_ids
+                )
+
+                if unauthorized:
+
+                    return Response(
+                        {
+                            "detail": (
+                                "You are not authorized "
+                                "to configure fees for one "
+                                "or more selected classes."
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+        # --------------------------------------------------------
+        # UPSERT TRANSACTION
+        # --------------------------------------------------------
+
+        with transaction.atomic():
+
+            # -----------------------------------------------
+            # Build lookup combinations
+            # -----------------------------------------------
+
+            class_ids = [
+                item["school_class"].id
+                for item in items
+            ]
+
+            session_ids = [
+                item["session"].id
+                for item in items
+            ]
+
+            term_ids = [
+                item["term"].id
+                for item in items
+            ]
+
+            existing_qs = ClassFees.objects.filter(
+                school_class_id__in=class_ids,
+                session_id__in=session_ids,
+                term_id__in=term_ids,
+            )
+
+            existing = {
+                (
+                    obj.school_class_id,
+                    obj.session_id,
+                    obj.term_id,
+                ): obj
+                for obj in existing_qs
+            }
+
+            to_create = []
+            to_update = []
+
+            # -----------------------------------------------
+            # Separate update/create
+            # -----------------------------------------------
+
+            for item in items:
+
+                school_class = item[
+                    "school_class"
+                ]
+
+                session = item[
+                    "session"
+                ]
+
+                term = item[
+                    "term"
+                ]
+
+                amount = item[
+                    "amount"
+                ]
+
+                key = (
+                    school_class.id,
+                    session.id,
+                    term.id,
+                )
+
+                if key in existing:
+
+                    fee = existing[key]
+
+                    fee.amount = amount
+
+                    to_update.append(fee)
+
+                else:
+
+                    to_create.append(
+                        ClassFees(
+                            school_class=school_class,
+                            session=session,
+                            term=term,
+                            amount=amount,
+                        )
+                    )
+
+            # -----------------------------------------------
+            # CREATE
+            # -----------------------------------------------
+
+            if to_create:
+
+                ClassFees.objects.bulk_create(
+                    to_create
+                )
+
+            # -----------------------------------------------
+            # UPDATE
+            # -----------------------------------------------
+
+            if to_update:
+
+                ClassFees.objects.bulk_update(
+                    to_update,
+                    ["amount"],
+                )
+
+        # --------------------------------------------------------
+        # Return saved records
+        # --------------------------------------------------------
+
+        result = (
+            ClassFees.objects
+            .select_related(
+                "school_class",
+                "school_class__arm",
+                "session",
+                "term",
+            )
+            .filter(
+                school_class_id__in=class_ids,
+                session_id__in=session_ids,
+                term_id__in=term_ids,
+            )
+            .order_by(
+                "school_class_id"
+            )
+        )
+
+        return Response(
+            ClassFeeSerializer(
+                result,
+                many=True,
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+        
+#==========================================================
 # 5. RESUMPTION DATE VIEWSET
 # =============================================================================
 class ResumptionDateViewSet(viewsets.ModelViewSet):

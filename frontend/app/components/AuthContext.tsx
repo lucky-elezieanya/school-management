@@ -103,15 +103,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const { tokens, decoded } = await login(username, password);
 
-      setAuthToken(tokens);
+      if (decoded && tokens) {
+        setAuthToken(tokens);
 
-      const user = await fetchCurrentUser(decoded.user_id);
+        const user = await fetchCurrentUser(decoded.user_id);
+        setUser(user);
 
-      setUser(user);
-
-      const term = await fetchCurrentTerm();
-
-      setCurrentTerm(term);
+        const term = await fetchCurrentTerm();
+        setCurrentTerm(term);
+      }
 
       router.replace(
         decoded.role === "admin"

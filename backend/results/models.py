@@ -220,7 +220,9 @@ class GradingScale(models.Model):
         default=SUBJECT,
     )
 
-    grade = models.CharField(max_length=20)
+    grade = models.CharField(
+        max_length=20
+    )
 
     lower_limit = models.DecimalField(
         max_digits=5,
@@ -234,11 +236,26 @@ class GradingScale(models.Model):
         default=0,
     )
 
-    remark = models.CharField(max_length=50)
+    remark = models.CharField(
+        max_length=50
+    )
 
     class Meta:
-        ordering = ["grading_type", "-upper_limit"]
+        ordering = [
+            "grading_type",
+            "-upper_limit",
+        ]
 
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "grading_type",
+                    "grade",
+                ],
+                name="unique_grade_per_grading_type",
+            )
+        ]
+        
 # RESULT SUMMARY MODEL
 
 class ResultSummary(models.Model): 
@@ -423,24 +440,37 @@ class ClassFees(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["school_class", "session", "term"],
-                name="unique_class_fee"
+                fields=[
+                    "school_class",
+                    "session",
+                    "term",
+                ],
+                name="unique_class_fee_per_session_term",
             )
         ]
         ordering = ["-school_class"]
 
 class MaxScores(models.Model):
-    first_test = models.DecimalField(max_digits=10, decimal_places=2)
-    second_test = models.DecimalField(max_digits=10, decimal_places=2)
-    exam = models.DecimalField(max_digits=10, decimal_places=2)
-    school_class = models.ForeignKey("academics.Class", on_delete=models.CASCADE)
-    class Meta:
-        ordering = (
-          "-school_class__name",
-        )
-    def __str__(self):
-        return f"Max scores for {self.school_class.name}: T1: {self.first_test}, T: {self.second_test}, Ex: {self.exam}"
+    school_class = models.OneToOneField(
+        "academics.Class",
+        on_delete=models.CASCADE,
+        related_name="max_scores",
+    )
 
+    first_test = models.PositiveIntegerField(default=20)
+    second_test = models.PositiveIntegerField(default=20)
+    exam = models.PositiveIntegerField(default=60)
+
+    class Meta:
+        ordering = ["school_class_id"]
+
+    def __str__(self):
+        return f"{self.school_class} - {self.total}"
+
+    @property
+    def total(self):
+        return self.first_test + self.second_test + self.exam
+    
 class ResumptionDate(models.Model):
     resumption_date = models.DateField(blank=True, null=True)
     current_term = models.ForeignKey("academics.Term", on_delete=models.CASCADE, related_name="current_term",  null=True)

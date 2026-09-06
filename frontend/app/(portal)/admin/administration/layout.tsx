@@ -339,7 +339,7 @@ export default function Layout({
               <div className="flex items-center gap-4">
                 <div className="hidden sm:flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-xl border border-gray-200">
                   <p className="text-sm font-semibold text-gray-700">
-                    {currentTerm?.session.name}
+                    {currentTerm?.session?.name}
                   </p>
 
                   <span className="text-gray-400">•</span>

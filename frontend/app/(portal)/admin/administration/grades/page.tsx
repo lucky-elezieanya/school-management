@@ -1,527 +1,813 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  apiAction,
-  createAction,
-  updateAction,
-  handleUserDelete,
-} from "@/app/lib/api";
-
-import { Pencil, Trash2, Plus, X, GraduationCap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Save, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { apiAction, apiHeaders, BASE_URL } from "@/app/lib/api";
 
-type GradeType = {
-  id: number;
+
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type GradingType = "subject" | "overall";
+
+type GradingScale = {
+  id?: number;
+
   grade: string;
-  lower_limit: number;
-  upper_limit: number;
+  grading_type: GradingType;
+
+  lower_limit: string;
+  upper_limit: string;
+
   remark: string;
-  grading_type: string;
+
+  // Only used by the frontend.
+  // It tells us whether the row came from the database.
+  isNew?: boolean;
 };
 
-export default function GradesPage() {
-  const [grades, setGrades] = useState<GradeType[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingId, setEditingId] = useState("");
+// ============================================================
+// PAGE
+// ============================================================
 
-  const [selectedGrade, setSelectedGrade] = useState<GradeType | null>(null);
+export default function GradingConfigurationPage() {
+  const [gradingType, setGradingType] =
+    useState<GradingType>("subject");
 
-  const [form, setForm] = useState({
-    grade: "",
-    lower_limit: "",
-    upper_limit: "",
-    remark: "",
-    grading_type: "subject",
-  });
+  const [grades, setGrades] = useState<GradingScale[]>([]);
 
-  // ============================
-  // FETCH GRADES
-  // ============================
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+
+  // ==========================================================
+  // FETCH GRADING SCALES
+  // ==========================================================
+
   const fetchGrades = async () => {
     try {
-      setFetching(true);
+      setLoading(true);
 
-      const res = await apiAction("results", "grading-scales");
+      const response = await apiAction(
+        "results",
+        "grading-scales"
+      );
 
-      setGrades(res.results || res);
+      const data = Array.isArray(response)
+        ? response
+        : response?.results ?? [];
+
+      setGrades(
+        data
+          .filter(
+            (grade: GradingScale) =>
+              grade.grading_type === gradingType
+          )
+          .map((grade: GradingScale) => ({
+            ...grade,
+            lower_limit: String(grade.lower_limit ?? ""),
+            upper_limit: String(grade.upper_limit ?? ""),
+            remark: grade.remark ?? "",
+            grade: grade.grade ?? "",
+            isNew: false,
+          }))
+      );
     } catch (error) {
-      console.log(error);
+      console.error("Failed to fetch grading scales:", error);
+
+      toast.error(
+        "Failed to load grading configuration."
+      );
     } finally {
-      setFetching(false);
+      setLoading(false);
     }
   };
+
+
+  // ==========================================================
+  // LOAD WHEN GRADING TYPE CHANGES
+  // ==========================================================
 
   useEffect(() => {
     fetchGrades();
-  }, [grades.length]);
+  }, [gradingType]);
 
-  // ============================
-  // HANDLE CHANGE
-  // ============================
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+
+  // ==========================================================
+  // UPDATE ROW
+  // ==========================================================
+
+  const updateGrade = (
+    index: number,
+    field: keyof GradingScale,
+    value: string
   ) => {
-    setForm((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    setGrades((current) =>
+      current.map((row, rowIndex) => {
+        if (rowIndex !== index) {
+          return row;
+        }
+
+        return {
+          ...row,
+          [field]: value,
+        };
+      })
+    );
   };
 
-  // ============================
-  // RESET FORM
-  // ============================
-  const resetForm = () => {
-    setForm({
-      grade: "",
-      lower_limit: "",
-      upper_limit: "",
-      remark: "",
-      grading_type: "subject",
-    });
+
+  // ==========================================================
+  // ADD NEW ROW
+  // ==========================================================
+
+  const addGrade = () => {
+    setGrades((current) => [
+      ...current,
+      {
+        grade: "",
+        grading_type: gradingType,
+        lower_limit: "",
+        upper_limit: "",
+        remark: "",
+        isNew: true,
+      },
+    ]);
   };
-  function toSentenceCase(str: string) {
-    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-  }
-  // ============================
-  // CREATE GRADE
-  // ============================
-  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
 
-    try {
-      setLoading(true);
 
-      const payload = {
-        grade: form.grade.toUpperCase(),
-        lower_limit: Number(form.lower_limit),
-        upper_limit: Number(form.upper_limit),
-        remark: toSentenceCase(form.remark),
-        grading_type: form.grading_type,
-      };
+  // ==========================================================
+  // REMOVE ROW
+  // ==========================================================
 
-      const res = await createAction(
-        "results",
-        "grading-scales",
-        payload,
-        "POST",
+  const removeGrade = (index: number) => {
+    setGrades((current) =>
+      current.filter((_, rowIndex) => rowIndex !== index)
+    );
+  };
+
+
+  // ==========================================================
+  // VALIDATE GRADES
+  // ==========================================================
+
+  const validateGrades = (): boolean => {
+    if (grades.length === 0) {
+      toast.error(
+        "Add at least one grading scale before saving."
       );
 
-      if (res) {
-        setGrades((prev) => [...prev, res]);
-
-        resetForm();
-        setShowCreateModal(false);
-
-        toast.success(`Grade ${payload.grade} created successfully`);
-      }
-    } catch (error:any) {
-      console.log(error);
-      toast.error(error?.message || "Failed to create grade");
-    } finally {
-      setLoading(false);
+      return false;
     }
-  };
 
-  // ============================
-  // OPEN EDIT
-  // ============================
-  const openEditModal = (grade: GradeType) => {
-    setSelectedGrade(grade);
 
-    setForm({
-      grade: grade.grade,
-      lower_limit: String(grade.lower_limit),
-      upper_limit: String(grade.upper_limit),
-      remark: grade.remark,
-      grading_type: grade.grading_type,
-    });
+    // --------------------------------------------------------
+    // Check individual rows
+    // --------------------------------------------------------
 
-    setShowEditModal(true);
-  };
+    for (let index = 0; index < grades.length; index++) {
+      const row = grades[index];
 
-  // ============================
-  // UPDATE GRADE
-  // ============================
-  const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+      const rowNumber = index + 1;
 
-    if (!selectedGrade) return;
+      const grade = row.grade.trim();
 
-    try {
-      setLoading(true);
+      const remark = row.remark.trim();
 
-      const payload = {
-        grade: form.grade.toUpperCase(),
-        lower_limit: Number(form.lower_limit),
-        upper_limit: Number(form.upper_limit),
-        remark: toSentenceCase(form.remark),
-        grading_type: form.grading_type,
-      };
-
-      const res = await updateAction(
-        "results",
-        "grading-scales",
-        Number(editingId),
-        payload,
-        "PUT",
-      );
-
-      if (res) {
-        setGrades((prev) =>
-          prev.map((g) => (g.id === selectedGrade.id ? res : g)),
+      if (!grade) {
+        toast.error(
+          `Grade name is required on row ${rowNumber}.`
         );
 
-        setShowEditModal(false);
-        setSelectedGrade(null);
-
-        resetForm();
-
-        toast.success(`Grade ${payload.grade} updated successfully`);
+        return false;
       }
-    } catch (error) {
-      console.log(error);
-      toast.error("Failed to update grade");
-    } finally {
-      setLoading(false);
+
+      if (!remark) {
+        toast.error(
+          `Remark is required for "${grade}".`
+        );
+
+        return false;
+      }
+
+      if (
+        row.lower_limit === "" ||
+        row.upper_limit === ""
+      ) {
+        toast.error(
+          `Both lower and upper limits are required for "${grade}".`
+        );
+
+        return false;
+      }
+
+      const lower = Number(row.lower_limit);
+      const upper = Number(row.upper_limit);
+
+      if (
+        !Number.isFinite(lower) ||
+        !Number.isFinite(upper)
+      ) {
+        toast.error(
+          `Invalid grading limits for "${grade}".`
+        );
+
+        return false;
+      }
+
+      if (lower < 0 || upper < 0) {
+        toast.error(
+          `Grading limits cannot be negative for "${grade}".`
+        );
+
+        return false;
+      }
+
+      if (lower > upper) {
+        toast.error(
+          `Lower limit cannot be greater than upper limit for "${grade}".`
+        );
+
+        return false;
+      }
     }
+
+
+    // --------------------------------------------------------
+    // Check duplicate grade names
+    // --------------------------------------------------------
+
+    const gradeNames = new Set<string>();
+
+    for (const row of grades) {
+      const normalizedGrade =
+        row.grade.trim().toLowerCase();
+
+      if (gradeNames.has(normalizedGrade)) {
+        toast.error(
+          `Duplicate grade "${row.grade}".`
+        );
+
+        return false;
+      }
+
+      gradeNames.add(normalizedGrade);
+    }
+
+
+    // --------------------------------------------------------
+    // Check overlapping ranges
+    // --------------------------------------------------------
+
+    for (let i = 0; i < grades.length; i++) {
+      const first = grades[i];
+
+      const firstLower = Number(first.lower_limit);
+      const firstUpper = Number(first.upper_limit);
+
+      for (let j = i + 1; j < grades.length; j++) {
+        const second = grades[j];
+
+        const secondLower = Number(
+          second.lower_limit
+        );
+
+        const secondUpper = Number(
+          second.upper_limit
+        );
+
+        const overlaps =
+          firstLower <= secondUpper &&
+          firstUpper >= secondLower;
+
+        if (overlaps) {
+          toast.error(
+            `The ranges for "${first.grade}" and "${second.grade}" overlap.`
+          );
+
+          return false;
+        }
+      }
+    }
+
+
+    return true;
   };
 
-  // ============================
-  // DELETE GRADE
-  // ============================
-  const handleDelete = async (grade: GradeType) => {
+
+  // ==========================================================
+  // SAVE ALL
+  // ==========================================================
+
+  const handleSaveAll = async () => {
+    if (!validateGrades()) {
+      return;
+    }
+
     try {
-      await handleUserDelete(
-        "results",
-        "grades",
-        grade.id,
-        `grade ${grade.grade}`,
+      setSaving(true);
+
+      // ------------------------------------------------------
+      // Prepare payload
+      // ------------------------------------------------------
+
+      const payload = grades.map((row) => {
+        const item: {
+          id?: number;
+          grade: string;
+          grading_type: GradingType;
+          lower_limit: number;
+          upper_limit: number;
+          remark: string;
+        } = {
+          grade: row.grade.trim(),
+          grading_type: gradingType,
+          lower_limit: Number(row.lower_limit),
+          upper_limit: Number(row.upper_limit),
+          remark: row.remark.trim(),
+        };
+
+        // Only existing database records have IDs.
+        // New rows intentionally omit id.
+        if (row.id !== undefined) {
+          item.id = row.id;
+        }
+
+        return item;
+      });
+
+
+      // ------------------------------------------------------
+      // Bulk upsert
+      // ------------------------------------------------------
+
+      const response = await fetch(
+        `${BASE_URL}/results/grading-scales/bulk-upsert/`,
+        {
+          method: "POST",
+
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
       );
 
-      setGrades((prev) => prev.filter((g) => g.id !== grade.id));
+      // ------------------------------------------------------
+      // Handle response
+      // ------------------------------------------------------
+
+      if (!response.ok) {
+        let errorMessage =
+          "Failed to save grading configuration.";
+
+        try {
+          const errorData = await response.json();
+
+          if (errorData?.message) {
+            errorMessage = errorData.message;
+          } else if (errorData?.detail) {
+            errorMessage = errorData.detail;
+          }
+        } catch {
+          // Ignore JSON parsing errors.
+        }
+
+        throw new Error(errorMessage);
+      }
+
+
+      toast.success(
+        "Grading configuration saved successfully."
+      );
+
+
+      // ------------------------------------------------------
+      // Reload from backend
+      // ------------------------------------------------------
+
+      await fetchGrades();
+
     } catch (error) {
-      toast.error("Failed to delete grade");
-      console.log(error);
+      console.error(
+        "Failed to save grading configuration:",
+        error
+      );
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to save grading configuration."
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ============================
-  // LOADING
-  // ============================
-  if (fetching) {
-    return (
-      <div className="p-10 text-center text-gray-500">Loading grades...</div>
+
+  // ==========================================================
+  // RESET
+  // ==========================================================
+
+  const handleReset = async () => {
+    await fetchGrades();
+
+    toast.success(
+      "Changes have been discarded."
     );
-  }
+  };
+
+
+  // ==========================================================
+  // SUMMARY
+  // ==========================================================
+
+  const configuredCount = useMemo(() => {
+    return grades.filter(
+      (grade) => grade.grade.trim() !== ""
+    ).length;
+  }, [grades]);
+
+
+  // ==========================================================
+  // RENDER
+  // ==========================================================
 
   return (
-    <div className="space-y-6 px-6">
-      {/* HEADER */}
-      <div className="flex flex-col text-left md:flex-row md:items-center md:justify-between gap-2">
-        <div className="text-left">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Grades Management
+    <div className="space-y-6 p-6">
+
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
+
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Grading Configuration
           </h1>
 
-          <p className="text-gray-500 mt-1">
-            Manage grading system and score ranges
+          <p className="mt-1 text-sm text-muted-foreground">
+            Configure grade names, score ranges, and remarks.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex max-w-fit items-center gap-2  bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-2xl transition"
-        >
-          <Plus size={18} />
-          Add Grade
-        </button>
+
+        {/* Grading type */}
+
+        <div className="flex items-center gap-3">
+
+          <label
+            htmlFor="grading-type"
+            className="text-sm font-medium"
+          >
+            Grading Type
+          </label>
+
+          <select
+            id="grading-type"
+            value={gradingType}
+            onChange={(event) =>
+              setGradingType(
+                event.target.value as GradingType
+              )
+            }
+            disabled={saving}
+            className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="subject">
+              Subject Grade
+            </option>
+
+            <option value="overall">
+              Overall Grade
+            </option>
+          </select>
+
+        </div>
+
       </div>
-      {/* GRID → TABLE */}
-      <div className="bg-white border w-full border-gray-200 rounded-3xl shadow-sm">
-        {grades.length > 0 ? (
-          <div className="flex mx-auto w-full overflow-x-auto px-4">
-            <table className="w-full mx-auto overflow-x-auto">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="p-2 text-left">Grade</th>
-                  <th className="p-2 text-left">Remark</th>
-                  <th className="p-2 text-left">Grading Type</th>
-                  <th className="p-2 text-left">Lower Limit</th>
-                  <th className="p-2 text-left">Upper Limit</th>
-                  <th className="p-2 text-left">Actions</th>
-                </tr>
-              </thead>
 
-              <tbody>
-                {grades.map((grade) => (
-                  <tr
-                    key={`${grade.grading_type}-${grade.id}`}
-                    className="border-t hover:bg-gray-50 transition"
-                  >
-                    {/* GRADE */}
-                    <td className="p-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                          <GraduationCap size={20} />
-                        </div>
 
-                        <span className="text-lg font-bold text-gray-800">
-                          {grade.grade}
-                        </span>
-                      </div>
-                    </td>
+      {/* ======================================================
+          SUMMARY
+      ====================================================== */}
 
-                    <td className="p-2 text-sm text-gray-500">
-                      {grade.remark}
-                    </td>
-                    {/* GRADING TYPE */}
-                    <td className="p-2 text-sm text-gray-500">
-                      {grade.grading_type.toUpperCase()}
-                    </td>
+      <div className="rounded-lg border bg-card p-4">
 
-                    {/* LOWER */}
-                    <td className="p-2">
-                      <span className="inline-flex bg-gray-50 px-4 py-2 rounded-2xl font-semibold text-gray-800">
-                        {grade.lower_limit}
-                      </span>
-                    </td>
+        <div className="flex flex-wrap items-center justify-between gap-4">
 
-                    {/* UPPER */}
-                    <td className="p-2">
-                      <span className="inline-flex bg-gray-50 px-4 py-2 rounded-2xl font-semibold text-gray-800">
-                        {grade.upper_limit}
-                      </span>
-                    </td>
+          <div>
+            <p className="text-sm font-medium">
+              {gradingType === "subject"
+                ? "Subject Grading"
+                : "Overall Grading"}
+            </p>
 
-                    {/* ACTIONS */}
-                    <td className="p-2">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => {
-                            openEditModal(grade);
-                            setEditingId(String(grade.id));
-                          }}
-                          className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-2xl transition"
-                        >
-                          <Pencil size={16} />
-                          Edit
-                        </button>
-
-                        <button
-                          onClick={() => handleDelete(grade)}
-                          className="w-10 h-10 rounded-2xl bg-red-100 hover:bg-red-200 text-red-700 flex items-center justify-center transition"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="p-16 text-center">
-            <h3 className="text-xl font-semibold text-gray-800">
-              No grades found
-            </h3>
-
-            <p className="text-gray-500 mt-2">
-              Start by creating your grading structure
+            <p className="text-sm text-muted-foreground">
+              {configuredCount} grading scale
+              {configuredCount === 1 ? "" : "s"} configured
             </p>
           </div>
-        )}
+
+
+          <button
+            type="button"
+            onClick={addGrade}
+            disabled={saving}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" />
+
+            Add Grade
+          </button>
+
+        </div>
+
       </div>
 
-      {/* CREATE MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
-          <div className="bg-white w-full max-w-lg rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Add Grade</h2>
 
-                <p className="text-sm text-gray-500 mt-1">
-                  Create a new grading range
-                </p>
-              </div>
+      {/* ======================================================
+          TABLE
+      ====================================================== */}
 
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="w-10 h-10 rounded-xl hover:bg-gray-100 flex items-center justify-center"
-              >
-                <X size={20} />
-              </button>
+      <div className="rounded-lg border bg-card">
+
+        {loading ? (
+
+          <div className="flex min-h-[300px] items-center justify-center">
+
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+
+              <RefreshCw className="h-4 w-4 animate-spin" />
+
+              Loading grading configuration...
+
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-5">
-              <h2 className="font-bold text-md">Grading Type</h2>
-              <select
-                name="grading_type"
-                id="grading_type"
-                className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-                onChange={handleChange}
-                value={form.grading_type}
-              >
-                <option value="">Select Grading Type</option>
-                <option value="subject">SUBJECT</option>
-                <option value="overall">OVERALL GRADE</option>
-              </select>
-              <h2 className="font-bold text-md">Grade</h2>
-
-              <input
-                type="text"
-                name="grade"
-                value={form.grade}
-                onChange={handleChange}
-                placeholder="Grade (e.g A1)"
-                className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  name="lower_limit"
-                  value={form.lower_limit}
-                  onChange={handleChange}
-                  placeholder="Lower Limit"
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-
-                <input
-                  type="number"
-                  name="upper_limit"
-                  value={form.upper_limit}
-                  onChange={handleChange}
-                  placeholder="Upper Limit"
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <input
-                type="text"
-                name="remark"
-                value={form.remark}
-                onChange={handleChange}
-                placeholder="Remark"
-                className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-5 py-3 rounded-2xl bg-gray-200 hover:bg-gray-300 transition"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  disabled={loading}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition"
-                >
-                  {loading ? "Saving..." : "Save Grade"}
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
 
-      {/* EDIT MODAL */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2">
-          <div className="bg-white w-full max-w-lg rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Edit Grade</h2>
+        ) : grades.length === 0 ? (
 
-                <p className="text-sm text-gray-500 mt-1">
-                  Update grading information
-                </p>
-              </div>
+          <div className="flex min-h-[300px] flex-col items-center justify-center gap-4 px-6 text-center">
 
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="w-10 h-10 rounded-xl hover:bg-gray-100 flex items-center justify-center"
-              >
-                <X size={20} />
-              </button>
+            <div>
+              <h3 className="font-semibold">
+                No grading scales configured
+              </h3>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Add your first grading scale to get started.
+              </p>
             </div>
 
-            <form onSubmit={handleUpdate} className="space-y-5">
-              <input
-                type="text"
-                name="grade"
-                value={form.grade}
-                onChange={handleChange}
-                placeholder="Grade"
-                className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
+            <button
+              type="button"
+              onClick={addGrade}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
 
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  name="lower_limit"
-                  value={form.lower_limit}
-                  onChange={handleChange}
-                  placeholder="Lower Limit"
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+              Add Grade
+            </button>
 
-                <input
-                  type="number"
-                  name="upper_limit"
-                  value={form.upper_limit}
-                  onChange={handleChange}
-                  placeholder="Upper Limit"
-                  className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <input
-                type="text"
-                name="remark"
-                value={form.remark}
-                onChange={handleChange}
-                placeholder="Remark"
-                className="w-full rounded-2xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-5 py-3 rounded-2xl bg-gray-200 hover:bg-gray-300 transition"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  disabled={loading}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl transition"
-                >
-                  {loading ? "Updating..." : "Update Grade"}
-                </button>
-              </div>
-            </form>
           </div>
+
+        ) : (
+
+          <div className="overflow-x-auto">
+
+            <table className="w-full min-w-[850px] border-collapse">
+
+              <thead>
+
+                <tr className="border-b bg-muted/40">
+
+                  <th className="px-4 py-3 text-left text-sm font-semibold">
+                    Grade
+                  </th>
+
+                  <th className="px-4 py-3 text-left text-sm font-semibold">
+                    Remark
+                  </th>
+
+                  <th className="w-[150px] px-4 py-3 text-left text-sm font-semibold">
+                    Lower Limit
+                  </th>
+
+                  <th className="w-[150px] px-4 py-3 text-left text-sm font-semibold">
+                    Upper Limit
+                  </th>
+
+                  <th className="w-[100px] px-4 py-3 text-center text-sm font-semibold">
+                    Action
+                  </th>
+
+                </tr>
+
+              </thead>
+
+
+              <tbody>
+
+                {grades.map((row, index) => (
+
+                  <tr
+                    key={
+                      row.id ??
+                      `new-${index}`
+                    }
+                    className="border-b last:border-b-0"
+                  >
+
+                    {/* ========================================
+                        GRADE
+                    ======================================== */}
+
+                    <td className="px-4 py-3">
+
+                      <input
+                        type="text"
+                        value={row.grade}
+                        onChange={(event) =>
+                          updateGrade(
+                            index,
+                            "grade",
+                            event.target.value
+                          )
+                        }
+                        placeholder="e.g. A"
+                        disabled={saving}
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+
+                    </td>
+
+
+                    {/* ========================================
+                        REMARK
+                    ======================================== */}
+
+                    <td className="px-4 py-3">
+
+                      <input
+                        type="text"
+                        value={row.remark}
+                        onChange={(event) =>
+                          updateGrade(
+                            index,
+                            "remark",
+                            event.target.value
+                          )
+                        }
+                        placeholder="e.g. Excellent"
+                        disabled={saving}
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+
+                    </td>
+
+
+                    {/* ========================================
+                        LOWER LIMIT
+                    ======================================== */}
+
+                    <td className="px-4 py-3">
+
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.lower_limit}
+                        onChange={(event) =>
+                          updateGrade(
+                            index,
+                            "lower_limit",
+                            event.target.value
+                          )
+                        }
+                        placeholder="0"
+                        disabled={saving}
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+
+                    </td>
+
+
+                    {/* ========================================
+                        UPPER LIMIT
+                    ======================================== */}
+
+                    <td className="px-4 py-3">
+
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.upper_limit}
+                        onChange={(event) =>
+                          updateGrade(
+                            index,
+                            "upper_limit",
+                            event.target.value
+                          )
+                        }
+                        placeholder="100"
+                        disabled={saving}
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+
+                    </td>
+
+
+                    {/* ========================================
+                        DELETE
+                    ======================================== */}
+
+                    <td className="px-4 py-3 text-center">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeGrade(index)
+                        }
+                        disabled={saving}
+                        title="Remove row"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+
+                    </td>
+
+                  </tr>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        )}
+
+      </div>
+
+
+      {/* ======================================================
+          ACTIONS
+      ====================================================== */}
+
+      {!loading && grades.length > 0 && (
+
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={saving}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+
+            Reset Changes
+          </button>
+
+
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={saving}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+          >
+
+            {saving ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+
+                Save All
+              </>
+            )}
+
+          </button>
+
         </div>
+
       )}
+
     </div>
   );
 }
+

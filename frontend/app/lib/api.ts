@@ -220,8 +220,10 @@ export const getActiveTermSession = async () => {
 		headers: apiHeaders()
 	});
 	const response = await res.json();
-	if (!res.ok) {
-		throw response;
+	if (!res) {
+		console.log(response);
+        return null;
+        
 	}
 	return response;
 };

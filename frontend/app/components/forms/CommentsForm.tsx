@@ -479,11 +479,13 @@ export default function TermCommentEntryPage() {
             body: JSON.stringify(behaviourPayload),
           }),
         ]);
+      console.log(attendancePayload, commentPayload, behaviourPayload);
+      console.log(attendanceResponse, commentResponse, behaviourResponse);
 
       if (
-        !attendanceResponse.ok ||
-        !commentResponse.ok ||
-        !behaviourResponse.ok
+        !attendanceResponse ||
+        !commentResponse ||
+        !behaviourResponse
       ) {
         toast.error("Unable to save records.");
         return;
@@ -492,6 +494,7 @@ export default function TermCommentEntryPage() {
       toast.success("Attendance, comments and behaviour saved successfully.");
     } catch (err: any) {
       toast.error(err.message || "Unable to save.");
+      console.log(err.message || err);
     } finally {
       setSubmitting(false);
     }

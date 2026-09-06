@@ -339,16 +339,53 @@ class AttendanceSerializer(serializers.ModelSerializer):
         return attrs  
 
 class MaxScoresSerializer(serializers.ModelSerializer):
-    school_class = ClassSerializer(read_only=True)
-    school_class_id = serializers.PrimaryKeyRelatedField(
-        source="school_class",
-        write_only=True,
-        queryset=Class.objects.all()
-    )
+    school_class = serializers.SerializerMethodField()
+
     class Meta:
         model = MaxScores
-        fields = ["id", "first_test", "second_test", "exam", "school_class", "school_class_id"]
+        fields = [
+            "id",
+            "school_class",
+            "first_test",
+            "second_test",
+            "exam",
+        ]
 
+    def get_school_class(self, obj):
+        school_class = obj.school_class
+
+        return {
+            "id": school_class.id,
+            "name": school_class.name,
+            "arm": {
+                "name": school_class.arm.name,
+                "code": school_class.arm.code,
+            } if getattr(school_class, "arm", None) else None,
+        }
+
+class MaxScoresBulkItemSerializer(serializers.Serializer):
+    school_class = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all()
+    ) 
+
+    first_test = serializers.IntegerField(min_value=0)
+    second_test = serializers.IntegerField(min_value=0)
+    exam = serializers.IntegerField(min_value=0)
+
+    def validate(self, attrs):
+        total = (
+            attrs["first_test"]
+            + attrs["second_test"]
+            + attrs["exam"]
+        )
+
+        if total != 100:
+            raise serializers.ValidationError(
+                "Maximum scores must total 100."
+            )
+
+        return attrs
+    
 class BehaviourSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(
         source="student.user.full_name",
@@ -408,9 +445,13 @@ class BehaviourSerializer(serializers.ModelSerializer):
     def validate(self, data):
         return data
 
-class GradingScaleSerializer(serializers.ModelSerializer):
+class GradingScaleSerializer(
+    serializers.ModelSerializer
+):
+
     class Meta:
         model = GradingScale
+
         fields = [
             "id",
             "grade",
@@ -421,14 +462,71 @@ class GradingScaleSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        lower = attrs["lower_limit"]
-        upper = attrs["upper_limit"]
-        grading_type = attrs["grading_type"]
+
+        lower = attrs.get(
+            "lower_limit",
+            self.instance.lower_limit
+            if self.instance
+            else None,
+        )
+
+        upper = attrs.get(
+            "upper_limit",
+            self.instance.upper_limit
+            if self.instance
+            else None,
+        )
+
+        grading_type = attrs.get(
+            "grading_type",
+            self.instance.grading_type
+            if self.instance
+            else None,
+        )
+
+        grade = attrs.get(
+            "grade",
+            self.instance.grade
+            if self.instance
+            else None,
+        )
+
+        if lower is None or upper is None:
+            return attrs
 
         if lower > upper:
-            raise serializers.ValidationError({"message":
-                "Lower limit cannot be greater than upper limit."
+            raise serializers.ValidationError({
+                "message": (
+                    "Lower limit cannot be greater "
+                    "than upper limit."
+                )
             })
+
+        # ----------------------------------------------------
+        # Duplicate grade
+        # ----------------------------------------------------
+
+        duplicate_grade = GradingScale.objects.filter(
+            grading_type=grading_type,
+            grade__iexact=grade,
+        )
+
+        if self.instance:
+            duplicate_grade = duplicate_grade.exclude(
+                pk=self.instance.pk
+            )
+
+        if duplicate_grade.exists():
+            raise serializers.ValidationError({
+                "message": (
+                    "This grade already exists "
+                    "for this grading type."
+                )
+            })
+
+        # ----------------------------------------------------
+        # Overlapping range
+        # ----------------------------------------------------
 
         overlap = GradingScale.objects.filter(
             grading_type=grading_type,
@@ -437,29 +535,83 @@ class GradingScaleSerializer(serializers.ModelSerializer):
         )
 
         if self.instance:
-            overlap = overlap.exclude(pk=self.instance.pk)
-
-        if overlap.exists():
-            raise serializers.ValidationError(
-                {"message": "This grading range overlaps with an existing grading scale."}
+            overlap = overlap.exclude(
+                pk=self.instance.pk
             )
 
+        if overlap.exists():
+            raise serializers.ValidationError({
+                "message": (
+                    "This grading range overlaps "
+                    "with an existing grading scale."
+                )
+            })
+
         return attrs
-      
+
+class GradingScaleBulkItemSerializer(
+    serializers.Serializer
+):
+    id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+    )
+
+    grade = serializers.CharField(
+        max_length=20
+    )
+
+    grading_type = serializers.ChoiceField(
+        choices=GradingScale.GRADE_TYPES
+    )
+
+    lower_limit = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+    )
+
+    upper_limit = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+    )
+
+    remark = serializers.CharField(
+        max_length=50
+    )
+
+    def validate(self, attrs):
+
+        lower = attrs["lower_limit"]
+        upper = attrs["upper_limit"]
+
+        if lower > upper:
+            raise serializers.ValidationError({
+                "message": (
+                    "Lower limit cannot be greater "
+                    "than upper limit."
+                )
+            })
+
+        return attrs
+
 class ClassFeeSerializer(serializers.ModelSerializer):
     session = AcademicSessionSerializer(read_only=True)
     session_id = serializers.PrimaryKeyRelatedField(
         source="session",
         queryset=AcademicSession.objects.all(),
-        write_only=True
+        write_only=True,
     )
     term = TermSerializer(read_only=True)
-    term_id = serializers.PrimaryKeyRelatedField(source="term", write_only=True, queryset=Term.objects.all())
+    term_id = serializers.PrimaryKeyRelatedField(
+        source="term",
+        queryset=Term.objects.all(),
+        write_only=True,
+    )
     school_class = ClassSerializer(read_only=True)
     school_class_id = serializers.PrimaryKeyRelatedField(
-        write_only=True,
+        source="school_class",
         queryset=Class.objects.all(),
-        source="school_class"
+        write_only=True,
     )
 
     class Meta:
@@ -470,16 +622,12 @@ class ClassFeeSerializer(serializers.ModelSerializer):
             "school_class_id",
             "session_id",
             "session",
-            "term",
             "term_id",
+            "term",
             "amount",
         ]
 
     def validate(self, data):
-        """
-        Prevent duplicate fee entries per class/session/term
-        (safe for both create and update)
-        """
 
         school_class = data.get("school_class")
         session = data.get("session")
@@ -488,15 +636,29 @@ class ClassFeeSerializer(serializers.ModelSerializer):
         if not school_class or not session or not term:
             return data
 
+        # -----------------------------------------
+        # Make sure term belongs to session
+        # -----------------------------------------
+
+        if term.session_id != session.id:
+            raise serializers.ValidationError({
+                "term_id": "This term does not belong to the selected session."
+            })
+
+        # -----------------------------------------
+        # Prevent duplicate
+        # -----------------------------------------
+
         queryset = ClassFees.objects.filter(
             school_class=school_class,
             session=session,
-            term=term
+            term=term,
         )
 
-        # 🔥 IMPORTANT: exclude current instance on update
         if self.instance:
-            queryset = queryset.exclude(pk=self.instance.pk)
+            queryset = queryset.exclude(
+                pk=self.instance.pk
+            )
 
         if queryset.exists():
             raise serializers.ValidationError({
@@ -506,7 +668,38 @@ class ClassFeeSerializer(serializers.ModelSerializer):
             })
 
         return data
+    
+class ClassFeesBulkItemSerializer(serializers.Serializer):
 
+    school_class = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all()
+    )
+
+    session = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicSession.objects.all()
+    )
+
+    term = serializers.PrimaryKeyRelatedField(
+        queryset=Term.objects.all()
+    )
+
+    amount = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=0,
+    )
+
+    def validate(self, attrs):
+
+        session = attrs["session"]
+        term = attrs["term"]
+
+        if term.session_id != session.id:
+            raise serializers.ValidationError(
+                "The selected term does not belong to the selected session."
+            )
+
+        return attrs 
 # ==============================
 # RESULT SERIALIZER
 class ResultSerializer(serializers.ModelSerializer):

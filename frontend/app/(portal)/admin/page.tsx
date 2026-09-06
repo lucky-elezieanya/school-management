@@ -4,10 +4,7 @@ import Link from "next/link";
 import { logout } from "@/app/lib/auth";
 import { useRoleGuard } from "@/app/lib/hooks/useRoleGuard";
 import { useEffect, useState } from "react";
-import {
- 
-  UserType,
-} from "@/app/lib/types";
+import { UserType } from "@/app/lib/types";
 import {
   apiAction,
   apiHeaders,
@@ -39,8 +36,7 @@ import UsersSection from "@/app/components/sections/UsersSection";
 import { useRouter } from "next/navigation";
 import AddSessionForm from "@/app/components/forms/AddSession";
 import SessionTermSwitcher from "@/app/components/forms/SessionTermSwitcher";
-import {toast} from "sonner"
-
+import { toast } from "sonner";
 
 export default function AdminPage() {
   useRoleGuard(["admin"]);
@@ -54,8 +50,8 @@ export default function AdminPage() {
   const [classesCount, setClassesCount] = useState(0);
   // subjects
   const [subjectsCount, setSubjectsCount] = useState(0);
-const [teachersCount, setTeachersCount] = useState(0)
-const [resultsCount, setResultsCount] = useState(0)
+  const [teachersCount, setTeachersCount] = useState(0);
+  const [resultsCount, setResultsCount] = useState(0);
 
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [toggleSessionModal, setToggleSessionModal] = useState(false);
@@ -70,9 +66,8 @@ const [resultsCount, setResultsCount] = useState(0)
           }).then((res) => res.json())
         : await apiAction("academics", "students");
 
-    
       setStudentsCount(data.count || 0);
-    } catch (error:any) {
+    } catch (error: any) {
       toast.error("Failed to fetch students:", error);
     }
   };
@@ -85,14 +80,13 @@ const [resultsCount, setResultsCount] = useState(0)
           }).then((res) => res.json())
         : await apiAction("academics", "teachers");
 
-
       setTeachersCount(data.count || 0);
     } catch (error) {
       console.error("Failed to fetch students:", error);
     }
   };
 
-const fetchResults = async (url?: string) => {
+  const fetchResults = async (url?: string) => {
     try {
       const data = url
         ? await fetch(url, {
@@ -115,7 +109,7 @@ const fetchResults = async (url?: string) => {
         : await apiAction("academics", "classes");
 
       setClassesCount(data.count || 0);
-    } catch (error:any) {
+    } catch (error: any) {
       toast.error("Failed to fetch students:", error);
     }
   };
@@ -166,7 +160,7 @@ const fetchResults = async (url?: string) => {
         toast.success(`Session: {data.name} created successfully!`);
       }
     } catch (error: any) {
-        toast.error(`Error: ${error.name}`)
+      toast.error(`Error: ${error.name}`);
     }
   };
 
@@ -233,7 +227,9 @@ const fetchResults = async (url?: string) => {
                 <h4 className="font-extrabold text-slate-800 text-sm leading-snug">
                   {user?.full_name}
                 </h4>
-                <p className="text-xs text-slate-500 mt-0.5">{user?.username}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {user?.username}
+                </p>
                 {currentTerm && (
                   <div className="mt-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600/10 text-emerald-700 rounded-lg text-xs font-bold">
                     <ClipboardList size={12} />
@@ -308,7 +304,7 @@ const fetchResults = async (url?: string) => {
         </Sheet>
       </div>
       <div className="wrapper grid grid-cols-12">
-          {/* ======== DESKTOP SIDEBAR ============== */}
+        {/* ======== DESKTOP SIDEBAR ============== */}
         <div className="col-span-3">
           <aside className="w-64 fixed top-0 left-0 bg-white shadow-md hidden md:flex flex-col h-screen overflow-y-auto stick top-">
             <div className="bg-gradient-to-br hidden md:flex md:flex-col from-emerald-50 to-teal-50 border border-emerald-100/60 p-4 rounded-2xl mb-7">
@@ -401,7 +397,7 @@ const fetchResults = async (url?: string) => {
             </div>
           </aside>
         </div>
-          {/* Main Content */}
+        {/* Main Content */}
         <div className="col-span-9">
           <main className="flex-1 p-4 pt-10 md:pt-6 overflow-x-hidden">
             <div className="w-full max-w-7xl mx-auto">
@@ -415,7 +411,8 @@ const fetchResults = async (url?: string) => {
                     </h1>
                     {currentTerm ? (
                       <h1 className="px-3 w-fit sm:px-4 py-2 text-sm sm:text-base bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition whitespace-nowrap">
-                        {currentTerm.session.name} • {currentTerm.name}
+                        {currentTerm && currentTerm.session? currentTerm.session.name : "No session yet"} •{" "}
+                        {currentTerm && currentTerm.name}
                       </h1>
                     ) : (
                       <button
@@ -483,7 +480,6 @@ const fetchResults = async (url?: string) => {
                 <div className="toggle">
                   {toggleSessionModal && (
                     <SessionTermSwitcher
-          
                       setToggleSessionModal={setToggleSessionModal}
                     />
                   )}

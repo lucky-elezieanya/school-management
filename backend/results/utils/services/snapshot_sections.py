@@ -235,7 +235,7 @@ def build_attendance(
 
     return {
 
-        "attendance": attendance.attendance,
+        "attendance": attendance.attendance if attendance else 0,
 
         "daysSchoolOpened":
             school_days.days_school_opened
@@ -294,7 +294,7 @@ def build_comments(
                 teacher_comment or "",
 
             "signature":
-                teacher_signature,
+                teacher_signature or None,
         },
 
         "principal": {
@@ -303,7 +303,7 @@ def build_comments(
                 principal_comment or "",
 
             "signature":
-                principal_signature,
+                principal_signature or None,
         },
 
     }
@@ -316,46 +316,32 @@ def build_assets(settings):
 def build_customization(customization):
 
     return {
-
         "testScores":
             customization.test_scores,
-
         "subjectAverage":
             customization.subject_average,
-
         "subjectPosition":
             customization.subject_position,
-
         "subjectScore":
             customization.subject_score,
-
         "cumulativeAverage":
             customization.cumulative_average,
-
         "classAverage":
             customization.class_average,
-
         "classPosition":
             customization.class_position,
-
         "classSize":
             customization.class_size,
-
         "overallGrade":
             customization.overall_grade,
-
         "highestLowestScores":
             customization.highest_lowest_scores,
-
         "showBehaviour":
             customization.show_behaviour,
-
         "showTeacherComment":
             customization.show_teacher_comment,
-
         "showPrincipalComment":
             customization.show_principal_comment,
-
         "showPerformanceChart":
             customization.show_performance_chart,
     }

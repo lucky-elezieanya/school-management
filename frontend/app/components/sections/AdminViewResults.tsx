@@ -210,6 +210,7 @@ export default function AdminViewResults() {
       const url = `${BASE_URL}/results/result-snapshots/?school_class=${schoolClass.id}&session=${session.id}&term=${term.id}`;
       const res = await fetch(url, { headers: apiHeaders() });
       const data = await handleResponse(res);
+      console.log("Snapshot data:", data); // Debugging line
       if (data) {
         setSnapshot(data);
         loadBroadsheet(schoolClass);
@@ -240,7 +241,7 @@ export default function AdminViewResults() {
         setBroadsheet(data);
       }
     } catch (err: any) {
-      setError(err?.message || "Unable to load class results.");
+      setError(err?.message || err.detail || "Unable to load class results.");
     } finally {
       setLoadingResults(false);
     }
