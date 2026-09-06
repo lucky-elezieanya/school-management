@@ -2,13 +2,12 @@ from decimal import Decimal
 
 from django.core.files.base import ContentFile
 
-import csv
 from django.db.models import Count, F, Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 
+from .utils.services import compute
 from .utils.services.calculations import format_position
-
 from .utils.signature import process_signature
 from .utils.services.approve_workflow import approve_workflow
 from .utils.services.engine import ResultEngine
@@ -168,9 +167,9 @@ class SchoolDaysViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["term", "session"]
 
-# ============================================================================
+#=================================================
 # 4. CLASS TEACHER SIGNATURE VIEWSET
-# ============================================================================
+# ========================================
 
 class ClassTeacherSignatureViewSet(viewsets.ModelViewSet):
 
@@ -624,7 +623,7 @@ class ClassTeacherSignatureViewSet(viewsets.ModelViewSet):
         )
 
 # 5. HEAD TEACHER SIGNATURE VIEWSET
-# ============================================================================
+# ===============
 class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
     queryset = HeadTeacherSignature.objects.all()
     serializer_class = HeadTeacherSignatureSerializer
@@ -826,7 +825,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
 # ============================================================================
 # 8. BEHAVIOUR VIEWSET (BULK OPTIMIZED)
-# ============================================================================
+# ======================================
 class BehaviourViewSet(viewsets.ModelViewSet):
     queryset = Behaviour.objects.select_related("student__user", "term", "session", "school_class").all()
     serializer_class = BehaviourSerializer
@@ -1636,9 +1635,9 @@ class ResultViewSet(viewsets.ModelViewSet):
             "results": results_data,
         })
 
-    # =========================================================================
+    # ==========================================
     # 2. RESULT SHEETS EXIST ACTION
-    # =========================================================================
+    # ================================= 
     @action(detail=False, methods=["get"], url_path="results-sheets-exist")
     def result_sheets_exist(self, request):
         user_role = getattr(request.user, "role", None)
@@ -1660,9 +1659,9 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return Response({"class_results_exists": class_merged_pdf})
 
-    # =========================================================================
+    # ===========================================
     # 3. ALL RESULTS SUBMITTED ACTION
-    # =========================================================================
+    # ====================================== 
     @action(detail=False, methods=["get"], url_path="all-results-submitted")
     def all_results_submitted(self, request):
         user_role = getattr(request.user, "role", None)
@@ -1694,9 +1693,9 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return Response({"all_results_submitted": all_submitted})
 
-    # =========================================================================
+    # =========================
     # 4. PRECHECK ACTION (OPTIMIZED FOR METRICS & VALIDATION)
-    # =========================================================================
+    # =============================
     @action(detail=False, methods=["get"], url_path="precheck")
     def precheck(self, request):
         term_id = request.query_params.get("term_id")
@@ -1720,7 +1719,7 @@ class ResultViewSet(viewsets.ModelViewSet):
                 term_id=term_id,
                 session_id=session_id,
                 school_class_id=school_class_id,
-                student__enrollments__is_current=True,
+                
             ).count()
 
             behaviour_count = Behaviour.objects.filter(
@@ -1787,9 +1786,12 @@ class ResultViewSet(viewsets.ModelViewSet):
             "attendance": (enrollment_count > 0 and attendance_count == enrollment_count),
             "behaviours": (enrollment_count > 0 and behaviour_count == enrollment_count),
             "comments": (enrollment_count > 0 and comment_count == enrollment_count),
-            "grades": GradingScale.objects.filter(grading_type="subject").exists(),
+            "grades": GradingScale.objects.filter(grading_type="subject").exists() and GradingScale.objects.filter(grading_type="overall").exists(),
+            
             "school_days": SchoolDays.objects.filter(term_id=term_id, session_id=session_id).exists(),
-            "school_assets": SchoolAsset.objects.filter(is_active=True, asset_type="logo").exists(),
+            
+            "school_assets": SchoolAsset.objects.filter(is_active=True, asset_type="logo").exists() and SchoolAsset.objects.filter(is_active=True, asset_type="header").exists(),
+            
             "class_teacher_signatures": has_class_teacher_signature,
             "head_teacher_signature": HeadTeacherSignature.objects.filter(is_active=True).exists(),
             "class_fees": has_class_fees,
@@ -1925,12 +1927,12 @@ class ResultViewSet(viewsets.ModelViewSet):
         workflow = ResultWorkflow.objects.filter(school_class=school_class, term=term, session=session).first()
      
         if workflow and workflow.all_results_submitted:
-            ResultEngine(
-                school_class=school_class,
-                session=session,
-                term=term,
+            compute(
                 request=request,
-            ).compute()
+                school_class_id=school_class.id,
+                session_id=session_id,
+                term_id=term_id,
+            )
 
         return Response(
             {
@@ -3261,7 +3263,7 @@ class ResultWorkflowViewSet(viewsets.ModelViewSet):
 
     # -------------------------------------------------------------------------
     # REFRESH STATUS (SINGLE QUERY AGGREGATION)
-    # -------------------------------------------------------------------------
+    # ----------------------------------------------------------------
     @action(detail=False, methods=["post"], url_path="refresh")
     def refresh_status(self, request):
         class_id = request.data.get("school_class_id")

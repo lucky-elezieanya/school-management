@@ -51,6 +51,7 @@ from .serializers import (
     ClassUpdateSerializer,
     PromotionBatchSerializer,
     PromotionRecordSerializer,
+    PromotionRuleBulkItemSerializer,
     PromotionRuleSerializer,
     SchoolAssetSerializer,
     SessionTermSerializer,
@@ -420,18 +421,35 @@ class ClassViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         user = self.request.user
 
-        user_role = user.role
-        
-        if user.is_staff or user.is_superuser or user_role =="admin":
+        user_role = getattr(user, "role", None)
+
+        if user.is_staff or user.is_superuser or user_role == "admin":
             return queryset
-        
+
         if user_role == "teacher":
-            return queryset.filter(class_teacher__user=user)
+            return queryset.filter(
+                class_teacher__user=user
+            )
 
         if user_role == "student":
-            student_classes = StudentEnrollment.objects.filter(student__user=user).values_list("school_class_id", flat=True) 
-            return queryset.filter(id__in=student_classes)
-    
+            student_classes = (
+                StudentEnrollment.objects
+                .filter(
+                    student__user=user,
+                    is_current=True,
+                )
+                .values_list(
+                    "school_class_id",
+                    flat=True,
+                )
+            )
+
+            return queryset.filter(
+                id__in=student_classes
+            )
+
+        return queryset.none()
+
     # GET CLASS STUDENTS (WITH BEHAVIOUR STATUS)
     @action(detail=True, methods=["get"], url_path="students")
     def students(self, request, pk=None):
@@ -540,12 +558,19 @@ class ClassViewSet(viewsets.ModelViewSet):
             "subjects": serializer.data
         })
     
+    # ==========================================
+    # CLASS SUMMARY
+    # ==========================================
+    
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         """
         Returns all classes together with:
-        - student count
+        - current student count
         - class teacher
+
+        A student is counted only when their enrollment
+        is marked as is_current=True.
         """
 
         queryset = (
@@ -558,10 +583,13 @@ class ClassViewSet(viewsets.ModelViewSet):
             .annotate(
                 student_count=Count(
                     "student_enrollments__student",
+                    filter=Q(
+                        student_enrollments__is_current=True
+                    ),
                     distinct=True,
                 )
             )
-            .order_by("name")
+            .order_by("name", "arm__name")
         )
 
         data = []
@@ -573,14 +601,22 @@ class ClassViewSet(viewsets.ModelViewSet):
                 {
                     "id": school_class.id,
                     "name": school_class.name,
+
                     "arm": {
                         "id": school_class.arm.id,
                         "name": school_class.arm.name,
                         "code": school_class.arm.code,
-                    },
+                    }
+                    if school_class.arm
+                    else None,
+
                     "description": school_class.description,
+
                     "is_active": school_class.is_active,
+
+                    # ONLY CURRENT ENROLLMENTS
                     "student_count": school_class.student_count,
+
                     "class_teacher": (
                         {
                             "id": teacher.id,
@@ -598,8 +634,8 @@ class ClassViewSet(viewsets.ModelViewSet):
                 "count": len(data),
                 "results": data,
             }
-        )    
-    
+        )
+        
     @action(detail=False, methods=["post"], url_path="upload")
     def upload(self, request, pk=None):
         REQUIRED_COLUMNS = [
@@ -739,16 +775,21 @@ class ClassViewSet(viewsets.ModelViewSet):
                     # =================================================
                     # CHECK EXISTING CLASS
                     # =================================================
-                    if Class.objects.filter(
+                    if Class.objects.filter( 
                         name=class_name,
-                        arm=class_arm
+                        arm=class_arm,
                     ).exists():
 
                         skipped_classes.append({
                             "row": excel_row,
                             "name": class_name,
-                            "error": f"Subject with name {class_name} and code {class_description} already exists",
+                            "error": (
+                                f"Class {class_name} with arm "
+                                f"{class_arm.name} already exists."
+                            ),
                         })
+
+                        continue
                         
                     class_teacher_id = None
 
@@ -1702,12 +1743,12 @@ class PromotionRecordViewSet(viewsets.ModelViewSet):
     serializer_class = PromotionRecordSerializer
     permission_classes = [IsAdminUser]
 
-
 # ============================================================
 # PROMOTION RULE VIEWSET
 # ============================================================
 
 class PromotionRuleViewSet(viewsets.ModelViewSet):
+
     queryset = (
         PromotionRule.objects
         .select_related(
@@ -1723,6 +1764,143 @@ class PromotionRuleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
 
+    # ========================================================
+    # BULK UPSERT
+    # ========================================================
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-upsert",
+    )
+    @transaction.atomic
+    def bulk_upsert(self, request):
+
+        serializer = PromotionRuleBulkItemSerializer(
+            data=request.data,
+            many=True,
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        rows = serializer.validated_data
+
+
+        # ====================================================
+        # CHECK DUPLICATE SOURCE CLASSES
+        # ====================================================
+
+        from_class_ids = [
+            row["from_class_id"].id
+            for row in rows
+        ]
+
+        if len(from_class_ids) != len(set(from_class_ids)):
+
+            return Response(
+                {
+                    "message": (
+                        "A class can only have one "
+                        "promotion rule."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+        # ====================================================
+        # PROCESS CONFIGURATION
+        # ====================================================
+
+        for row in rows:
+
+            from_class = row["from_class_id"]
+
+            to_class = row.get(
+                "to_class_id"
+            )
+
+            outcome = row.get(
+                "outcome",
+                PromotionRule.PROMOTE,
+            )
+
+            is_active = row.get(
+                "is_active",
+                True,
+            )
+
+
+            # ------------------------------------------------
+            # FIND EXISTING RULE
+            # ------------------------------------------------
+
+            rule = (
+                PromotionRule.objects
+                .filter(
+                    from_class=from_class,
+                )
+                .first()
+            )
+
+
+            # ------------------------------------------------
+            # UPDATE EXISTING RULE
+            # ------------------------------------------------
+
+            if rule:
+
+                rule.to_class = to_class
+                rule.outcome = outcome
+                rule.is_active = is_active
+
+                rule.save(
+                    update_fields=[
+                        "to_class",
+                        "outcome",
+                        "is_active",
+                    ]
+                )
+
+                continue
+
+
+            # ------------------------------------------------
+            # CREATE NEW RULE
+            # ------------------------------------------------
+
+            PromotionRule.objects.create(
+                from_class=from_class,
+                to_class=to_class,
+                outcome=outcome,
+                is_active=is_active,
+            )
+
+
+        # ====================================================
+        # RETURN CURRENT CONFIGURATION
+        # ====================================================
+
+        result = (
+            PromotionRule.objects
+            .select_related(
+                "from_class",
+                "from_class__arm",
+                "to_class",
+                "to_class__arm",
+            )
+            .order_by("from_class__name")
+        )
+
+        response_serializer = PromotionRuleSerializer(
+            result,
+            many=True,
+        )
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
 # ============================================================
 # PROMOTION BATCH VIEWSET
 # ============================================================
@@ -1745,25 +1923,17 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
     # ========================================================
     # HELPER
     # ========================================================
-
     def _get_batch(self, pk, lock=False):
-        """
-        Get the promotion batch.
 
-        When lock=True, select_for_update() prevents two
-        concurrent requests from executing the same batch.
-        """
-
-        queryset = PromotionBatch.objects.select_related(
-            "from_session",
-            "to_session",
-            "promoted_by",
-        )
+        queryset = PromotionBatch.objects.all()
 
         if lock:
             queryset = queryset.select_for_update()
 
-        return get_object_or_404(queryset, pk=pk)
+        return get_object_or_404(
+            queryset,
+            pk=pk,
+        )
 
     # ========================================================
     # EXECUTE PROMOTION
@@ -1772,26 +1942,35 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     @transaction.atomic
     def execute(self, request, pk=None):
+
         # --------------------------------------------------------
-        # Lock the promotion batch.
-        # Prevent two admins from executing the same batch
-        # concurrently.
+        # Lock ONLY the promotion batch row.
+        # Do not select_related() while locking.
         # --------------------------------------------------------
 
-        batch = self._get_batch(pk, lock=True)
+        batch = self._get_batch(
+            pk,
+            lock=True,
+        )
 
         if batch.completed:
+
             return Response(
                 {
                     "detail": (
-                        "This promotion batch has already been executed."
+                        "This promotion batch has already "
+                        "been executed."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+
         # --------------------------------------------------------
-        # Get all current source-session enrollments.
+        # Get current source-session enrollments.
+        #
+        # IMPORTANT:
+        # Do NOT combine select_for_update() with select_related().
         # --------------------------------------------------------
 
         enrollments = list(
@@ -1801,13 +1980,8 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
                 session=batch.from_session,
                 is_current=True,
             )
-            .select_related(
-                "student",
-                "student__user",
-                "school_class",
-                "school_class__arm",
-            )
         )
+
 
         # --------------------------------------------------------
         # Get active promotion rules.
@@ -1815,44 +1989,90 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
 
         rules = (
             PromotionRule.objects
-            .filter(is_active=True)
-            .values_list(
+            .filter(
+                is_active=True,
+            )
+            .values(
                 "from_class_id",
                 "to_class_id",
+                "outcome",
             )
         )
 
-        rules_map = dict(rules)
 
-        # --------------------------------------------------------
-        # Pre-flight validation.
-        #
-        # We do this BEFORE changing any enrollment.
-        # --------------------------------------------------------
+        rules_map = {
+            rule["from_class_id"]: rule
+            for rule in rules
+        }
+
+
+        # ========================================================
+        # PRE-FLIGHT VALIDATION
+        # ========================================================
 
         students_without_rule = []
         target_conflicts = []
 
+
         for enrollment in enrollments:
 
-            to_class_id = rules_map.get(
+            rule = rules_map.get(
                 enrollment.school_class_id
             )
 
-            if not to_class_id:
+
+            # ----------------------------------------------------
+            # NO RULE
+            #
+            # This is different from GRADUATE.
+            #
+            # It means the administrator has not configured
+            # this class.
+            # ----------------------------------------------------
+
+            if not rule:
+
                 students_without_rule.append(
                     {
                         "student_id": enrollment.student_id,
                         "from_class_id": enrollment.school_class_id,
                     }
                 )
+
                 continue
 
+
             # ----------------------------------------------------
-            # A student can only have one enrollment per session.
+            # GRADUATION
             #
-            # Do not silently overwrite an existing target
-            # enrollment.
+            # No target enrollment is required.
+            # ----------------------------------------------------
+
+            if rule["outcome"] == PromotionRule.GRADUATE:
+
+                continue
+
+
+            # ----------------------------------------------------
+            # PROMOTION
+            # ----------------------------------------------------
+
+            to_class_id = rule["to_class_id"]
+
+            if not to_class_id:
+
+                students_without_rule.append(
+                    {
+                        "student_id": enrollment.student_id,
+                        "from_class_id": enrollment.school_class_id,
+                    }
+                )
+
+                continue
+
+
+            # ----------------------------------------------------
+            # Prevent target-session conflicts.
             # ----------------------------------------------------
 
             existing_target = (
@@ -1865,71 +2085,124 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
             )
 
             if existing_target:
+
                 target_conflicts.append(
                     {
                         "student_id": enrollment.student_id,
-                        "existing_enrollment_id": existing_target.id,
+                        "existing_enrollment_id": (
+                            existing_target.id
+                        ),
                         "existing_class_id": (
                             existing_target.school_class_id
                         ),
                     }
                 )
 
-        # --------------------------------------------------------
-        # Do NOT partially execute a promotion batch.
-        #
-        # If there are students without rules or target conflicts,
-        # stop and let the admin resolve them first.
-        # --------------------------------------------------------
-
+        # ========================================================
+        # STOP BEFORE MAKING CHANGES
+        # ========================================================
         if students_without_rule or target_conflicts:
-
             return Response(
                 {
                     "detail": (
-                        "Promotion batch cannot be executed until "
-                        "all students are resolved."
+                        "Promotion batch cannot be executed "
+                        "until all students are resolved."
                     ),
-                    "students_without_rule": students_without_rule,
-                    "target_conflicts": target_conflicts,
+
+                    "students_without_rule":
+                        students_without_rule,
+
+                    "target_conflicts":
+                        target_conflicts,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # --------------------------------------------------------
-        # Process promotions.
-        # --------------------------------------------------------
-
+        # ========================================================
+        # PROCESS STUDENTS
+        # ========================================================
         promoted_count = 0
+        graduated_count = 0
 
         for enrollment in enrollments:
 
             student_id = enrollment.student_id
-            from_class_id = enrollment.school_class_id
-            to_class_id = rules_map[from_class_id]
+
+            from_class_id = (
+                enrollment.school_class_id
+            )
+
+            rule = rules_map[from_class_id]
+
+            outcome = rule["outcome"]
+
+
+            # ====================================================
+            # GRADUATE
+            # ====================================================
+
+            if outcome == PromotionRule.GRADUATE:
+
+                enrollment.is_current = False
+
+                enrollment.save(
+                    update_fields=[
+                        "is_current",
+                        "updated_at",
+                    ]
+                )
+
+
+                PromotionRecord.objects.create(
+                    batch=batch,
+                    student_id=student_id,
+                    from_class_id=from_class_id,
+                    to_class_id=None,
+                    status="GRADUATED",
+                )
+
+
+                graduated_count += 1
+
+                continue
+
+
+            # ====================================================
+            # PROMOTE
+            # ====================================================
+
+            to_class_id = rule["to_class_id"]
+
 
             # ----------------------------------------------------
-            # Deactivate the student's current enrollment.
+            # Deactivate current enrollment.
             # ----------------------------------------------------
 
             enrollment.is_current = False
+
             enrollment.save(
-                update_fields=["is_current", "updated_at"]
+                update_fields=[
+                    "is_current",
+                    "updated_at",
+                ]
             )
 
+
             # ----------------------------------------------------
-            # Create target-session enrollment.
+            # Create target enrollment.
             # ----------------------------------------------------
 
-            target_enrollment = StudentEnrollment.objects.create(
-                student_id=student_id,
-                session=batch.to_session,
-                school_class_id=to_class_id,
-                is_current=True,
+            target_enrollment = (
+                StudentEnrollment.objects.create(
+                    student_id=student_id,
+                    session=batch.to_session,
+                    school_class_id=to_class_id,
+                    is_current=True,
+                )
             )
 
+
             # ----------------------------------------------------
-            # Create promotion record.
+            # Promotion record.
             # ----------------------------------------------------
 
             PromotionRecord.objects.create(
@@ -1940,11 +2213,9 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
                 status="PROMOTED",
             )
 
+
             # ----------------------------------------------------
-            # Create immutable academic history.
-            #
-            # IMPORTANT:
-            # This is the student's history for the TARGET session.
+            # Target-session academic history.
             # ----------------------------------------------------
 
             create_student_history(
@@ -1952,39 +2223,57 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
                 status="PROMOTED",
             )
 
+
             promoted_count += 1
 
-        # --------------------------------------------------------
-        # Only mark the batch completed after every student has
-        # been successfully processed.
-        # --------------------------------------------------------
+
+        # ========================================================
+        # COMPLETE BATCH
+        # ========================================================
 
         batch.completed = True
-        batch.save(update_fields=["completed"])
+
+        batch.save(
+            update_fields=["completed"]
+        )
+
+
+        # ========================================================
+        # RESPONSE
+        # ========================================================
 
         return Response(
             {
                 "message": (
                     "Promotion execution completed successfully."
                 ),
-                "students_processed": len(enrollments),
-                "students_promoted": promoted_count,
-                "students_failed": 0,
+
+                "students_processed":
+                    len(enrollments),
+
+                "students_promoted":
+                    promoted_count,
+
+                "students_graduated":
+                    graduated_count,
+
+                "students_failed":
+                    0,
             },
             status=status.HTTP_200_OK,
-        )  
+        )
+        
     # ========================================================
     # PREVIEW
     # ========================================================
 
-    @action(detail=True, methods=["get"])
+    @action(
+        detail=True,
+        methods=["get"],
+    )
     def preview(self, request, pk=None):
 
         batch = self.get_object()
-
-        # ----------------------------------------------------
-        # ONLY current enrollments.
-        # ----------------------------------------------------
 
         class_counts = dict(
             StudentEnrollment.objects
@@ -1993,17 +2282,20 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
                 is_current=True,
             )
             .values("school_class_id")
-            .annotate(total=Count("id"))
-            .values_list("school_class_id", "total")
+            .annotate(
+                total=Count("id")
+            )
+            .values_list(
+                "school_class_id",
+                "total",
+            )
         )
-
-        # ----------------------------------------------------
-        # Active promotion rules only.
-        # ----------------------------------------------------
 
         rules = (
             PromotionRule.objects
-            .filter(is_active=True)
+            .filter(
+                is_active=True,
+            )
             .select_related(
                 "from_class",
                 "from_class__arm",
@@ -2013,15 +2305,27 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
         )
 
         preview_data = []
+
         total_students = 0
+
         students_without_rule = 0
 
-        # Track classes which have rules.
         rule_class_ids = set()
+
+        promoted_students = 0
+
+        graduating_students = 0
+
+
+        # ==========================================================
+        # RULES
+        # ==========================================================
 
         for rule in rules:
 
-            rule_class_ids.add(rule.from_class_id)
+            rule_class_ids.add(
+                rule.from_class_id
+            )
 
             count = class_counts.get(
                 rule.from_class_id,
@@ -2030,36 +2334,122 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
 
             total_students += count
 
+
+            # ------------------------------------------------------
+            # Graduate
+            # ------------------------------------------------------
+
+            if (
+                rule.outcome ==
+                PromotionRule.GRADUATE
+            ):
+
+                graduating_students += count
+
+                preview_data.append(
+                    {
+                        "from_class_id":
+                            rule.from_class_id,
+
+                        "from_class":
+                            str(
+                                rule.from_class
+                            ),
+
+                        "to_class_id":
+                            None,
+
+                        "to_class":
+                            None,
+
+                        "outcome":
+                            PromotionRule.GRADUATE,
+
+                        "students":
+                            count,
+                    }
+                )
+
+                continue
+
+
+            # ------------------------------------------------------
+            # Promote
+            # ------------------------------------------------------
+
+            promoted_students += count
+
             preview_data.append(
                 {
-                    "from_class_id": rule.from_class_id,
-                    "from_class": str(rule.from_class),
-                    "to_class_id": rule.to_class_id,
-                    "to_class": str(rule.to_class),
-                    "students": count,
+                    "from_class_id":
+                        rule.from_class_id,
+
+                    "from_class":
+                        str(
+                            rule.from_class
+                        ),
+
+                    "to_class_id":
+                        rule.to_class_id,
+
+                    "to_class":
+                        (
+                            str(rule.to_class)
+                            if rule.to_class
+                            else None
+                        ),
+
+                    "outcome":
+                        PromotionRule.PROMOTE,
+
+                    "students":
+                        count,
                 }
             )
 
-        # ----------------------------------------------------
-        # Find current students whose classes have no rule.
-        # ----------------------------------------------------
+
+        # ==========================================================
+        # CLASSES WITHOUT RULES
+        # ==========================================================
 
         for class_id, count in class_counts.items():
 
             if class_id not in rule_class_ids:
+
                 students_without_rule += count
+
+
+        # ==========================================================
+        # RESPONSE
+        # ==========================================================
 
         return Response(
             {
-                "batch_id": batch.id,
-                "from_session": batch.from_session_id,
-                "to_session": batch.to_session_id,
-                "total_students": total_students,
-                "students_without_rule": students_without_rule,
-                "promotions": preview_data,
+                "batch_id":
+                    batch.id,
+
+                "from_session":
+                    batch.from_session_id,
+
+                "to_session":
+                    batch.to_session_id,
+
+                "total_students":
+                    total_students,
+
+                "promoted_students":
+                    promoted_students,
+
+                "graduating_students":
+                    graduating_students,
+
+                "students_without_rule":
+                    students_without_rule,
+
+                "promotions":
+                    preview_data,
             }
         )
-
     # ========================================================
     # GET BATCH STUDENTS
     # ========================================================
@@ -2171,21 +2561,15 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
         # --------------------------------------------------------
 
         enrollment = (
-            StudentEnrollment.objects
-            .select_for_update()
-            .select_related(
-                "student",
-                "student__user",
-                "school_class",
-                "school_class__arm",
+                StudentEnrollment.objects
+                .select_for_update()
+                .filter(
+                    student_id=student_id,
+                    session=batch.from_session,
+                    is_current=True,
+                )
+                .first()
             )
-            .filter(
-                student_id=student_id,
-                session=batch.from_session,
-                is_current=True,
-            )
-            .first()
-        )
 
         if not enrollment:
             return Response(
@@ -2380,6 +2764,7 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+    
     # ========================================================
     # TRANSFER STUDENT
     # ========================================================
@@ -2454,16 +2839,9 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
         # --------------------------------------------------------
         # Lock source enrollment.
         # --------------------------------------------------------
-
         enrollment = (
             StudentEnrollment.objects
             .select_for_update()
-            .select_related(
-                "student",
-                "student__user",
-                "school_class",
-                "school_class__arm",
-            )
             .filter(
                 student_id=student_id,
                 session=batch.from_session,
@@ -2471,7 +2849,7 @@ class PromotionBatchViewSet(viewsets.ModelViewSet):
             )
             .first()
         )
-
+        
         if not enrollment:
             return Response(
                 {

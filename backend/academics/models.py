@@ -75,7 +75,6 @@ class Arms(models.Model):
     def __str__(self):
         return f"{self.name}"
 
-
 class AcademicSession(models.Model):
     name = models.CharField(max_length=20, unique=True)
     is_active = models.BooleanField(default=False)
@@ -220,8 +219,6 @@ class Class(models.Model):
     def __str__(self):
         
         return f"{self.name} - {self.arm}"
-        
-
 # ==========================================
 # CLASS SUBJECT MODEL
 # ==========================================
@@ -450,31 +447,59 @@ class StudentEnrollment(models.Model):
         )
     
 class PromotionRule(models.Model):
-    """
-    JSS1 -> JSS2
-    JSS2 -> JSS3
-    """
+
+    PROMOTE = "PROMOTE"
+    GRADUATE = "GRADUATE"
+
+    OUTCOME_CHOICES = (
+        (PROMOTE, "Promote"),
+        (GRADUATE, "Graduate"),
+    )
 
     from_class = models.ForeignKey(
         Class,
         on_delete=models.CASCADE,
-        related_name="promotion_rule"
+        related_name="promotion_rule",
     )
 
     to_class = models.ForeignKey(
         Class,
         on_delete=models.CASCADE,
-        related_name="incoming_promotions"
+        related_name="incoming_promotions",
+        null=True,
+        blank=True,
     )
 
-    is_active = models.BooleanField(default=True)
+    outcome = models.CharField(
+        max_length=20,
+        choices=OUTCOME_CHOICES,
+        default=PROMOTE,
+    )
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(
+        default=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["from_class__name"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["from_class"],
+                name="unique_promotion_rule_from_class",
+            )
+        ]
 
     def __str__(self):
-        return f"{self.from_class} → {self.to_class}"
-    
+        if self.outcome == self.GRADUATE:
+            return f"{self.from_class} → Graduate"
 
+        return f"{self.from_class} → {self.to_class}"
+           
 class PromotionBatch(models.Model):
     """
     One promotion operation.

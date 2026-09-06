@@ -1023,21 +1023,28 @@ class ClassSubjectSerializer(serializers.ModelSerializer):
 
         return data
     
+# ============================================================
+# NORMAL SERIALIZER
+# ============================================================
 
 class PromotionRuleSerializer(serializers.ModelSerializer):
-    from_class = ClassSerializer(read_only=True)
-    to_class = ClassSerializer(read_only=True)
-
+    from_class = ClassSerializer(
+        read_only=True
+    )
+    to_class = ClassSerializer(
+        read_only=True
+    )
     from_class_id = serializers.PrimaryKeyRelatedField(
         queryset=Class.objects.all(),
         source="from_class",
-        write_only=True
+        write_only=True,
     )
-
     to_class_id = serializers.PrimaryKeyRelatedField(
         queryset=Class.objects.all(),
         source="to_class",
-        write_only=True
+        write_only=True,
+        allow_null=True,
+        required=False,
     )
 
     class Meta:
@@ -1048,10 +1055,92 @@ class PromotionRuleSerializer(serializers.ModelSerializer):
             "to_class",
             "from_class_id",
             "to_class_id",
+            "outcome",
             "is_active",
             "created_at",
         ]
         
+# ============================================================
+# BULK CONFIGURATION SERIALIZER
+# ============================================================
+
+class PromotionRuleBulkItemSerializer(serializers.Serializer):
+
+    id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+    )
+
+    from_class_id = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all(),
+    )
+
+    to_class_id = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+
+    outcome = serializers.ChoiceField(
+        choices=PromotionRule.OUTCOME_CHOICES,
+        default=PromotionRule.PROMOTE,
+    )
+
+    is_active = serializers.BooleanField(
+        default=True,
+    )
+
+    def validate(self, attrs):
+
+        from_class = attrs["from_class_id"]
+        to_class = attrs.get("to_class_id")
+        outcome = attrs.get(
+            "outcome",
+            PromotionRule.PROMOTE,
+        )
+
+        # ----------------------------------------------------
+        # GRADUATION
+        # ----------------------------------------------------
+
+        if outcome == PromotionRule.GRADUATE:
+
+            if to_class is not None:
+                raise serializers.ValidationError({
+                    "message": (
+                        "A graduation rule cannot have "
+                        "a target class."
+                    )
+                })
+
+            return attrs
+
+        # ----------------------------------------------------
+        # PROMOTION
+        # ----------------------------------------------------
+
+        if to_class is None:
+            raise serializers.ValidationError({
+                "message": (
+                    f"{from_class} must have a target class "
+                    "when the outcome is Promote."
+                )
+            })
+
+        # ----------------------------------------------------
+        # Cannot promote to itself
+        # ----------------------------------------------------
+
+        if from_class.id == to_class.id:
+            raise serializers.ValidationError({
+                "message": (
+                    f"{from_class} cannot promote to itself."
+                )
+            })
+
+        return attrs
+    
+       
 class PromotionRecordSerializer(serializers.ModelSerializer):
     from_class = ClassSerializer(read_only=True)
     to_class = ClassSerializer(read_only=True)

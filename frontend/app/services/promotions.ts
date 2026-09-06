@@ -7,167 +7,260 @@ import {
 	updateAction,
 } from "@/app/lib/api";
 
-/* =====================================================
-   PROMOTION RULES
-===================================================== */
 
-export const getPromotionRules = async () => {
-	const res = await apiAction("academics", "promotion-rules");
-	return res;
+// =====================================================
+// PROMOTION RULES
+// =====================================================
+
+// =====================================================
+// GET ALL CLASSES
+// =====================================================
+
+export async function getPromotionClasses() {
+  return await apiAction("academics", "classes");
+}
+
+// =====================================================
+// GET PROMOTION RULES
+// =====================================================
+
+export async function getPromotionRules() {
+  return await apiAction("academics", "promotion-rules");
+}
+
+// =====================================================
+// BULK SAVE PROMOTION RULES
+// =====================================================
+
+export type PromotionRulePayload = {
+  id?: number;
+
+  from_class_id: number;
+
+  to_class_id: number | null;
+
+  outcome: "PROMOTE" | "GRADUATE";
+
+  is_active: boolean;
 };
+
+export async function bulkSavePromotionRules(data: PromotionRulePayload[]) {
+  const response = await fetch(
+    `${BASE_URL}/academics/promotion-rules/bulk-upsert/`,
+    {
+      method: "POST",
+
+      headers: {
+        ...apiHeaders(),
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify(data),
+    },
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    let message = "Failed to save promotion rules.";
+
+    if (typeof result?.message === "string") {
+      message = result.message;
+    } else if (typeof result?.detail === "string") {
+      message = result.detail;
+    } else if (Array.isArray(result)) {
+      message = result
+        .map((item) => (typeof item === "string" ? item : JSON.stringify(item)))
+        .join(", ");
+    } else if (result && typeof result === "object") {
+      message = JSON.stringify(result);
+    }
+
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+// =====================================================
+// CREATE
+// =====================================================
 
 export const createPromotionRule = async (payload: any) => {
-	const res = await createAction("academics", "promotion-rules", payload);
-	if (res) alert("Promotion rule set successfully!");
-	return res;
+  const res = await createAction("academics", "promotion-rules", payload);
+
+  if (res) {
+    alert("Promotion rule set successfully!");
+  }
+
+  return res;
 };
+
+// =====================================================
+// UPDATE
+// =====================================================
 
 export const updatePromotionRule = async (id: number, payload: any) => {
-	const res = await updateAction(
-		"academics",
-		"promotion-rules",
-		id,
-		payload,
-		"PATCH",
-	);
-	if (res) alert("Promotion rule updated successfully!");
-	return res;
+  const res = await updateAction(
+    "academics",
+    "promotion-rules",
+    id,
+    payload,
+    "PATCH",
+  );
+
+  if (res) {
+    alert("Promotion rule updated successfully!");
+  }
+
+  return res;
 };
+
+// =====================================================
+// DELETE
+// =====================================================
 
 export const deletePromotionRule = async (
-	id: number,
-	promotionName: string,
+  id: number,
+  promotionName: string,
 ) => {
-	const res = handleUserDelete(
-		"academics",
-		"promotion-rules",
-		id,
-		promotionName,
-	);
-	if (!res) alert("Failed to delete promotion rule");
-	return res;
+  const res = handleUserDelete(
+    "academics",
+    "promotion-rules",
+    id,
+    promotionName,
+  );
+
+  if (!res) {
+    alert("Failed to delete promotion rule");
+  }
+
+  return res;
 };
 
-/* =====================================================
-   PROMOTION BATCHES
-===================================================== */
+// =====================================================
+// PROMOTION BATCHES
+// =====================================================
 
 export const getPromotionBatches = async () => {
-	return await apiAction("academics", "promotion-batch");
+  return await apiAction("academics", "promotion-batch");
 };
 
 export const createPromotionBatch = async (payload: any) => {
-	return await createAction("academics", "promotion-batch", payload);
+  return await createAction("academics", "promotion-batch", payload);
 };
 
-/* =====================================================
-   BATCH OPERATIONS
-===================================================== */
+// =====================================================
+// PREVIEW
+// =====================================================
 
 export const getPromotionPreview = async (batchId: number) => {
-	const res = await apiAction(
-		"academics",
-		`promotion-batch/${batchId}/preview`,
-		undefined,
-		"GET",
-	);
-	return res;
+  return await apiAction(
+    "academics",
+    `promotion-batch/${batchId}/preview`,
+    undefined,
+    "GET",
+  );
 };
+
+// =====================================================
+// STUDENTS
+// =====================================================
 
 export const getPromotionStudents = async (batchId: number) => {
-	const res = await apiAction(
-		"academics",
-		`promotion-batch/${batchId}/students`,
-		undefined,
-		"GET",
-	);
-	return res;
+  return await apiAction(
+    "academics",
+    `promotion-batch/${batchId}/students`,
+    undefined,
+    "GET",
+  );
 };
 
-/* =====================================================
-   EXECUTION ACTIONS
-===================================================== */
+// =====================================================
+// EXECUTE
+// =====================================================
 
 export const executePromotion = async (batchId: number) => {
-	const res = await apiAction(
-		"academics",
-		`promotion-batch/${batchId}/execute`,
-		undefined,
-		"POST",
-	);
-	return res;
+  return await apiAction(
+    "academics",
+    `promotion-batch/${batchId}/execute`,
+    undefined,
+    "POST",
+  );
 };
+
+// =====================================================
+// REPEAT STUDENT
+// =====================================================
 
 export const repeatStudent = async (batchId: number, studentId: number) => {
-	try {
-		const payload = {
-			student: studentId,
-		};
-		const res = await createAction(
-			"academics",
-			`promotion-batch/${studentId}/repeat_student`,
-			payload,
-		);
-		if (res) {
-			return res;
-		}
-	} catch (error) {
-		return error;
-	}
+  const payload = {
+    student: studentId,
+  };
+
+  return await createAction(
+    "academics",
+    `promotion-batch/${batchId}/repeat_student`,
+    payload,
+  );
 };
+
+// =====================================================
+// GRADUATE STUDENT
+// =====================================================
 
 export const graduateStudent = async (batchId: number, studentId: number) => {
-	try {
-		const payload = {
-			student: studentId,
-		};
-		const res = await createAction(
-			"academics",
-			`promotion-batch/${batchId}/graduate_student`,
-			payload,
-		);
-		if (res) {
-			return res;
-		}
-	} catch (error) {
-		return error;
-	}
+  const payload = {
+    student: studentId,
+  };
+
+  return await createAction(
+    "academics",
+    `promotion-batch/${batchId}/graduate_student`,
+    payload,
+  );
 };
+
+// =====================================================
+// TRANSFER STUDENT
+// =====================================================
 
 export const transferStudent = async (
-	batchId: number,
-	studentId: number,
-	newClassId: number,
+  batchId: number,
+  studentId: number,
+  newClassId: number,
 ) => {
-	try {
-		const payload = {
-			student: studentId,
-			new_class: newClassId,
-		};
-		const res = await createAction(
-			"academics",
-			`promotion-batch/${batchId}/transfer_student`,
-			payload,
-		);
-		if (res) {
-			return res;
-		}
-	} catch (error) {
-		throw error;
-	} finally {
-	}
+  const payload = {
+    student: studentId,
+    new_class: newClassId,
+  };
+
+  return await createAction(
+    "academics",
+    `promotion-batch/${batchId}/transfer_student`,
+    payload,
+  );
 };
 
-/* =====================================================
-   PROMOTION RECORDS
-===================================================== */
+// =====================================================
+// PROMOTION RECORDS
+// =====================================================
 
 export const getPromotionRecords = async () => {
-	const res = await fetch(`${BASE_URL}/academics/promotion-record/`, {
-		headers: apiHeaders(),
-	});
-	const response = await res.json();
-	if (!res.ok) throw response.details;
+  const res = await fetch(`${BASE_URL}/academics/promotion-record/`, {
+    headers: apiHeaders(),
+  });
 
-	return response;
+  const response = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      response?.detail ||
+        response?.message ||
+        "Failed to load promotion records.",
+    );
+  }
+
+  return response;
 };
+
