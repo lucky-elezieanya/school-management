@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { apiAction, createAction } from "@/app/lib/api";
+import { apiAction, apiHeaders, BASE_URL, createAction } from "@/app/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClassType } from "@/app/lib/types";
@@ -67,33 +67,75 @@ export default function NewteacherPage() {
     }
   };
 
-  /* =========================
-        CREATE teacher
-    ========================== */
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     setLoading(true);
 
     try {
-      const payload = {
-        ...formData,
-        assigned_classes: formData.assigned_classes || [],
-      };
-      if (!payload.profile_picture) {
-        delete (payload as any).profile_picture;
+      const data = new FormData();
+
+      // ==========================================
+      // USER / TEACHER FIELDS
+      // ==========================================
+
+      data.append("first_name", formData.first_name);
+      data.append("middle_name", formData.middle_name);
+      data.append("last_name", formData.last_name);
+      data.append("username", formData.username);
+      data.append("email", formData.email);
+      data.append("password", formData.password);
+      data.append("gender", formData.gender);
+
+      data.append("date_of_birth", formData.date_of_birth);
+
+      data.append("date_employed", formData.date_employed);
+
+      data.append("qualification", formData.qualification);
+
+      data.append("address", formData.address);
+
+      data.append("phone_number", formData.phone_number);
+
+      // ==========================================
+      // PROFILE PICTURE
+      // ==========================================
+
+      if (formData.profile_picture) {
+        data.append("profile_picture", formData.profile_picture);
       }
 
+      // ==========================================
+      // ASSIGNED CLASSES
+      // ==========================================
 
-      const res = await createAction("academics", "teachers", payload);
+      formData.assigned_classes.forEach((classId) => {
+        data.append("assigned_classes", String(classId));
+      });
 
-      if (res) {
+      // ==========================================
+      // SEND REQUEST
+      // ==========================================
+
+      const res = await fetch(`${BASE_URL}/academics/teachers/`, {
+        method: "POST",
+        headers: apiHeaders(),
+        body: data,
+      });
+      if (!res.ok) {
+          throw res;
+        }
+        
+    const response = await res.json();
+
+      if (response) {
         toast.success("Teacher created successfully");
         router.push("/admin/administration/teachers");
       }
     } catch (error) {
       toast.error("Failed to create teacher");
-      console.error(error);
+
+      console.error("Teacher creation error:", error);
     } finally {
       setLoading(false);
     }
@@ -268,8 +310,8 @@ export default function NewteacherPage() {
                             isAssigned
                               ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
                               : isSelected
-                              ? "bg-green-800 text-white"
-                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                                ? "bg-green-800 text-white"
+                                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                           }`}
                         >
                           <span>

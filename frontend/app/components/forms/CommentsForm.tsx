@@ -391,114 +391,291 @@ export default function TermCommentEntryPage() {
   // =====================================================
   // SAVE
   // =====================================================
-  const handleSubmit = async (e: React.SubmitEvent) => {
-    e.preventDefault();
-    if (!selectedClass || !currentTerm || !isFormComplete) return;
+//   const handleSubmit = async (e: React.SubmitEvent) => {
+//     e.preventDefault();
+//     if (!selectedClass || !currentTerm || !isFormComplete) return;
 
-    try {
-      setSubmitting(true);
+//     try {
+//       setSubmitting(true);
 
-      const attendancePayload = {
-        term_id: currentTerm.id,
+//       const attendancePayload = {
+//         term_id: currentTerm.id,
 
-        session_id: currentTerm.session.id,
+//         session_id: currentTerm.session.id,
 
-        school_class_id: Number(selectedClass),
+//         school_class_id: Number(selectedClass),
 
-        records: students.map((student) => ({
-          student: student.student,
+//         records: students.map((student) => ({
+//           student: student.student,
 
-          attendance: student.attendance,
-        })),
-      };
+//           attendance: student.attendance,
+//         })),
+//       };
 
-      const commentPayload = {
-        term_id: currentTerm.id,
+//       const commentPayload = {
+//         term_id: currentTerm.id,
 
-        session_id: currentTerm.session.id,
+//         session_id: currentTerm.session.id,
 
-        school_class_id: Number(selectedClass),
+//         school_class_id: Number(selectedClass),
 
-        comments: students.map((student) => ({
-          student: student.student,
+//         comments: students.map((student) => ({
+//           student: student.student,
 
-          class_teacher_comment: student.class_teacher_comment,
+//           class_teacher_comment: student.class_teacher_comment,
 
-          principal_comment: student.principal_comment,
-        })),
-      };
+//           principal_comment: student.principal_comment,
+//         })),
+//       };
 
-      const behaviourPayload = {
-        term_id: currentTerm.id,
-        session_id: currentTerm.session.id,
-        school_class_id: Number(selectedClass),
+//       const behaviourPayload = {
+//         term_id: currentTerm.id,
+//         session_id: currentTerm.session.id,
+//         school_class_id: Number(selectedClass),
 
-        records: students.map((student) => ({
-          student:
-            typeof student.student === "object"
-              ? student.student.id
-              : student.student,
+//         records: students.map((student) => ({
+//           student:
+//             typeof student.student === "object"
+//               ? student.student.id
+//               : student.student,
 
-          skills: student.behaviour.skills,
-          politeness: student.behaviour.politeness,
-          neatness: student.behaviour.neatness,
-          self_control: student.behaviour.self_control,
-          relationship: student.behaviour.relationship,
-          attendance: student.behaviour.attendance,
-          punctuality: student.behaviour.punctuality,
-          leadership: student.behaviour.leadership,
-        })),
-      };
-      const [attendanceResponse, commentResponse, behaviourResponse] =
-        await Promise.all([
-          fetch(`${BASE_URL}/results/attendance/bulk_upsert/`, {
-            method: "POST",
-            headers: {
-              ...apiHeaders(),
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(attendancePayload),
-          }),
+//           skills: student.behaviour.skills,
+//           politeness: student.behaviour.politeness,
+//           neatness: student.behaviour.neatness,
+//           self_control: student.behaviour.self_control,
+//           relationship: student.behaviour.relationship,
+//           attendance: student.behaviour.attendance,
+//           punctuality: student.behaviour.punctuality,
+//           leadership: student.behaviour.leadership,
+//         })),
+//       };
+//       const [attendanceResponse, commentResponse, behaviourResponse] =
+//         await Promise.all([
+//           fetch(`${BASE_URL}/results/attendance/bulk_upsert/`, {
+//             method: "POST",
+//             headers: {
+//               ...apiHeaders(),
+//               "Content-Type": "application/json",
+//             },
+//             body: JSON.stringify(attendancePayload),
+//           }),
 
-          fetch(`${BASE_URL}/results/term-comments/bulk-save/`, {
-            method: "POST",
-            headers: {
-              ...apiHeaders(),
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(commentPayload),
-          }),
-          fetch(`${BASE_URL}/results/behaviour/bulk-upsert/`, {
-            method: "POST",
+//           fetch(`${BASE_URL}/results/term-comments/bulk-save/`, {
+//             method: "POST",
+//             headers: {
+//               ...apiHeaders(),
+//               "Content-Type": "application/json",
+//             },
+//             body: JSON.stringify(commentPayload),
+//           }),
+//           fetch(`${BASE_URL}/results/behaviour/bulk-upsert/`, {
+//             method: "POST",
 
-            headers: {
-              ...apiHeaders(),
-              "Content-Type": "application/json",
-            },
+//             headers: {
+//               ...apiHeaders(),
+//               "Content-Type": "application/json",
+//             },
 
-            body: JSON.stringify(behaviourPayload),
-          }),
-        ]);
-      console.log(attendancePayload, commentPayload, behaviourPayload);
-      console.log(attendanceResponse, commentResponse, behaviourResponse);
+//             body: JSON.stringify(behaviourPayload),
+//           }),
+//         ]);
+//       console.log(attendancePayload, commentPayload, behaviourPayload);
+//       console.log(attendanceResponse, commentResponse, behaviourResponse);
 
-      if (
-        !attendanceResponse ||
-        !commentResponse ||
-        !behaviourResponse
-      ) {
-        toast.error("Unable to save records.");
-        return;
-      }
+//       if (
+//         !attendanceResponse ||
+//         !commentResponse ||
+//         !behaviourResponse
+//       ) {
+//         toast.error("Unable to save records.");
+//         return;
+//       }
 
-      toast.success("Attendance, comments and behaviour saved successfully.");
-    } catch (err: any) {
-      toast.error(err.message || "Unable to save.");
-      console.log(err.message || err);
-    } finally {
-      setSubmitting(false);
+//       toast.success("Attendance, comments and behaviour saved successfully.");
+//     } catch (err: any) {
+//       toast.error(err.message || "Unable to save.");
+//       console.log(err.message || err);
+//     } finally {
+//       setSubmitting(false);
+//     }
+//   };
+
+const handleSubmit = async (e: React.SubmitEvent) => {
+  e.preventDefault();
+
+  if (!selectedClass || !currentTerm || !isFormComplete) {
+    return;
+  }
+
+  try {
+    setSubmitting(true);
+
+    // ==========================================
+    // ATTENDANCE
+    // ==========================================
+
+    const attendancePayload = {
+      term_id: currentTerm.id,
+      session_id: currentTerm.session.id,
+      school_class_id: Number(selectedClass),
+
+      records: students.map((student) => ({
+        student:
+          typeof student.student === "object"
+            ? student.student.id
+            : student.student,
+
+        attendance: student.attendance,
+      })),
+    };
+
+    // ==========================================
+    // COMMENTS
+    // ==========================================
+
+    const commentPayload = {
+      term_id: currentTerm.id,
+      session_id: currentTerm.session.id,
+      school_class_id: Number(selectedClass),
+
+      comments: students.map((student) => ({
+        student:
+          typeof student.student === "object"
+            ? student.student.id
+            : student.student,
+
+        class_teacher_comment: student.class_teacher_comment,
+
+        principal_comment: student.principal_comment,
+      })),
+    };
+
+    // ==========================================
+    // BEHAVIOUR
+    // ==========================================
+
+    const behaviourPayload = {
+      term_id: currentTerm.id,
+      session_id: currentTerm.session.id,
+      school_class_id: Number(selectedClass),
+
+      records: students.map((student) => ({
+        student:
+          typeof student.student === "object"
+            ? student.student.id
+            : student.student,
+
+        skills: student.behaviour?.skills ?? "A",
+
+        politeness: student.behaviour?.politeness ?? "A",
+
+        neatness: student.behaviour?.neatness ?? "A",
+
+        self_control: student.behaviour?.self_control ?? "A",
+
+        relationship: student.behaviour?.relationship ?? "A",
+
+        attendance: student.behaviour?.attendance ?? "A",
+
+        punctuality: student.behaviour?.punctuality ?? "A",
+
+        leadership: student.behaviour?.leadership ?? "A",
+      })),
+    };
+
+    console.log("========== BEHAVIOUR PAYLOAD ==========");
+
+    console.log(JSON.stringify(behaviourPayload, null, 2));
+
+    console.log("=======================================");
+
+    // ==========================================
+    // SEND ALL REQUESTS
+    // ==========================================
+
+    const [attendanceResponse, commentResponse, behaviourResponse] =
+      await Promise.all([
+        fetch(`${BASE_URL}/results/attendance/bulk_upsert/`, {
+          method: "POST",
+
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify(attendancePayload),
+        }),
+
+        fetch(`${BASE_URL}/results/term-comments/bulk-save/`, {
+          method: "POST",
+
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify(commentPayload),
+        }),
+
+        fetch(`${BASE_URL}/results/behaviour/bulk-upsert/`, {
+          method: "POST",
+
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify(behaviourPayload),
+        }),
+      ]);
+
+    // ==========================================
+    // READ RESPONSES
+    // ==========================================
+
+    const attendanceJson = await attendanceResponse.json();
+
+    const commentJson = await commentResponse.json();
+
+    const behaviourJson = await behaviourResponse.json();
+
+    console.log("ATTENDANCE:", attendanceJson);
+
+    console.log("COMMENTS:", commentJson);
+
+    console.log("BEHAVIOUR:", behaviourJson);
+
+    // ==========================================
+    // CHECK HTTP STATUS
+    // ==========================================
+
+    if (!attendanceResponse.ok) {
+      throw new Error(
+        attendanceJson?.message || JSON.stringify(attendanceJson),
+      );
     }
-  };
+
+    if (!commentResponse.ok) {
+      throw new Error(commentJson?.message || JSON.stringify(commentJson));
+    }
+
+    if (!behaviourResponse.ok) {
+      throw new Error(behaviourJson?.message || JSON.stringify(behaviourJson));
+    }
+
+    // ==========================================
+    // SUCCESS
+    // ==========================================
+
+    toast.success("Attendance, comments and behaviour saved successfully.");
+  } catch (err: any) {
+    console.error("SAVE ERROR:", err);
+
+    toast.error(err?.message || "Unable to save records.");
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-6">

@@ -389,43 +389,71 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             "assigned_classes",
         ]
  
+    @transaction.atomic
     def create(self, validated_data):
-        # Get actual Class objects
+
         assigned_classes = validated_data.pop(
             "assigned_classes",
             []
         )
-        # Extract user fields
+
         user_data = {
             "first_name": validated_data.pop("first_name"),
-            "middle_name": validated_data.pop("middle_name", None),
+            "middle_name": validated_data.pop(
+                "middle_name",
+                None
+            ),
             "last_name": validated_data.pop("last_name"),
             "username": validated_data.pop("username"),
-            "email": validated_data.pop("email", ""),
+            "email": validated_data.pop(
+                "email",
+                ""
+            ),
             "gender": validated_data.pop("gender"),
-            "date_of_birth": validated_data.pop("date_of_birth", None),
-            "profile_picture": validated_data.pop("profile_picture", None),
+            "date_of_birth": validated_data.pop(
+                "date_of_birth",
+                None
+            ),
+            "profile_picture": validated_data.pop(
+                "profile_picture",
+                None
+            ),
             "role": "teacher",
         }
 
         password = validated_data.pop("password")
 
-        # Create user
-        user = User.objects.create(**user_data)
+        # ==========================================
+        # CREATE USER
+        # ==========================================
+
+        user = User.objects.create(
+            **user_data
+        )
+
         user.set_password(password)
         user.save()
 
-        # Create teacher
+        # ==========================================
+        # CREATE TEACHER
+        # ==========================================
+
         teacher = Teacher.objects.create(
             user=user,
             **validated_data
         )
 
+        # ==========================================
+        # ASSIGN CLASSES
+        # ==========================================
+
         if assigned_classes:
-            teacher.assigned_classes.set(assigned_classes)
+            teacher.assigned_classes.set(
+                assigned_classes
+            )
 
-        return teacher # TEACHER UPDATE SERIALIZER
-
+        return teacher
+    
 class TeacherUpdateSerializer(serializers.ModelSerializer):
     # Allow passing an array of Class IDs
     assigned_classes = serializers.PrimaryKeyRelatedField(

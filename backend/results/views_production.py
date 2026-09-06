@@ -6,7 +6,9 @@ from django.db.models import Count, F, Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .utils.services import compute
+from .utils.services.result_summary import generate_result_summary_for_class
+from .utils.services.subject_summary import generate_subject_summaries_for_class
+from .utils.services.compute import compute
 from .utils.services.calculations import format_position
 from .utils.signature import process_signature
 from .utils.services.approve_workflow import approve_workflow
@@ -655,66 +657,6 @@ class HeadTeacherSignatureViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(signature).data, status=status.HTTP_200_OK)
 
 # ============================================================================
-# 6. RESULT COMPUTATION VIEWSET
-# ============================================================================
-class ResultComputationViewSet(viewsets.ViewSet):
-    permission_classes = [IsAdminUser]
-    
-    @action(detail=False, methods=["post"], url_path="compute")
-    def compute(self, request):
-        term_id = request.data.get("term_id")
-        session_id = request.data.get("session_id")
-        school_class_id = request.data.get("school_class_id")  # Optional: targeted computation
-
-        if not term_id or not session_id:
-            return Response(
-                {"detail": "term_id and session_id are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        term = Term.objects.filter(id=term_id, session_id=session_id).first()
-        session = AcademicSession.objects.filter(id=session_id).first()
-
-        if not term or not session:
-            return Response(
-                {"detail": "Invalid term or session provided."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # If a class ID is provided, compute only for that class to avoid timing out HTTP requests
-        if school_class_id:
-            classes = Class.objects.filter(id=school_class_id)
-            if not classes.exists():
-                return Response(
-                    {"detail": "Specified school_class_id does not exist."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        else:
-            # Fallback to computing all classes
-            classes = Class.objects.all()
-
-        computed_classes = []
-
-        # Wrap computations in an atomic transaction to avoid partial state corruption on error
-        with transaction.atomic():
-            for school_class in classes:
-                ResultEngine(
-                    school_class=school_class,
-                    session=session,
-                    term=term,
-                    request=self.request,
-                ).compute()
-                computed_classes.append(school_class.name)
-
-        return Response(
-            {
-                "message": f"Results computed successfully for {len(computed_classes)} class(es).",
-                "classes": computed_classes,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-# ============================================================================
 # 7. ATTENDANCE VIEWSET (BULK OPTIMIZED)
 # ============================================================================
 class AttendanceViewSet(viewsets.ModelViewSet):
@@ -823,44 +765,112 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-# ============================================================================
-# 8. BEHAVIOUR VIEWSET (BULK OPTIMIZED)
-# ======================================
+# ==========================================
+# BEHAVIOUR VIEWSET
+# ==========================================
+
 class BehaviourViewSet(viewsets.ModelViewSet):
-    queryset = Behaviour.objects.select_related("student__user", "term", "session", "school_class").all()
+    queryset = (
+        Behaviour.objects
+        .select_related(
+            "student__user",
+            "term",
+            "session",
+            "school_class",
+        )
+    )
     serializer_class = BehaviourSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["term", "session", "student", "school_class"]
+    filterset_fields = [
+        "term",
+        "session",
+        "student",
+        "school_class",
+    ]
+    # ==========================================
+    # PERMISSIONS
+    # ==========================================
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
+
+        if self.action in [
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "bulk_upsert",
+        ]:
             return [IsTeacherOrAdmin()]
+
         return [IsAuthenticated()]
 
+    # ==========================================
+    # QUERYSET
+    # ==========================================
+
     def get_queryset(self):
+
         queryset = super().get_queryset()
+
         user = self.request.user
+        role = getattr(user, "role", None)
 
-        if user.is_staff or user.is_superuser or user.role == "admin":
-            return queryset.filter(student__enrollments__is_current=True)
+        # --------------------------------------
+        # ADMIN
+        # --------------------------------------
 
-        if user.role == "teacher":
-            teacher = Teacher.objects.get(user=user)
-            school_class = Class.objects.filter(class_teacher_id=teacher.id).first()
-            return queryset.filter(school_class=school_class, student__enrollments__is_current=True)
-
-        if user.role == "student":
-            from django.db.models import F
+        if (
+            user.is_staff
+            or user.is_superuser
+            or role == "admin"
+        ):
             return queryset.filter(
-                student__user=user,
-                student__enrollments__school_class__result_workflows__term=F('term'),
-                student__enrollments__school_class__result_workflows__session=F('session'),
-                student__enrollments__school_class__result_workflows__status="Released",
                 student__enrollments__is_current=True
             ).distinct()
 
+        # --------------------------------------
+        # TEACHER
+        # --------------------------------------
+
+        if role == "teacher":
+
+            teacher = Teacher.objects.filter(
+                user=user
+            ).first()
+
+            if not teacher:
+                return queryset.none()
+
+            return queryset.filter(
+                school_class__class_teacher=teacher,
+                student__enrollments__is_current=True,
+            ).distinct()
+
+        # --------------------------------------
+        # STUDENT
+        # --------------------------------------
+
+        if role == "student":
+            from django.db.models import F
+
+            return queryset.filter(
+                student__user=user,
+                student__enrollments__school_class__result_workflows__term=F(
+                    "term"
+                ),
+                student__enrollments__school_class__result_workflows__session=F(
+                    "session"
+                ),
+                student__enrollments__school_class__result_workflows__status="Released",
+                student__enrollments__is_current=True,
+            ).distinct()
+
         return queryset.none()
+
+    # ==========================================
+    # BULK UPSERT
+    # ==========================================
 
     @action(
         detail=False,
@@ -869,29 +879,45 @@ class BehaviourViewSet(viewsets.ModelViewSet):
         permission_classes=[IsTeacherOrAdmin],
     )
     def bulk_upsert(self, request):
+
         term_id = request.data.get("term_id")
         session_id = request.data.get("session_id")
         school_class_id = request.data.get("school_class_id")
         records = request.data.get("records", [])
 
-        # ---------------------------------------------------
-        # VALIDATION
-        # ---------------------------------------------------
+        # ==========================================
+        # VALIDATE HEADER
+        # ==========================================
 
-        if not all([term_id, session_id, school_class_id]):
+        if not all([
+            term_id,
+            session_id,
+            school_class_id,
+        ]):
             return Response(
                 {
                     "status": "error",
-                    "message": "term_id, session_id and school_class_id are required.",
+                    "message": (
+                        "term_id, session_id and "
+                        "school_class_id are required."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ==========================================
+        # VALIDATE RECORDS
+        # ==========================================
+
         if not isinstance(records, list) or not records:
+
             return Response(
                 {
                     "status": "error",
-                    "message": "records must be a non-empty list.",
+                    "message": (
+                        "records must be a "
+                        "non-empty list."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -899,36 +925,102 @@ class BehaviourViewSet(viewsets.ModelViewSet):
         saved_records = []
         errors = []
 
-        # ---------------------------------------------------
-        # PROCESS RECORDS
-        # ---------------------------------------------------
+        # ==========================================
+        # PROCESS
+        # ==========================================
 
         with transaction.atomic():
 
             for index, item in enumerate(records):
 
-                payload = {
-                    "student_id": item.get("student"),
-                    "school_class_id": school_class_id,
-                    "term_id": term_id,
-                    "session_id": session_id,
+                student_id = item.get("student")
 
-                    "skills": item.get("skills", "A"),
-                    "politeness": item.get("politeness", "A"),
-                    "neatness": item.get("neatness", "A"),
-                    "self_control": item.get("self_control", "A"),
-                    "relationship": item.get("relationship", "A"),
-                    "attendance": item.get("attendance", "A"),
-                    "punctuality": item.get("punctuality", "A"),
-                    "leadership": item.get("leadership", "A"),
+                if not student_id:
+
+                    errors.append(
+                        {
+                            "index": index,
+                            "student": None,
+                            "errors": {
+                                "student": [
+                                    "Student is required."
+                                ]
+                            },
+                        }
+                    )
+
+                    continue
+
+                # ----------------------------------
+                # FIND EXISTING RECORD
+                # ----------------------------------
+
+                instance = (
+                    Behaviour.objects
+                    .filter(
+                        student_id=student_id,
+                        school_class_id=school_class_id,
+                        term_id=term_id,
+                        session_id=session_id,
+                    )
+                    .first()
+                )
+
+                # ----------------------------------
+                # IMPORTANT:
+                # USE "student", NOT "student_id"
+                # ----------------------------------
+
+                payload = {
+                    "student": student_id,
+                    "school_class_id": school_class_id,
+                    "term": term_id,
+                    "session": session_id,
+
+                    "skills": item.get(
+                        "skills",
+                        "A"
+                    ),
+
+                    "politeness": item.get(
+                        "politeness",
+                        "A"
+                    ),
+
+                    "neatness": item.get(
+                        "neatness",
+                        "A"
+                    ),
+
+                    "self_control": item.get(
+                        "self_control",
+                        "A"
+                    ),
+
+                    "relationship": item.get(
+                        "relationship",
+                        "A"
+                    ),
+
+                    "attendance": item.get(
+                        "attendance",
+                        "A"
+                    ),
+
+                    "punctuality": item.get(
+                        "punctuality",
+                        "A"
+                    ),
+
+                    "leadership": item.get(
+                        "leadership",
+                        "A"
+                    ),
                 }
 
-                instance = Behaviour.objects.filter(
-                    student_id=item.get("student"),
-                    school_class_id=school_class_id,
-                    term_id=term_id,
-                    session_id=session_id,
-                ).first()
+                # ----------------------------------
+                # SERIALIZE
+                # ----------------------------------
 
                 serializer = self.get_serializer(
                     instance=instance,
@@ -937,66 +1029,102 @@ class BehaviourViewSet(viewsets.ModelViewSet):
                 )
 
                 try:
-                    serializer.is_valid(raise_exception=True)
+
+                    serializer.is_valid(
+                        raise_exception=True
+                    )
 
                     behaviour = serializer.save()
 
-                    saved_records.append(behaviour)
+                    saved_records.append(
+                        behaviour
+                    )
 
-                except DjangoValidationError as exc:
+                except serializer.ValidationError as exc:
+
                     errors.append(
                         {
                             "index": index,
-                            "student": item.get("student"),
+                            "student": student_id,
                             "errors": exc.detail,
                         }
                     )
 
                 except Exception as exc:
+
                     errors.append(
                         {
                             "index": index,
-                            "student": item.get("student"),
+                            "student": student_id,
                             "errors": str(exc),
                         }
                     )
 
-        # ---------------------------------------------------
+        # ==========================================
         # RESPONSE
-        # ---------------------------------------------------
+        # ==========================================
 
-        serializer = self.get_serializer(saved_records, many=True)
+        response_serializer = self.get_serializer(
+            saved_records,
+            many=True
+        )
 
-        if errors and not saved_records:
+        # ------------------------------------------
+        # NOTHING SAVED
+        # ------------------------------------------
+
+        if not saved_records:
+
             return Response(
                 {
                     "status": "error",
-                    "message": "No behaviour records were saved.",
+                    "message": (
+                        "No behaviour records "
+                        "were saved."
+                    ),
                     "results": [],
+                    "saved_count": 0,
+                    "failed_count": len(errors),
                     "errors": errors,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ------------------------------------------
+        # SOME OR ALL SAVED
+        # ------------------------------------------
+
         return Response(
             {
-                "status": "success" if not errors else "partial_success",
+                "status": (
+                    "success"
+                    if not errors
+                    else "partial_success"
+                ),
                 "message": (
                     "Behaviour saved successfully."
                     if not errors
                     else "Behaviour saved with some errors."
                 ),
-                "results": serializer.data,
+                "results": response_serializer.data,
                 "saved_count": len(saved_records),
                 "failed_count": len(errors),
                 "errors": errors,
             },
             status=status.HTTP_200_OK,
         )
-        
+
+    # ==========================================
+    # CREATE
+    # ==========================================
+
     def create(self, request, *args, **kwargs):
-        return self.upsert(request)
-   
+        return self.bulk_upsert(
+            request,
+            *args,
+            **kwargs
+        )
+         
 class MaxScoreViewset(viewsets.ModelViewSet):
     serializer_class = MaxScoresSerializer
     permission_classes = [IsTeacherOrAdmin]
@@ -1809,8 +1937,63 @@ class ResultViewSet(viewsets.ModelViewSet):
         }
 
         return Response(checks, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["post"], url_path="compute")
+    def compute(self, request):
+        term_id = request.data.get("term_id")
+        session_id = request.data.get("session_id")
+        school_class_id = request.data.get("school_class_id")  # Optional: targeted computation
 
-    # =========================================================================
+        if not term_id or not session_id:
+            return Response(
+                {"detail": "term_id and session_id are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        term = Term.objects.filter(id=term_id, session_id=session_id).first()
+        session = AcademicSession.objects.filter(id=session_id).first()
+
+        if not term or not session:
+            return Response(
+                {"detail": "Invalid term or session provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # If a class ID is provided, compute only for that class to avoid timing out HTTP requests
+        if school_class_id:
+            classes = Class.objects.filter(id=school_class_id)
+            if not classes.exists():
+                return Response(
+                    {"detail": "Specified school_class_id does not exist."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            # Fallback to computing all classes
+            classes = Class.objects.all()
+
+        computed_classes = []
+
+        # Wrap computations in an atomic transaction to avoid partial state corruption on error
+        with transaction.atomic():
+            for school_class in classes:
+                compute(
+                    request,
+                    school_class.id,
+                    session_id,
+                    term_id,
+                    enforce_prechecks=False  # Allow calculation upon full submission
+                )
+                computed_classes.append(school_class.name)
+
+        return Response(
+            {
+                "message": f"Results computed successfully for {len(computed_classes)} class(es).",
+                "classes": computed_classes,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # ===================================
     # 5. BULK CREATE / UPDATE OPTIMIZED
     # =========================================================================
     @action(detail=False, methods=["post"], url_path="bulk-create")
@@ -1921,27 +2104,40 @@ class ResultViewSet(viewsets.ModelViewSet):
                         "is_submitted": True,
                     },
                 )
+                generate_subject_summaries_for_class(
+                    school_class.id,
+                    term_id, 
+                    session_id,
+                )
+                generate_result_summary_for_class(school_class.id,
+                                    term_id, 
+                                    session_id,)
 
-        # Trigger workflow evaluation synchronously (No Celery)
-        update_result_workflow(school_class, term, session)
-        workflow = ResultWorkflow.objects.filter(school_class=school_class, term=term, session=session).first()
-     
-        if workflow and workflow.all_results_submitted:
-            compute(
-                request=request,
-                school_class_id=school_class.id,
-                session_id=session_id,
-                term_id=term_id,
+            # Trigger workflow evaluation synchronously
+            update_result_workflow(school_class, term, session)
+            workflow = ResultWorkflow.objects.filter(
+                school_class=school_class, 
+                term=term, 
+                session=session
+            ).first()
+
+            if workflow and workflow.all_results_submitted:
+                compute(
+                    request,
+                    school_class.id,
+                    session_id,
+                    term_id,
+                    enforce_prechecks=False  # Allow calculation upon full submission
+                )
+
+            return Response(
+                {
+                    "message": "Results processed successfully",
+                    "created": len(to_create),
+                    "updated": len(to_update),
+                },
+                status=status.HTTP_200_OK,
             )
-
-        return Response(
-            {
-                "message": "Results processed successfully",
-                "created": len(to_create),
-                "updated": len(to_update),
-            },
-            status=status.HTTP_200_OK,
-        )
 
     # =========================================================================
     # HELPER METHODS (BROADSHEET PERMISSIONS & MATRIX BUILDING)
@@ -2871,9 +3067,9 @@ class ResumptionDateViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)   
     
-# =============================================================================
+# ===================================
 # 1. ACTIVATE RESULT PORTAL VIEWSET
-# =============================================================================
+# ====================================
 class ActivateResultPortalViewSet(viewsets.ModelViewSet):
     queryset = ActivateResultPortal.objects.select_related("term", "session")
     serializer_class = ActivateResultPortalSerializer
@@ -2886,9 +3082,9 @@ class ActivateResultPortalViewSet(viewsets.ModelViewSet):
         term = serializer.validated_data["term"]
         serializer.save(session=term.session)
 
-# =============================================================================
+# ===========================
 # 2. RESULT WORKFLOW VIEWSET
-# =============================================================================
+# ===========================
 class ResultWorkflowViewSet(viewsets.ModelViewSet):
     queryset = ResultWorkflow.objects.select_related(
         "school_class",

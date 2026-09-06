@@ -1,7 +1,6 @@
 # urls.py
-
 from rest_framework.routers import DefaultRouter
-from .views_production import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet, ResultComputationViewSet)
+from .views_production import (AttendanceViewSet, BehaviourViewSet, ClassFeesViewset, ClassTeacherSignatureViewSet, GradingScaleViewSet, HeadTeacherSignatureViewSet, MaxScoreViewset, ResultCustomizationViewSet, ResultSummaryViewset, ResultViewSet, SchoolDaysViewSet, StudentResultSnapshotViewSet, SubjectResultStatusViewSet, TermCommentViewSet, ResumptionDateViewSet, ActivateResultPortalViewSet, ResultWorkflowViewSet, SubjectSummaryViewSet)
 
 router = DefaultRouter()
 router.register(r'results', ResultViewSet, basename='results')
@@ -22,8 +21,6 @@ router.register(r'resumption-date', ResumptionDateViewSet, basename="resumption-
 router.register(r'activate-portal', ActivateResultPortalViewSet, basename="activate-portal")
 router.register(r"workflow", ResultWorkflowViewSet, basename="workflow",)
 router.register(r"subject-summaries", SubjectSummaryViewSet, basename="subject-summary",
-)
-router.register(r"computation", ResultComputationViewSet, basename="results-computation",
 )
 
 router.register(r"school-days", SchoolDaysViewSet, basename="school-days")

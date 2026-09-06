@@ -1,9 +1,10 @@
 "use client";
-import {toast} from "sonner"
+
+import { toast } from "sonner";
 import { apiHeaders, BASE_URL, handleResponse } from "@/app/lib/api";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   CheckCircle2,
   XCircle,
@@ -12,7 +13,7 @@ import {
   PlayCircle,
   Loader2,
   Activity,
-  Terminal,
+  X,
 } from "lucide-react";
 import { getSessions, sessionTerms } from "@/app/services/academics";
 import { AcademicSession, ClassType, Term } from "@/app/lib/types";
@@ -22,21 +23,34 @@ type Status = "Computing" | "Done" | "Failed" | "idle";
 export default function GenerateResultsPage() {
   const { currentTerm } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+
   const [status, setStatus] = useState<Status>("idle");
-  const [sessionId, setSessionId] = useState(currentTerm?.session?.id);
+  const [sessionId, setSessionId] = useState<number | undefined>(
+    currentTerm?.session?.id
+  );
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
-  const [session, setSession] = useState({
-    id: currentTerm?.session.id,
+  const [session, setSession] = useState<{
+    id?: number;
+    name?: string;
+    is_active?: boolean;
+  }>({
+    id: currentTerm?.session?.id,
     name: currentTerm?.session?.name,
     is_active: currentTerm?.session?.is_active,
   });
-  const [termId, setTermId] = useState(currentTerm?.id);
+
+  const [termId, setTermId] = useState<number | undefined>(currentTerm?.id);
   const [terms, setTerms] = useState<Term[]>([]);
-  const [term, setTerm] = useState({
-    id: currentTerm && currentTerm.id,
-    name: currentTerm && currentTerm.name,
-    is_active: currentTerm && currentTerm.is_active,
+  const [term, setTerm] = useState<{
+    id?: number;
+    name?: string;
+    is_active?: boolean;
+  }>({
+    id: currentTerm?.id,
+    name: currentTerm?.name,
+    is_active: currentTerm?.is_active,
   });
 
   const [query, setQuery] = useState("");
@@ -57,22 +71,34 @@ export default function GenerateResultsPage() {
     head_teacher_signature: false,
   });
 
+  // Sync initial term/session if user context populates later
+  useEffect(() => {
+    if (currentTerm && !sessionId) {
+      setSessionId(currentTerm.session?.id);
+      setSession(currentTerm.session);
+    }
+    if (currentTerm && !termId) {
+      setTermId(currentTerm.id);
+      setTerm(currentTerm);
+    }
+  }, [currentTerm]);
+
+  // Fetch terms when session changes
   useEffect(() => {
     if (!sessionId) return;
     fetchTerms(sessionId);
   }, [sessionId]);
 
-  // --------------------------------------------------
-  // PRECHECK
-  // --------------------------------------------------
+  // Precheck execution
   const fetchChecks = async () => {
+    if (!sessionId || !termId) return;
+
     try {
       const params = new URLSearchParams({
         term_id: String(termId),
         session_id: String(sessionId),
       });
 
-      // Only include class_id when a class is selected
       if (selectedClass?.id) {
         params.set("class_id", String(selectedClass.id));
       }
@@ -81,7 +107,7 @@ export default function GenerateResultsPage() {
         `${BASE_URL}/results/results/precheck/?${params.toString()}`,
         {
           headers: apiHeaders(),
-        },
+        }
       );
 
       const data = await res.json();
@@ -100,13 +126,11 @@ export default function GenerateResultsPage() {
         });
       }
     } catch (err) {
-      console.error(err);
+      console.error("Failed to run prechecks:", err);
     }
   };
 
   useEffect(() => {
-    if (!sessionId || !termId) return;
-
     fetchChecks();
   }, [sessionId, termId, selectedClass]);
 
@@ -121,45 +145,38 @@ export default function GenerateResultsPage() {
     checks.class_teacher_signatures &&
     checks.head_teacher_signature;
 
-  //   sessions
+  // Fetch academic sessions
   useEffect(() => {
     const fetchSessions = async () => {
-      const res = await getSessions();
-
-      if (res) {
-        setSessions(res.results);
+      try {
+        const res = await getSessions();
+        if (res?.results) {
+          setSessions(res.results);
+        }
+      } catch (err) {
+        console.error("Failed to load sessions:", err);
       }
     };
 
     fetchSessions();
   }, []);
-  // terms
-  const fetchTerms = async (sessionId: number) => {
-    if (!sessionId) return;
 
+  // Fetch terms for selected session
+  const fetchTerms = async (sId: number) => {
+    if (!sId) return;
     setTerms([]);
 
-    const res = await sessionTerms(sessionId);
-
-    if (res) {
-      setTerms(res.terms);
+    try {
+      const res = await sessionTerms(sId);
+      if (res?.terms) {
+        setTerms(res.terms);
+      }
+    } catch (err) {
+      console.error("Failed to load terms:", err);
     }
   };
 
-  useEffect(() => {
-    if (!classes.length) return;
-
-    const classId = searchParams.get("class_id");
-
-    if (!classId) return;
-
-    const found = classes.find((c) => c.id === Number(classId));
-
-    if (found) {
-      setSelectedClass(found);
-    }
-  }, [classes, searchParams]);
-
+  // Fetch classes
   useEffect(() => {
     const loadClasses = async () => {
       try {
@@ -179,51 +196,95 @@ export default function GenerateResultsPage() {
     loadClasses();
   }, []);
 
+  // URL sync for selected class
+  useEffect(() => {
+    if (!classes.length) return;
+
+    const classId = searchParams.get("class_id");
+    if (!classId) {
+      setSelectedClass(null);
+      return;
+    }
+
+    const found = classes.find((c) => c.id === Number(classId));
+    if (found) {
+      setSelectedClass(found);
+    }
+  }, [classes, searchParams]);
+
   const filteredClasses = useMemo(() => {
     const search = query.trim().toLowerCase();
     if (!search) return classes;
 
     return classes.filter((schoolClass) => {
-      const classLabel = `${schoolClass.name} ${schoolClass.arm?.code || ""} ${schoolClass.arm?.name || ""}`;
+      const classLabel = `${schoolClass.name} ${schoolClass.arm?.code || ""} ${
+        schoolClass.arm?.name || ""
+      }`;
       return classLabel.toLowerCase().includes(search);
     });
   }, [classes, query]);
 
-  const handleClassSelect = (schoolClass: ClassType | null) => {
-    setSelectedClass(schoolClass);
-    setError("");
-
+  const handleClassSelect = (schoolClass: ClassType) => {
     const params = new URLSearchParams(searchParams.toString());
 
-    if (schoolClass) {
-      params.set("class_id", String(schoolClass.id));
-    } else {
+    // Toggle off if already selected
+    if (selectedClass?.id === schoolClass.id) {
+      setSelectedClass(null);
       params.delete("class_id");
+    } else {
+      setSelectedClass(schoolClass);
+      params.set("class_id", String(schoolClass.id));
     }
+
+    setError("");
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  const clearClassSelection = () => {
+    setSelectedClass(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("class_id");
+    router.replace(`${pathname}?${params.toString()}`);
   };
 
   const compute = async () => {
-    setStatus("Computing")
-      try {
-        const payload = {
-          term_id: termId,
-          session_id: sessionId
-        };
-        const res = await fetch(`${BASE_URL}/results/computation/compute/`, {
-          method: "POST",
-          headers: { ...apiHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json()
-        if (res.ok){
-            setStatus("Done")
-            toast.info(`${data.status}`)
-        }
-
-    } catch (error) {
-        setStatus("Failed")
+    if (!termId || !sessionId) {
+      toast.error("Please select a session and term first.");
+      return;
     }
-  }
+
+    setStatus("Computing");
+
+    try {
+      const payload = {
+        term_id: termId,
+        session_id: sessionId,
+        school_class_id: selectedClass?.id || null,
+      };
+
+      const res = await fetch(`${BASE_URL}/results/results/compute/`, {
+        method: "POST",
+        headers: { ...apiHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setStatus("Done");
+        toast.success(
+          data.message ||
+            `Computed results for ${data.classes?.length || 0} class(es).`
+        );
+      } else {
+        setStatus("Failed");
+        toast.error(data.detail || "Failed to compute results.");
+      }
+    } catch (err: any) {
+      setStatus("Failed");
+      toast.error("Network error: Could not trigger result calculation.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -245,7 +306,7 @@ export default function GenerateResultsPage() {
                 value={session?.id || ""}
                 onChange={(event) => {
                   const selectedSession = sessions.find(
-                    (s: AcademicSession) => s.id === Number(event.target.value),
+                    (s: AcademicSession) => s.id === Number(event.target.value)
                   );
 
                   if (selectedSession) {
@@ -270,7 +331,7 @@ export default function GenerateResultsPage() {
             )}
 
             <p className="mt-4 text-sm text-slate-500">
-              {session
+              {session?.name
                 ? `${session.name} / ${term?.name ?? "No term selected"}`
                 : "Waiting for active session"}
             </p>
@@ -291,7 +352,7 @@ export default function GenerateResultsPage() {
                 value={term?.id || ""}
                 onChange={(event) => {
                   const selectedTerm = terms.find(
-                    (t: Term) => t.id === Number(event.target.value),
+                    (t: Term) => t.id === Number(event.target.value)
                   );
 
                   if (selectedTerm) {
@@ -314,17 +375,18 @@ export default function GenerateResultsPage() {
             )}
 
             <p className="mt-4 text-sm text-slate-500">
-              {term
+              {term?.name
                 ? `${term.name} - ${session?.name ?? ""}`
                 : "No term selected"}
             </p>
           </div>
         </div>
+
         {/* Class Selection */}
         <div className="rounded-xl border border-blue-100 bg-white p-5 shadow-sm md:p-6">
           <div className="mb-5">
             <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">
-              Class
+              Class Target
             </p>
 
             <h2 className="mt-1 text-xl font-bold text-slate-900">
@@ -332,7 +394,7 @@ export default function GenerateResultsPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Choose the class whose results should be recomputed. Skip this section to select all classes
+              Choose a specific class to compute. Deselect or leave unselected to calculate for <strong>all classes</strong>.
             </p>
           </div>
 
@@ -391,18 +453,27 @@ export default function GenerateResultsPage() {
             </div>
           )}
 
-          {/* Selected Class */}
+          {/* Selected Class Indicator */}
           {selectedClass && (
-            <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4">
-              <p className="text-sm text-blue-700">Selected Class</p>
-
-              <h3 className="mt-1 font-semibold text-slate-800">
-                {selectedClass.name}
-                {selectedClass.arm && ` ${selectedClass.arm.code}`}
-              </h3>
+            <div className="mt-5 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <div>
+                <p className="text-xs text-blue-700 uppercase font-semibold">Targeting Class</p>
+                <h3 className="mt-0.5 font-semibold text-slate-800">
+                  {selectedClass.name}
+                  {selectedClass.arm && ` ${selectedClass.arm.code}`}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={clearClassSelection}
+                className="flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-md font-medium transition"
+              >
+                <X className="w-3.5 h-3.5" /> Clear (Compute All)
+              </button>
             </div>
           )}
         </div>
+
         {/* HEADER */}
         <div className="bg-white p-5 rounded-xl shadow-sm">
           <div className="flex items-center gap-2">
@@ -410,7 +481,7 @@ export default function GenerateResultsPage() {
             <h2 className="text-xl font-semibold">Compute Results</h2>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Compute results for all students (Do this whenever you change customization settings)
+            Compute results for {selectedClass ? selectedClass.name : "all classes"} (re-calculates grading, comments, and positions).
           </p>
         </div>
 
@@ -439,36 +510,35 @@ export default function GenerateResultsPage() {
 
           {!allReady && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-50 text-yellow-700 text-sm mt-3">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
-              Some required setup data is missing. Generation is disabled.
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>Some required setup data is missing for the selected term/class. You can still force computation if needed.</span>
             </div>
           )}
         </div>
 
-        {/* BUTTON */}
+        {/* ACTION BUTTON */}
         <button
+          type="button"
           onClick={compute}
-          disabled={!allReady || status === "Computing"}
-          className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition
-            ${
-              !allReady || status === "Computing"
-                ? "bg-gray-300 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
+          disabled={status === "Computing"}
+          className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition text-white ${
+            status === "Computing"
+              ? "bg-blue-400 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700"
+          }`}
         >
           {status === "Computing" ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Computing...
+              Computing Results...
             </>
           ) : (
             <>
               <PlayCircle className="w-4 h-4" />
-              Compute
+              Compute {selectedClass ? selectedClass.name : "All Results"}
             </>
           )}
         </button>
-
       </div>
     </div>
   );
@@ -483,12 +553,12 @@ function Check({ label, ok }: { label: string; ok: boolean }) {
       <span className="text-sm text-gray-700">{label}</span>
 
       {ok ? (
-        <span className="flex items-center gap-1 text-green-600 text-sm">
+        <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
           <CheckCircle2 className="w-4 h-4" />
           Ready
         </span>
       ) : (
-        <span className="flex items-center gap-1 text-red-500 text-sm">
+        <span className="flex items-center gap-1 text-red-500 text-sm font-medium">
           <XCircle className="w-4 h-4" />
           Missing
         </span>

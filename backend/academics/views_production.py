@@ -891,26 +891,47 @@ class TeacherViewSet(viewsets.ModelViewSet):
         user = self.request.user
         role = getattr(user, "role", None)
 
-        queryset = Teacher.objects.select_related("user").prefetch_related(
-            "assigned_classes__arm"
+        queryset = (
+            Teacher.objects
+            .select_related("user")
+            .prefetch_related(
+                "assigned_classes__arm"
+            )
         )
 
         if user.is_staff or user.is_superuser or role == "admin":
             return queryset
+
         if role == "teacher":
             return queryset.filter(user=user)
 
         if role == "student":
-            student = Student.objects.select_related(
-                "enrollments__school_class__class_teacher"
-            ).filter(user=user, enrollments__is_current=True).first()
+            student = (
+                Student.objects
+                .select_related(
+                    "user",
+                    "current_class__class_teacher",
+                    "current_class__class_teacher__user",
+                )
+                .filter(
+                    user=user,
+                    enrollments__is_current=True,
+                )
+                .first()
+            )
 
-            if student and student.current_class and student.current_class.class_teacher_id:
-                return queryset.filter(pk=student.current_class.class_teacher_id)
+            if (
+                student
+                and student.current_class
+                and student.current_class.class_teacher_id
+            ):
+                return queryset.filter(
+                    pk=student.current_class.class_teacher_id
+                )
 
-            return Teacher.queryset.none()
+            return queryset.none()
 
-        return Teacher.queryset.none()
+        return queryset.none()
 
     def get_serializer_class(self):
         if self.action == "create":
