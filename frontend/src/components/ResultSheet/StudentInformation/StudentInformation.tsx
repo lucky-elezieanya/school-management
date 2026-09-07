@@ -17,11 +17,10 @@ export default function StudentInformation({ snapshot }: Props) {
     <table
       className="
         w-full   border-[0.5px]
-        border-gray-400
-       
+        border-gray-400      
         border-collapse
         text-[10px]
-        mt-2
+      
       "
     >
       <tbody>
@@ -34,21 +33,22 @@ export default function StudentInformation({ snapshot }: Props) {
           >
             <SchoolLogo logo={assets.logo} fallback={"/logo.png"} />
           </td>
-
           <td
             colSpan={4}
             className="  border-[0.5px]
             border-gray-400
-            px-2 py-1"
+            p-1"
           >
-            <StudentMetric label="Name:" value={student.fullName} />
+            <StudentMetric
+              label="Name:"
+              value={student.fullName}
+              className="uppercase"
+            />
           </td>
-
           <td
             rowSpan={7}
-            className="  border-[0.5px]
-            border-gray-400
-       "
+            className="border-[0.5px]
+            border-gray-400"
           >
             <StudentPhoto
               image={
@@ -63,8 +63,8 @@ export default function StudentInformation({ snapshot }: Props) {
         <tr>
           <td
             className="  border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+            border-gray-400
+            p-1"
           >
             <StudentMetric
               label="Class:"
@@ -72,20 +72,21 @@ export default function StudentInformation({ snapshot }: Props) {
                 school.schoolClass.description ||
                 `${school.schoolClass.name} ${school.schoolClass.arm}`
               }
+              className="uppercase"
             />
           </td>
 
-          <td className="border-[0.5px] px-2 py-1">
-            <StudentMetric label="Session:" value={school.session.name} />
+          <td className="border-[0.5px] p-1">
+            <StudentMetric label="Session:" value={school.session.name} className="uppercase" />
           </td>
 
           <td
             colSpan={2}
-            className="  border-[0.5px]
+            className="border-[0.5px]
         border-gray-400
-        px-2 py-1"
+        p-1"
           >
-            <StudentMetric label="Term:" value={school.term.name} />
+            <StudentMetric label="Term:" value={school.term.name} className="uppercase" />
           </td>
         </tr>
 
@@ -93,7 +94,7 @@ export default function StudentInformation({ snapshot }: Props) {
           <td
             className="  border-[0.5px]
         border-gray-400
-        px-2 py-1"
+        p-1"
           >
             <StudentMetric
               label="Total:"
@@ -105,7 +106,7 @@ export default function StudentInformation({ snapshot }: Props) {
             <td
               className="border-[0.5px]
             border-gray-400
-            px-2 py-1"
+            p-1"
             >
               <StudentMetric
                 label="Position:"
@@ -119,7 +120,7 @@ export default function StudentInformation({ snapshot }: Props) {
               colSpan={2}
               className="border-[0.5px]
             border-gray-400
-            px-2 py-1"
+            p-1"
             >
               <StudentMetric label="Class Size:" value={summary.classSize} />
             </td>
@@ -129,8 +130,8 @@ export default function StudentInformation({ snapshot }: Props) {
         <tr>
           <td
             className="border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+            border-gray-400
+            p-1"
           >
             <StudentMetric label="Average:" value={summary.averageScore} />
           </td>
@@ -139,7 +140,7 @@ export default function StudentInformation({ snapshot }: Props) {
             <td
               className="border-[0.5px]
             border-gray-400
-            px-2 py-1"
+            p-1"
             >
               <StudentMetric label="Class Avg:" value={summary.classAverage} />
             </td>
@@ -149,12 +150,12 @@ export default function StudentInformation({ snapshot }: Props) {
             <td
               colSpan={2}
               className="border-[0.5px]
-            border-gray-400
-            px-2 py-1"
+                border-gray-400
+                p-1"
             >
               <StudentMetric
                 label="Grade:"
-                value={`${summary.overallGrade ?? ""} ${summary.overallRemark ?? ""}`}
+                value={`${summary.overallGrade ?? ""} ${summary.overallRemark ?? ""}`} className="uppercase"
               />
             </td>
           )}
@@ -165,16 +166,16 @@ export default function StudentInformation({ snapshot }: Props) {
             <>
               <td
                 className="border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+                border-gray-400
+                p-1"
               >
                 <StudentMetric label="Highest:" value={summary.highestScore} />
               </td>
 
               <td
                 className="border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+                border-gray-400
+                p-1"
               >
                 <StudentMetric label="Lowest:" value={summary.lowestScore} />
               </td>
@@ -184,8 +185,8 @@ export default function StudentInformation({ snapshot }: Props) {
           <td
             colSpan={2}
             className="border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+            border-gray-400
+            p-1"
           >
             <StudentMetric label="Subjects:" value={summary.totalSubjects} />
           </td>
@@ -195,8 +196,8 @@ export default function StudentInformation({ snapshot }: Props) {
           <td
             colSpan={2}
             className="border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+            border-gray-400
+            p-1"
           >
             <StudentMetric label="Attendance:" value={attendance.attendance} />
           </td>
@@ -204,8 +205,8 @@ export default function StudentInformation({ snapshot }: Props) {
           <td
             colSpan={2}
             className="border-[0.5px]
-        border-gray-400
-        px-2 py-1"
+            border-gray-400
+            p-1"
           >
             <StudentMetric
               label="Days Open:"
@@ -215,11 +216,11 @@ export default function StudentInformation({ snapshot }: Props) {
         </tr>
 
         <tr>
-          <td colSpan={2} className="     border-gray-400 px-2 py-1">
+          <td colSpan={2} className="     border-gray-400 p-1">
             <StudentMetric label="Resumption:" value={summary.resumptionDate} />
           </td>
 
-          <td colSpan={2} className="        px-2 py-1">
+          <td colSpan={2} className="p-1">
             <StudentMetric
               label="Next Fees:"
               value={`₦${fees.nextFees.toLocaleString()}`}

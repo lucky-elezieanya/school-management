@@ -12,7 +12,6 @@ interface Props {
 
 export default function PdfPreview({ snapshot }: Props) {
   const pdfRef = useRef<HTMLDivElement>(null);
-
   return (
     <main
       className="
@@ -59,19 +58,16 @@ export default function PdfPreview({ snapshot }: Props) {
       >
         <div
           className="
-           
-            max-w-fit
           "
         >
           <div
             className="
               overflow-hidden
-           
               bg-white
               shadow-2xl
               ring-1
               ring-black/10
-              my-4
+              my-1
             "
           >
             <PdfContainer ref={pdfRef} snapshot={snapshot} />

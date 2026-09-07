@@ -232,3 +232,18 @@ export async function getHeadTeacherSignatures(token: string) {
 
   return handleResponse(response);
 }
+
+export function toMultiSentenceCase(text: string): string {
+    if (!text) return "";
+  
+    // 1. Lowercase the entire text first
+    const lower: string = text.toLowerCase();
+  
+    // 2. Match the start of the text OR characters following a sentence-ending punctuation (.!?) and spaces
+    return lower.replace(
+      /(^\s*|[.!?]\s+)([a-z])/g,
+      (_match: string, separator: string, letter: string): string => {
+        return separator + letter.toUpperCase();
+      }
+    );
+  }

@@ -21,8 +21,8 @@ export default function CommentPanel({ snapshot }: CommentPanelProps) {
         flex
         flex-col
         justify-between
-        gap-4
-        pr-4
+        gap-1
+        pr-2
        
       "
     >
@@ -37,7 +37,7 @@ export default function CommentPanel({ snapshot }: CommentPanelProps) {
       </div>
       <div className="">
         {showTeacher && showPrincipal && (
-          <hr className="my-2 border-gray-300" />
+          <hr className="my-1 border-gray-300" />
         )}
       </div>
       <div className="">

@@ -12,7 +12,7 @@ export default function BottomSection({ snapshot }: BottomSectionProps) {
   const { customization, behaviour } = snapshot;
 
   return (
-    <section className="mt-1 space-y-2 mb-0">
+    <section className="mt-0 space-y-1 mb-0">
       {customization.showPerformanceChart && (
         <PerformanceChart svg={snapshot.charts.performance} />
       )}
@@ -23,7 +23,7 @@ export default function BottomSection({ snapshot }: BottomSectionProps) {
           grid grid-cols-[1fr_24px_2fr] mb-0
         "
       >
-        <div className="behaviour flex justify-end p-0">
+        <div className="behaviour flex justify-end p-0 max-h-[180px] overflow-hidden">
           {customization.showBehaviour ? (
             <BehaviourPanel behaviour={behaviour} />
           ) : (
@@ -31,7 +31,7 @@ export default function BottomSection({ snapshot }: BottomSectionProps) {
           )}
         </div>
         <div />
-        <div className="comments p-0">
+        <div className="comments p-0 max-h-[150px] overflow-hidden">
           <CommentPanel snapshot={snapshot} />
         </div>
       </div>

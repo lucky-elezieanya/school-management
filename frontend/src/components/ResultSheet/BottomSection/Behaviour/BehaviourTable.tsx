@@ -23,7 +23,7 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
               bg-blue-400 font-bold
               text-[#fff]
               font-bold
-              py-[2px]
+              py-[1px]
               px-1
             "
           >
@@ -38,7 +38,7 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
               bg-blue-400 font-bold
               text-[#fff]
               font-bold
-              py-[2px]
+              py-[1px]
               px-1
               font-bold
             "
@@ -52,7 +52,7 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
               bg-blue-400 font-bold
               text-[#fff]
               font-bold
-              py-[2px]
+              py-[1px]
               px-1
               font-bold text-[11px]
             "
@@ -70,7 +70,7 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
               border-[0.5px] border-gray-400
                 text-center
                 text-[11px]
-                py-[2px]
+                py-[1px]
               "
             >
               {index + 1}
@@ -80,7 +80,7 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
               className="
               border-[0.5px] border-gray-400
                 px-2
-                py-[2px] text-[11px]
+                py-[1px] text-[11px]
               "
             >
               {item.item}
@@ -90,7 +90,7 @@ export default function BehaviourTable({ behaviour }: BehaviourTableProps) {
               className="
               border-[0.5px] border-gray-400
                 text-center
-                py-[2px] text-[11px]
+                py-[1px] text-[11px]
                 font-semibold
               "
             >

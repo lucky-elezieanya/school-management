@@ -21,14 +21,14 @@ export default function ResultSheet({ snapshot }: Props) {
         rounded-md
         overflow-hidden
         text-[#220080]
-        p-[10px]
+        p-2
       "
     >
       {/* Watermark */}
       <Watermark logo={snapshot.assets.logo} />
 
       {/* Page Content */}
-      <div className="relative z-10 flex flex-col gap-2">
+      <div className="relative z-10 flex flex-col gap-1">
         {/* School Header */}
         <Header image={snapshot?.assets?.header || "/cozzi-header.png"} />
 

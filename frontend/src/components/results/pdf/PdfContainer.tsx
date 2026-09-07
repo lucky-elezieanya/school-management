@@ -28,7 +28,7 @@ const PdfContainer = forwardRef<HTMLDivElement, Props>(({ snapshot }, ref) => {
             ring-1
             ring-slate-200
             transition-shadow
-            p-4
+            p-2
             duration-300
             hover:shadow-[0_30px_80px_rgba(0,0,0,0.22)]
           "

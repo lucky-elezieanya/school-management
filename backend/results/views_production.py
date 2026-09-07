@@ -130,13 +130,11 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
             lookup["school_class_id"] = school_class_id
         else:
             lookup["school_class"] = None
-
         with transaction.atomic():
             customization, created = ResultCustomization.objects.update_or_create(
                 defaults=defaults,
                 **lookup,
-            )
-
+            )   
             if school_class_id:
                 workflow = ResultWorkflow.objects.filter(
                     school_class_id=school_class_id,
@@ -144,14 +142,14 @@ class ResultCustomizationViewSet(viewsets.ModelViewSet):
                     session_id=session_id,
                 ).select_related("school_class", "session", "term").first()
 
-                if workflow and workflow.all_results_submitted and workflow.status != "Released":
-                   
-                    ResultEngine(
-                        school_class=workflow.school_class,
-                        session=workflow.session,
-                        term=workflow.term,
-                        request=self.request
-                    ).compute()
+                if workflow and workflow.all_results_submitted:
+                    compute(
+                        request,
+                        school_class_id,
+                        session_id,
+                        term_id,
+                        enforce_prechecks=False  # Allow calculation upon full submission
+                    )
 
         serializer = self.get_serializer(customization)
         return Response(
