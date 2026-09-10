@@ -30,6 +30,8 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
+  EyeOff,
+  Eye,
 } from "lucide-react";
 
 import {
@@ -101,6 +103,10 @@ export default function StudentDashboardPage() {
   // ============================================================
   // CHANGE PASSWORD STATE
   // ============================================================
+
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [passwordData, setPasswordData] = useState({
     current_password: "",
@@ -470,7 +476,7 @@ export default function StudentDashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50/30 flex flex-col md:flex-row relative">
       {/* MOBILE HEADER & NAVIGATION */}
-      <aside className="md:hidden flex items-center justify-between bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-40 w-full shadow-sm">
+      <aside className="md:hidden flex items-center justify-between bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-40 w-full shadow-sm mb-3">
         <div className="flex items-center gap-2">
           <GraduationCap className="text-blue-600 w-7 h-7" />
           <span className="font-extrabold text-slate-800 tracking-tight">
@@ -484,13 +490,13 @@ export default function StudentDashboardPage() {
               <Menu className="w-6 h-6" />
             </button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-[80%] p-0">
+          <SheetContent side="left" className="w-[70%] p-0">
             <SheetTitle className="sr-only">
               Student Dashboard Portal
             </SheetTitle>
-            <div className="h-full flex flex-col justify-between bg-white p-6">
+            <div className="h-full mb-3 flex flex-col justify-between bg-white p-6">
               <div>
-                <div className="flex flex-col items-center w-full mb-6">
+                <div className="flex flex-col items-center w-full">
                   <div className="flex items-center gap-2 mb-8">
                     <GraduationCap className="text-blue-600 w-8 h-8" />
                     <span className="font-black text-slate-800 text-xl tracking-tight">
@@ -535,7 +541,7 @@ export default function StudentDashboardPage() {
                   </div>
                 </div>
 
-                <nav className="space-y-1.5">
+                <nav className="space-y-1.5 overflow-y-auto max-h-[calc(40vh-50px)]">
                   {menuItems.map((item) => (
                     <SheetClose asChild key={item.id}>
                       <button
@@ -567,7 +573,7 @@ export default function StudentDashboardPage() {
       </aside>
 
       {/* DESKTOP SIDEBAR */}
-      <aside className="w-80 bg-white border-r border-slate-100 hidden md:flex flex-col h-screen sticky top-0 justify-between shrink-0 shadow-sm p-8">
+      <aside className="w-80 bg-white h-screen overflow-y-auto border-r border-slate-100 hidden md:flex flex-col h-screen sticky top-0 justify-between shrink-0 shadow-sm p-8">
         <div>
           <div className="flex items-center gap-2.5 mb-10">
             <GraduationCap className="text-blue-600 w-8 h-8" />
@@ -1383,9 +1389,7 @@ export default function StudentDashboardPage() {
                   </div>
 
                   <form onSubmit={handleChangePassword} className="space-y-5">
-                    {/* ==================================================
-              CURRENT PASSWORD
-          ================================================== */}
+                    {/* ================= CURRENT PASSWORD ============== */}
 
                     <div className="space-y-2">
                       <label
@@ -1395,26 +1399,48 @@ export default function StudentDashboardPage() {
                         Current Password
                       </label>
 
-                      <input
-                        id="current_password"
-                        type="password"
-                        value={passwordData.current_password}
-                        onChange={(e) =>
-                          setPasswordData((current) => ({
-                            ...current,
-                            current_password: e.target.value,
-                          }))
-                        }
-                        autoComplete="current-password"
-                        placeholder="Enter your current password"
-                        disabled={passwordLoading}
-                        className="w-full bg-slate-50/70 border border-slate-100 hover:border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 py-3 rounded-2xl text-slate-800 text-sm font-semibold transition disabled:opacity-60"
-                      />
+                      <div className="relative">
+                        <input
+                          id="current_password"
+                          type={showCurrentPassword ? "text" : "password"}
+                          value={passwordData.current_password}
+                          onChange={(e) =>
+                            setPasswordData((current) => ({
+                              ...current,
+                              current_password: e.target.value,
+                            }))
+                          }
+                          autoComplete="current-password"
+                          placeholder="Enter your current password"
+                          disabled={passwordLoading}
+                          className="w-full bg-slate-50/70 border border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 pr-12 py-3 rounded-2xl text-slate-800 text-sm font-semibold placeholder:text-slate-400 placeholder:font-normal transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowCurrentPassword((current) => !current)
+                          }
+                          disabled={passwordLoading}
+                          aria-label={
+                            showCurrentPassword
+                              ? "Hide current password"
+                              : "Show current password"
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {showCurrentPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
 
-                    {/* ==================================================
-              NEW PASSWORD
-          ================================================== */}
+                    {/* =========================================================
+      NEW PASSWORD
+  ========================================================== */}
 
                     <div className="space-y-2">
                       <label
@@ -1424,30 +1450,52 @@ export default function StudentDashboardPage() {
                         New Password
                       </label>
 
-                      <input
-                        id="new_password"
-                        type="password"
-                        value={passwordData.new_password}
-                        onChange={(e) =>
-                          setPasswordData((current) => ({
-                            ...current,
-                            new_password: e.target.value,
-                          }))
-                        }
-                        autoComplete="new-password"
-                        placeholder="Enter your new password"
-                        disabled={passwordLoading}
-                        className="w-full bg-slate-50/70 border border-slate-100 hover:border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 py-3 rounded-2xl text-slate-800 text-sm font-semibold transition disabled:opacity-60"
-                      />
+                      <div className="relative">
+                        <input
+                          id="new_password"
+                          type={showNewPassword ? "text" : "password"}
+                          value={passwordData.new_password}
+                          onChange={(e) =>
+                            setPasswordData((current) => ({
+                              ...current,
+                              new_password: e.target.value,
+                            }))
+                          }
+                          autoComplete="new-password"
+                          placeholder="Enter your new password"
+                          disabled={passwordLoading}
+                          className="w-full bg-slate-50/70 border border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 pr-12 py-3 rounded-2xl text-slate-800 text-sm font-semibold placeholder:text-slate-400 placeholder:font-normal transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowNewPassword((current) => !current)
+                          }
+                          disabled={passwordLoading}
+                          aria-label={
+                            showNewPassword
+                              ? "Hide new password"
+                              : "Show new password"
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {showNewPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
 
                       <p className="text-xs text-slate-400">
                         Use at least 8 characters and avoid common passwords.
                       </p>
                     </div>
 
-                    {/* ==================================================
-              CONFIRM PASSWORD
-          ================================================== */}
+                    {/* =========================================================
+      CONFIRM PASSWORD
+  ========================================================== */}
 
                     <div className="space-y-2">
                       <label
@@ -1457,26 +1505,47 @@ export default function StudentDashboardPage() {
                         Confirm New Password
                       </label>
 
-                      <input
-                        id="confirm_password"
-                        type="password"
-                        value={passwordData.confirm_password}
-                        onChange={(e) =>
-                          setPasswordData((current) => ({
-                            ...current,
-                            confirm_password: e.target.value,
-                          }))
-                        }
-                        autoComplete="new-password"
-                        placeholder="Re-enter your new password"
-                        disabled={passwordLoading}
-                        className="w-full bg-slate-50/70 border border-slate-100 hover:border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 py-3 rounded-2xl text-slate-800 text-sm font-semibold transition disabled:opacity-60"
-                      />
+                      <div className="relative">
+                        <input
+                          id="confirm_password"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={passwordData.confirm_password}
+                          onChange={(e) =>
+                            setPasswordData((current) => ({
+                              ...current,
+                              confirm_password: e.target.value,
+                            }))
+                          }
+                          autoComplete="new-password"
+                          placeholder="Re-enter your new password"
+                          disabled={passwordLoading}
+                          className="w-full bg-slate-50/70 border border-slate-200 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 pr-12 py-3 rounded-2xl text-slate-800 text-sm font-semibold placeholder:text-slate-400 placeholder:font-normal transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowConfirmPassword((current) => !current)
+                          }
+                          disabled={passwordLoading}
+                          aria-label={
+                            showConfirmPassword
+                              ? "Hide confirm password"
+                              : "Show confirm password"
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
 
-                    {/* ==================================================
-              ACTIONS
-          ================================================== */}
+                    {/* =========================================================
+      ACTIONS
+  ========================================================== */}
 
                     <div className="pt-4 flex flex-col sm:flex-row gap-3">
                       <button
@@ -1491,7 +1560,7 @@ export default function StudentDashboardPage() {
                           setActiveTab("profile");
                         }}
                         disabled={passwordLoading}
-                        className="w-full sm:w-auto px-5 py-3 rounded-2xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition font-bold text-sm disabled:opacity-50"
+                        className="w-full sm:w-auto px-5 py-3 rounded-2xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
@@ -1499,7 +1568,7 @@ export default function StudentDashboardPage() {
                       <button
                         type="submit"
                         disabled={passwordLoading}
-                        className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition font-bold text-sm shadow-lg shadow-blue-600/10 disabled:opacity-60 flex items-center justify-center gap-2"
+                        className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition font-bold text-sm shadow-lg shadow-blue-600/10 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         {passwordLoading ? (
                           <>

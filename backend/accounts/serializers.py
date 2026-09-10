@@ -3,6 +3,12 @@ from django.contrib.auth import get_user_model
 
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer  
 
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+from rest_framework import serializers
+
+
 User = get_user_model()
 
 
@@ -98,6 +104,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["is_superuser"] = user.is_superuser
         return token
    
+
 class ChangePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(
         write_only=True,
@@ -123,7 +130,7 @@ class ChangePasswordSerializer(serializers.Serializer):
         confirm_password = attrs["confirm_password"]
 
         # ------------------------------------------------------
-        # Verify current password
+        # 1. Verify current password
         # ------------------------------------------------------
 
         if not user.check_password(current_password):
@@ -133,7 +140,7 @@ class ChangePasswordSerializer(serializers.Serializer):
             })
 
         # ------------------------------------------------------
-        # Confirm new password
+        # 2. Confirm new password
         # ------------------------------------------------------
 
         if new_password != confirm_password:
@@ -143,7 +150,7 @@ class ChangePasswordSerializer(serializers.Serializer):
             })
 
         # ------------------------------------------------------
-        # Prevent same password
+        # 3. Prevent reusing current password
         # ------------------------------------------------------
 
         if user.check_password(new_password):
@@ -153,17 +160,18 @@ class ChangePasswordSerializer(serializers.Serializer):
             })
 
         # ------------------------------------------------------
-        # Django password validation
+        # 4. Django password validation
         # ------------------------------------------------------
 
-        from django.contrib.auth.password_validation import (
-            validate_password,
-        )
-
-        validate_password(
-            new_password,
-            user,
-        )
+        try:
+            validate_password(
+                new_password,
+                user,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({
+                "new_password": exc.messages
+            })
 
         return attrs
 
@@ -179,4 +187,3 @@ class ChangePasswordSerializer(serializers.Serializer):
         )
 
         return user
-
