@@ -376,21 +376,6 @@ export default function Student() {
                 </div>
               </div>
             </div>
-
-            {/* ACTIVITY SECTION */}
-            <div className="bg-white rounded-3xl shadow-lg p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-emerald-900 mb-8">
-                Academic Overview
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard title="Attendance" value="92%" />
-
-                <StatCard title="Average Score" value="78%" />
-
-                <StatCard title="Subjects" value="12" />
-              </div>
-            </div>
           </div>
         </div>
       </div>

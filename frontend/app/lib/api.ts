@@ -136,26 +136,52 @@ export const createAction = async (
 	}
 };
 
-export const apiAction = async (
-	api_base: string,
-	route_name: string,
-	id?: number,
-	method?: string,
-) => {
-	const url = id
-		? `${BASE_URL}/${api_base}/${route_name}/${id}/`
-		: `${BASE_URL}/${api_base}/${route_name}/`;
-	const res = await fetch(url, {
-		method: method || "GET",
-		headers: apiHeaders(),
-	});
 
-	if (!res) {
-		throw alert("Failed to perform action");
-	}
-	const response = await res.json();
-	return response;
+export const apiAction = async (
+  api_base: string,
+  route_name: string,
+  id?: number,
+  method: string = "GET",
+) => {
+  const url = id
+    ? `${BASE_URL}/${api_base}/${route_name}/${id}/`
+    : `${BASE_URL}/${api_base}/${route_name}/`;
+
+  const res = await fetch(url, {
+    method,
+    headers: apiHeaders(),
+  });
+
+  // ---------------------------------------------------------
+  // Safely parse the response
+  // ---------------------------------------------------------
+
+  let response: any = null;
+
+  try {
+    response = await res.json();
+  } catch {
+    // Response may not contain JSON.
+    response = null;
+  }
+
+  // ---------------------------------------------------------
+  // Handle HTTP errors
+  // ---------------------------------------------------------
+
+  if (!res.ok) {
+    const message =
+      response?.message ||
+      response?.detail ||
+      response?.error ||
+      "Failed to perform action. Please try again.";
+
+    throw new Error(message);
+  }
+
+  return response;
 };
+
 
 export const updateAction = async (
 	base_name: string,

@@ -29,22 +29,11 @@ class UserSerializer(serializers.ModelSerializer):
             "date_of_birth",
             "age",
             "profile_picture",
+            "is_staff",
+            "is_superuser",
         ]
         read_only_fields = ["id"]
 
-    # def get_profile_picture(self, obj):
-    #     if not obj.profile_picture:
-    #         return None
-
-    #     try:
-    #         request = self.context.get("request")
-
-    #         if request:
-    #             return request.build_absolute_uri(obj.profile_picture.url)
-
-    #         return obj.profile_picture.url
-    #     except Exception:
-    #         return None
         
     # CREATE USER
     # =====================================
@@ -105,6 +94,89 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['role'] = user.role
         token['username'] = user.username
         token["first_name"] = user.first_name
-       
+        token["is_staff"] = user.is_staff
+        token["is_superuser"] = user.is_superuser
         return token
    
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(
+        write_only=True,
+        required=True,
+    )
+
+    new_password = serializers.CharField(
+        write_only=True,
+        required=True,
+        min_length=8,
+    )
+
+    confirm_password = serializers.CharField(
+        write_only=True,
+        required=True,
+    )
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+
+        current_password = attrs["current_password"]
+        new_password = attrs["new_password"]
+        confirm_password = attrs["confirm_password"]
+
+        # ------------------------------------------------------
+        # Verify current password
+        # ------------------------------------------------------
+
+        if not user.check_password(current_password):
+            raise serializers.ValidationError({
+                "current_password":
+                    "Your current password is incorrect."
+            })
+
+        # ------------------------------------------------------
+        # Confirm new password
+        # ------------------------------------------------------
+
+        if new_password != confirm_password:
+            raise serializers.ValidationError({
+                "confirm_password":
+                    "The new passwords do not match."
+            })
+
+        # ------------------------------------------------------
+        # Prevent same password
+        # ------------------------------------------------------
+
+        if user.check_password(new_password):
+            raise serializers.ValidationError({
+                "new_password":
+                    "Your new password must be different from your current password."
+            })
+
+        # ------------------------------------------------------
+        # Django password validation
+        # ------------------------------------------------------
+
+        from django.contrib.auth.password_validation import (
+            validate_password,
+        )
+
+        validate_password(
+            new_password,
+            user,
+        )
+
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+
+        user.set_password(
+            self.validated_data["new_password"]
+        )
+
+        user.save(
+            update_fields=["password"]
+        )
+
+        return user
+

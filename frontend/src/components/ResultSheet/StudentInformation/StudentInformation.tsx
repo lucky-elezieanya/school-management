@@ -4,6 +4,7 @@ import SchoolLogo from "./SchoolLogo";
 import StudentMetric from "./StudentMetric";
 import StudentPhoto from "./StudentPhoto";
 import { renderPosition } from "@/app/components/sections/Broadsheet/BroadsheetTable";
+import { toMultiSentenceCase } from "@/app/services/results";
 
 interface Props {
   snapshot: StudentResultSnapshot;
@@ -72,12 +73,16 @@ export default function StudentInformation({ snapshot }: Props) {
                 school.schoolClass.description ||
                 `${school.schoolClass.name} ${school.schoolClass.arm}`
               }
-              className="uppercase"
+              className="capitalize italic"
             />
-          </td>
+          </td> 
 
           <td className="border-[0.5px] p-1">
-            <StudentMetric label="Session:" value={school.session.name} className="uppercase" />
+            <StudentMetric
+              label="Session:"
+              value={school.session.name}
+              className="uppercase"
+            />
           </td>
 
           <td
@@ -86,7 +91,11 @@ export default function StudentInformation({ snapshot }: Props) {
         border-gray-400
         p-1"
           >
-            <StudentMetric label="Term:" value={school.term.name} className="uppercase" />
+            <StudentMetric
+              label="Term:"
+              value={school.term.name}
+              className="capitalize"
+            />
           </td>
         </tr>
 
@@ -155,7 +164,8 @@ export default function StudentInformation({ snapshot }: Props) {
             >
               <StudentMetric
                 label="Grade:"
-                value={`${summary.overallGrade ?? ""} ${summary.overallRemark ?? ""}`} className="uppercase"
+                value={`${toMultiSentenceCase(summary.overallGrade ?? "")}, ${toMultiSentenceCase(summary.overallRemark ?? "")}`}
+                className="italic"
               />
             </td>
           )}

@@ -166,7 +166,7 @@ export default function EditTeacher() {
             </p>
           </div>
           <Link
-            href={`${user?.role==="admin"? "/admin/administration": "/teachers"}`}
+            href={`${user?.role === "admin" ? "/admin/administration" : "/teachers"}`}
             className="flex items-center gap-4"
           >
             <button className="px-4 py-2 bg-red-700 text-gray-100 inline-flex gap-2 rounded-lg hover:bg-red-400 transition">
@@ -254,8 +254,8 @@ export default function EditTeacher() {
                       value={formData.username}
                       onChange={handleChange}
                       required
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-700"
-                      placeholder="Enter username"
+                      disabled={!isAdmin} // Only editable by admin
+                      className={`${!isAdmin && "bg-gray-100 text-gray-500 cursor-not-allowed"} w-full rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-700'}`}
                     />
                   </div>
 
@@ -393,7 +393,8 @@ export default function EditTeacher() {
                       value={formData.date_employed}
                       onChange={handleChange}
                       required
-                      className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-700"
+                      disabled={!isAdmin} // Only editable by admin
+                      className={`${!isAdmin && "bg-gray-100 text-gray-500 cursor-not-allowed"} w-full rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-700'}`}
                     />
                   </div>
 

@@ -152,10 +152,6 @@ export default function Student() {
               Edit Student
             </button>
 
-            <button className="flex items-center gap-2 bg-red-600 hover:bg-red-700 transition px-5 py-3 rounded-xl font-medium shadow">
-              <Trash2 size={18} />
-              Delete
-            </button>
           </div>
         </div>
       </div>
@@ -384,21 +380,6 @@ export default function Student() {
                     value={student.parent_address}
                   />
                 </div>
-              </div>
-            </div>
-
-            {/* ACTIVITY SECTION */}
-            <div className="bg-white rounded-3xl shadow-lg p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-emerald-900 mb-8">
-                Academic Overview
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard title="Attendance" value="92%" />
-
-                <StatCard title="Average Score" value="78%" />
-
-                <StatCard title="Subjects" value="12" />
               </div>
             </div>
           </div>

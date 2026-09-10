@@ -131,7 +131,9 @@ class SessionTermSerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username",
+        fields = [
+            "id",
+            "username",
             "email",
             "first_name",
             "middle_name",
@@ -141,7 +143,10 @@ class UserSerializer(serializers.ModelSerializer):
             "gender",
             "date_of_birth",
             "age",
-            "profile_picture",]
+            "profile_picture",
+            "is_staff",
+            "is_superuser"
+            ]
 
 class ArmSerializer(serializers.ModelSerializer):
     class Meta:

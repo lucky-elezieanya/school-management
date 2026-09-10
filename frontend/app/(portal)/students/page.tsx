@@ -47,7 +47,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getOrdinal } from "@/app/services/results";
+import { getOrdinal, toMultiSentenceCase } from "@/app/services/results";
 import { AcademicSession, ClassType, TermSession } from "@/app/lib/types";
 import { getClasses, sessionTerms } from "@/app/services/academics";
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
@@ -60,7 +60,7 @@ export default function StudentDashboardPage() {
 
   // Tab navigation state
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "results" | "profile" | "fees"
+    "dashboard" | "results" | "profile" | "fees" | "password"
   >("dashboard");
 
   // Profile data
@@ -97,6 +97,18 @@ export default function StudentDashboardPage() {
   const [resultsReleased, setResultsReleased] = useState(false);
 
   const [snapshot, setSnapshot] = useState<StudentResultSnapshot | null>(null);
+
+  // ============================================================
+  // CHANGE PASSWORD STATE
+  // ============================================================
+
+  const [passwordData, setPasswordData] = useState({
+    current_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
+
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const fetchTerms = async (sessionId: number) => {
     if (!sessionId) return;
@@ -142,13 +154,6 @@ export default function StudentDashboardPage() {
         if (studentJson.results && studentJson.results.length > 0) {
           const studentProfile = studentJson.results[0];
           setStudentData(studentProfile);
-
-          // Set default selected session from current enrollment
-          //   if (studentProfile.current_enrollment) {
-          //     setSelectedSession(
-          //       studentProfile.current_enrollment.session.id.toString(),
-          //     );
-          //   }
         }
 
         // 2. Fetch Sessions list
@@ -371,10 +376,101 @@ export default function StudentDashboardPage() {
     );
   }
 
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const { current_password, new_password, confirm_password } = passwordData;
+
+    // ----------------------------------------------------------
+    // Frontend validation
+    // ----------------------------------------------------------
+
+    if (!current_password) {
+      toast.error("Please enter your current password.");
+      return;
+    }
+
+    if (!new_password) {
+      toast.error("Please enter a new password.");
+      return;
+    }
+
+    if (new_password.length < 8) {
+      toast.error("Your new password must be at least 8 characters.");
+      return;
+    }
+
+    if (!confirm_password) {
+      toast.error("Please confirm your new password.");
+      return;
+    }
+
+    if (new_password !== confirm_password) {
+      toast.error("The new passwords do not match.");
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+
+      const response = await fetch(
+        `${BASE_URL}/accounts/users/change-password/`,
+        {
+          method: "POST",
+
+          headers: {
+            ...apiHeaders(),
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            current_password,
+            new_password,
+            confirm_password,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const message =
+          data?.current_password?.[0] ||
+          data?.new_password?.[0] ||
+          data?.confirm_password?.[0] ||
+          data?.detail ||
+          data?.message ||
+          "Unable to change password.";
+
+        throw new Error(message);
+      }
+
+      toast.success("Password changed successfully.");
+
+      // Clear form
+      setPasswordData({
+        current_password: "",
+        new_password: "",
+        confirm_password: "",
+      });
+
+      // Return to profile
+      setActiveTab("profile");
+    } catch (error) {
+      console.error("Change password error:", error);
+
+      toast.error(
+        error instanceof Error ? error.message : "Unable to change password.",
+      );
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50/30 flex flex-col md:flex-row relative">
       {/* MOBILE HEADER & NAVIGATION */}
-      <div className="md:hidden flex items-center justify-between bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-40 w-full shadow-sm">
+      <aside className="md:hidden flex items-center justify-between bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-40 w-full shadow-sm">
         <div className="flex items-center gap-2">
           <GraduationCap className="text-blue-600 w-7 h-7" />
           <span className="font-extrabold text-slate-800 tracking-tight">
@@ -394,25 +490,49 @@ export default function StudentDashboardPage() {
             </SheetTitle>
             <div className="h-full flex flex-col justify-between bg-white p-6">
               <div>
-                <div className="flex items-center gap-2 mb-8">
-                  <GraduationCap className="text-blue-600 w-8 h-8" />
-                  <span className="font-black text-slate-800 text-xl tracking-tight">
-                    Cozzi Portal
-                  </span>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-xl mb-6">
-                  <h4 className="font-bold text-slate-800 text-sm">
-                    {studentData.user?.full_name}
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {studentData.admission_number}
-                  </p>
-                  {currentClass && (
-                    <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 rounded-md">
-                      {currentClass.name} {currentClass.arm?.name}
+                <div className="flex flex-col items-center w-full mb-6">
+                  <div className="flex items-center gap-2 mb-8">
+                    <GraduationCap className="text-blue-600 w-8 h-8" />
+                    <span className="font-black text-slate-800 text-xl tracking-tight">
+                      Cozzi Portal
+                    </span>
+                  </div>
+                  {studentData.user?.profile_picture ? (
+                    <img
+                      src={studentData.user.profile_picture}
+                      alt="Profile"
+                      className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md mb-3"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-extrabold text-xl mb-3 shadow-sm">
+                      {studentData.user?.first_name?.[0]}
+                      {studentData.user?.last_name?.[0]}
                     </div>
                   )}
+                  <div className="bg-slate-50 p-4 rounded-xl mb-6 items-center text-center w-full">
+                    <h4 className="font-bold text-slate-800 text-sm">
+                      {studentData.user?.full_name}
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {studentData.admission_number}
+                    </p>
+
+                    {currentClass && (
+                      <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 rounded-md">
+                        {currentClass.name} {currentClass.arm?.name}
+                      </div>
+                    )}
+                    <SheetClose asChild>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("password")}
+                        className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-700 transition-all hover:bg-blue-100 hover:border-blue-200"
+                      >
+                        <ShieldAlert className="w-4 h-4" />
+                        Change Password
+                      </button>
+                    </SheetClose>
+                  </div>
                 </div>
 
                 <nav className="space-y-1.5">
@@ -444,7 +564,7 @@ export default function StudentDashboardPage() {
             </div>
           </SheetContent>
         </Sheet>
-      </div>
+      </aside>
 
       {/* DESKTOP SIDEBAR */}
       <aside className="w-80 bg-white border-r border-slate-100 hidden md:flex flex-col h-screen sticky top-0 justify-between shrink-0 shadow-sm p-8">
@@ -480,6 +600,15 @@ export default function StudentDashboardPage() {
                 {currentClass.name} {currentClass.arm?.name}
               </span>
             )}
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("password")}
+              className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition-all hover:border-blue-200 hover:bg-blue-100 hover:text-blue-800"
+            >
+              <ShieldAlert className="w-4 h-4" />
+              Change Password
+            </button>
           </div>
 
           <nav className="space-y-1.5">
@@ -518,8 +647,16 @@ export default function StudentDashboardPage() {
               <span className="text-xs font-bold text-slate-400 tracking-wider uppercase">
                 Portal Workspace
               </span>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight capitalize mt-1">
-                {activeTab} Overview
+              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight mt-1">
+                {activeTab === "password"
+                  ? "Change Password"
+                  : activeTab === "results"
+                    ? "Academic Results"
+                    : activeTab === "profile"
+                      ? "My Profile"
+                      : activeTab === "fees"
+                        ? "Class Fees"
+                        : "Dashboard"}
               </h1>
             </div>
 
@@ -939,8 +1076,8 @@ export default function StudentDashboardPage() {
                                   {res.grade}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 text-xs font-semibold text-slate-500">
-                                {res.remark}
+                              <td className="px-6 py-4 text-xs font-semibold text-slate-500 italic leading-relaxed">
+                                {toMultiSentenceCase(res.remark)}
                               </td>
                             </tr>
                           ))}
@@ -1222,7 +1359,231 @@ export default function StudentDashboardPage() {
             </div>
           )}
 
-          {/* 4. CLASS FEES TAB */}
+          {/*4. CHANGE PASSWORD TAB */}
+
+          {activeTab === "password" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* ==========    CHANGE PASSWORD FORM======== */}
+
+                <Card className="border-0 shadow-sm bg-white rounded-3xl p-6 md:p-8 lg:col-span-2">
+                  <div className="mb-8">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 mb-4">
+                      <ShieldAlert size={22} />
+                    </div>
+
+                    <CardTitle className="text-xl font-black text-slate-800">
+                      Change Password
+                    </CardTitle>
+
+                    <CardDescription className="text-sm mt-1.5">
+                      Update your portal password to keep your student account
+                      secure.
+                    </CardDescription>
+                  </div>
+
+                  <form onSubmit={handleChangePassword} className="space-y-5">
+                    {/* ==================================================
+              CURRENT PASSWORD
+          ================================================== */}
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="current_password"
+                        className="text-xs font-bold text-slate-500 uppercase tracking-wider"
+                      >
+                        Current Password
+                      </label>
+
+                      <input
+                        id="current_password"
+                        type="password"
+                        value={passwordData.current_password}
+                        onChange={(e) =>
+                          setPasswordData((current) => ({
+                            ...current,
+                            current_password: e.target.value,
+                          }))
+                        }
+                        autoComplete="current-password"
+                        placeholder="Enter your current password"
+                        disabled={passwordLoading}
+                        className="w-full bg-slate-50/70 border border-slate-100 hover:border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 py-3 rounded-2xl text-slate-800 text-sm font-semibold transition disabled:opacity-60"
+                      />
+                    </div>
+
+                    {/* ==================================================
+              NEW PASSWORD
+          ================================================== */}
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="new_password"
+                        className="text-xs font-bold text-slate-500 uppercase tracking-wider"
+                      >
+                        New Password
+                      </label>
+
+                      <input
+                        id="new_password"
+                        type="password"
+                        value={passwordData.new_password}
+                        onChange={(e) =>
+                          setPasswordData((current) => ({
+                            ...current,
+                            new_password: e.target.value,
+                          }))
+                        }
+                        autoComplete="new-password"
+                        placeholder="Enter your new password"
+                        disabled={passwordLoading}
+                        className="w-full bg-slate-50/70 border border-slate-100 hover:border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 py-3 rounded-2xl text-slate-800 text-sm font-semibold transition disabled:opacity-60"
+                      />
+
+                      <p className="text-xs text-slate-400">
+                        Use at least 8 characters and avoid common passwords.
+                      </p>
+                    </div>
+
+                    {/* ==================================================
+              CONFIRM PASSWORD
+          ================================================== */}
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="confirm_password"
+                        className="text-xs font-bold text-slate-500 uppercase tracking-wider"
+                      >
+                        Confirm New Password
+                      </label>
+
+                      <input
+                        id="confirm_password"
+                        type="password"
+                        value={passwordData.confirm_password}
+                        onChange={(e) =>
+                          setPasswordData((current) => ({
+                            ...current,
+                            confirm_password: e.target.value,
+                          }))
+                        }
+                        autoComplete="new-password"
+                        placeholder="Re-enter your new password"
+                        disabled={passwordLoading}
+                        className="w-full bg-slate-50/70 border border-slate-100 hover:border-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/10 px-4 py-3 rounded-2xl text-slate-800 text-sm font-semibold transition disabled:opacity-60"
+                      />
+                    </div>
+
+                    {/* ==================================================
+              ACTIONS
+          ================================================== */}
+
+                    <div className="pt-4 flex flex-col sm:flex-row gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPasswordData({
+                            current_password: "",
+                            new_password: "",
+                            confirm_password: "",
+                          });
+
+                          setActiveTab("profile");
+                        }}
+                        disabled={passwordLoading}
+                        className="w-full sm:w-auto px-5 py-3 rounded-2xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition font-bold text-sm disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={passwordLoading}
+                        className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition font-bold text-sm shadow-lg shadow-blue-600/10 disabled:opacity-60 flex items-center justify-center gap-2"
+                      >
+                        {passwordLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Updating Password...
+                          </>
+                        ) : (
+                          <>
+                            <ShieldAlert className="w-4 h-4" />
+                            Change Password
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </Card>
+
+                {/* ======================================================
+          SECURITY INFORMATION CARD
+      ====================================================== */}
+
+                <Card className="border-0 shadow-sm bg-white rounded-3xl p-6 flex flex-col justify-between">
+                  <div className="space-y-5">
+                    <div>
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-4">
+                        <CheckCircle className="w-5 h-5" />
+                      </div>
+
+                      <CardTitle className="text-base font-bold text-slate-800">
+                        Keep Your Account Secure
+                      </CardTitle>
+
+                      <CardDescription className="text-xs mt-1.5 leading-relaxed">
+                        Your password protects access to your academic records
+                        and student portal.
+                      </CardDescription>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        </div>
+
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          Use a password that is difficult for others to guess.
+                        </p>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        </div>
+
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          Do not share your portal password with classmates or
+                          other people.
+                        </p>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        </div>
+
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          Avoid using the same password on multiple accounts.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-5 mt-6 border-t border-slate-100">
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      If you have forgotten your current password and cannot
+                      change it here, please contact the school administrator.
+                    </p>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {/* 5. CLASS FEES TAB */}
           {activeTab === "fees" && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
               {/* FILTERS PANEL */}

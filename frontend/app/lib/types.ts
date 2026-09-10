@@ -61,6 +61,7 @@ export type UserType = {
   role: string;
   email?: string | "";
   age: number;
+  is_staff: boolean;
 };
 
 export type StudentType = {

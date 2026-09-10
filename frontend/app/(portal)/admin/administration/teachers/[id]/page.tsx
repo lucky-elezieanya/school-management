@@ -1,5 +1,5 @@
 "use client";
-
+import {toast} from "sonner"
 import {
   User,
   Mail,
@@ -18,7 +18,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiAction, handleUserDelete } from "@/app/lib/api";
+import { apiAction} from "@/app/lib/api";
 import { TeacherType } from "@/app/lib/types";
 import { InfoCard } from "@/app/components/Cards";
 
@@ -29,7 +29,7 @@ export default function Teacher() {
   const [teacher, setTeacher] = useState<TeacherType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
+  const [changingAdminStatus, setChangingAdminStatus] = useState(false);
   /* ======================================
        FETCH teacher
     ====================================== */
@@ -118,7 +118,88 @@ export default function Teacher() {
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={changingAdminStatus}
+              onClick={async () => {
+                const isCurrentlyStaff = teacher.user.is_staff;
+
+                const action = isCurrentlyStaff
+                  ? "remove-admin-status"
+                  : "give-admin-status";
+
+                const actionText = isCurrentlyStaff
+                  ? "remove admin status from"
+                  : "give admin status to";
+
+                const confirmed = window.confirm(
+                  `Are you sure you want to ${actionText} ${teacher.user.full_name}?`,
+                );
+
+                if (!confirmed) return;
+
+                try {
+                  setChangingAdminStatus(true);
+
+                  await apiAction(
+                    "accounts",
+                    `users/${teacher.user.id}/${action}`,
+                    undefined,
+                    "POST",
+                  );
+
+                  // -------------------------------------------------------
+                  // Only update local state after backend succeeds
+                  // -------------------------------------------------------
+
+                  setTeacher((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          user: {
+                            ...prev.user,
+                            is_staff: !isCurrentlyStaff,
+                          },
+                        }
+                      : prev,
+                  );
+
+                  toast.success(
+                    isCurrentlyStaff
+                      ? "Admin status removed successfully."
+                      : "Admin status granted successfully.",
+                  );
+                } catch (error) {
+                  console.error("Admin status action failed:", error);
+
+                  const message =
+                    error instanceof Error
+                      ? error.message
+                      : "Something went wrong. Please try again.";
+
+                  toast.error(message);
+                } finally {
+                  setChangingAdminStatus(false);
+                }
+              }}
+              className={`flex items-center gap-2 transition px-5 py-3 rounded-xl font-medium shadow disabled:opacity-60 disabled:cursor-not-allowed ${
+                teacher.user.is_staff
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
+              }`}
+            >
+              <ShieldCheck size={18} />
+
+              {changingAdminStatus
+                ? teacher.user.is_staff
+                  ? "Removing admin status..."
+                  : "Giving admin status..."
+                : teacher.user.is_staff
+                  ? "Remove admin status"
+                  : "Give admin status"}
+            </button>
+
             <button
               onClick={() =>
                 router.push(`/admin/administration/teachers/${teacherId}/edit`)
