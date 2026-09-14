@@ -4,9 +4,8 @@ from django.utils import timezone
 from django.utils import timezone
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
 from django.db.models import Q
-import uuid
+
 
 class StudentResultSnapshot(models.Model):
     """

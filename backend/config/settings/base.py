@@ -165,7 +165,6 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # ==============================================================================
 # STATIC FILES
 # ==============================================================================
@@ -340,7 +339,7 @@ WHITENOISE_ALLOW_ALL_ORIGINS = True
 # PROJECT SETTINGS
 # ==============================================================================
 
-SCHOOL_NAME = "Cozzi Schools"
+SCHOOL_NAME = config("SCHOOL_NAME", default="Cozzi Schools")
 
 DEFAULT_AVATAR = f"{STATIC_URL}images/avatar.png"
 
@@ -349,3 +348,14 @@ DEFAULT_HEADER = f"{STATIC_URL}images/cozzi-header.png"
 DEFAULT_LOGO = f"{STATIC_URL}images/logo.jpg"
 
 APPEND_SLASH = False
+
+
+RESEND_API_KEY = config("RESEND_API_KEY", default="")
+RESEND_FROM_EMAIL = config(
+    "RESEND_FROM_EMAIL",
+    default="onboarding@resend.dev",
+)
+RESEND_FROM_NAME = config(
+    "RESEND_FROM_NAME",
+    default=SCHOOL_NAME,
+)

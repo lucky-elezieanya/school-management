@@ -1,5 +1,5 @@
 // services/results.ts
-import {toast} from "sonner"
+import { toast } from "sonner";
 import { request, BASE_URL, apiHeaders } from "../lib/api";
 
 export function getBackendBaseUrl(url: string) {
@@ -43,7 +43,7 @@ const handleResponse = async (res: Response) => {
         .join(", ") ||
       `Request failed with status ${res.status}`;
 
-   toast.error(message);
+    toast.error(message);
   }
 
   return data;
@@ -64,7 +64,6 @@ export const computeAllResults = async (payload: {
 
   return handleResponse(res);
 };
-
 
 export const fetchClasses = () => request("/academics/classes/");
 
@@ -173,7 +172,7 @@ export const getWorkFlowApprovedStatus = async (
   term: number,
   session: number,
 ) => {
-  const url = `${BASE_URL}/results/workflow/?school_class=${school_class}&term=${term}&session=${session}`
+  const url = `${BASE_URL}/results/workflow/?school_class=${school_class}&term=${term}&session=${session}`;
   const res = await fetch(url, {
     headers: apiHeaders(),
   });
@@ -182,7 +181,7 @@ export const getWorkFlowApprovedStatus = async (
 
 export async function uploadTeacherSignature(
   file: File,
-  
+
   classTeacherId: number,
   is_active: boolean,
 ) {
@@ -234,16 +233,41 @@ export async function getHeadTeacherSignatures(token: string) {
 }
 
 export function toMultiSentenceCase(text: string): string {
-    if (!text) return "";
-  
-    // 1. Lowercase the entire text first
-    const lower: string = text.toLowerCase();
-  
-    // 2. Match the start of the text OR characters following a sentence-ending punctuation (.!?) and spaces
-    return lower.replace(
-      /(^\s*|[.!?]\s+)([a-z])/g,
-      (_match: string, separator: string, letter: string): string => {
-        return separator + letter.toUpperCase();
-      }
-    );
+  if (!text) return "";
+
+  // 1. Lowercase the entire text first
+  const lower: string = text.toLowerCase();
+
+  // 2. Match the start of the text OR characters following a sentence-ending punctuation (.!?) and spaces
+  return lower.replace(
+    /(^\s*|[.!?]\s+)([a-z])/g,
+    (_match: string, separator: string, letter: string): string => {
+      return separator + letter.toUpperCase();
+    },
+  );
+}
+
+export async function sendResultEmail(snapshotId: number, pdfBlob: Blob) {
+  const formData = new FormData();
+
+  formData.append("file", pdfBlob, `result-${snapshotId}.pdf`);
+
+  const response = await fetch(
+    `${BASE_URL}/results/result-snapshots/${snapshotId}/send-email/`,
+    {
+      method: "POST",
+      headers: {
+        ...apiHeaders(),
+      },
+      body: formData,
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.detail || "Failed to email result.");
   }
+
+  return data;
+}

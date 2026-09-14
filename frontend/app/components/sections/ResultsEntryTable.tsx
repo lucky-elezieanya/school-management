@@ -209,8 +209,7 @@ export default function ResultEntryTable({
       toast.error("Failed to save results");
     }
   };
-
-  
+ 
   const isDisabled =
     Object.keys(errors).length > 0 ||
     !allStudentsCompleted ||

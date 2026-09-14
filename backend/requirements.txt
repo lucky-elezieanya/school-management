@@ -78,6 +78,7 @@ redis==8.0.0
 referencing==0.37.0
 rembg==2.0.76
 requests==2.34.2
+resend==2.45.0
 rest-framework-simplejwt==0.0.2
 rpds-py==2026.5.1
 rst2ansi==0.1.5

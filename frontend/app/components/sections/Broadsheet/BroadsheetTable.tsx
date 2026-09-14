@@ -3,14 +3,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Download, Eye, Loader2, RefreshCw } from "lucide-react";
+import { Download, Eye, Loader2, Mail, RefreshCw } from "lucide-react";
 import { StudentResultSnapshot } from "@/app/types/result-snapshot";
 import { ResultSnapshot } from "./ResultBroadsheet";
 import { BASE_URL } from "@/app/lib/api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PdfContainer } from "@/src/components/results/pdf";
-import { getBackendBaseUrl } from "@/app/services/results";
-import { downloadPdf } from "@/src/components/results/pdf/downloadPdf";
+import { sendResultEmail, getBackendBaseUrl } from "@/app/services/results";
+import {
+  downloadPdf,
+  generatePdfBlob,
+} from "@/src/components/results/pdf/downloadPdf";
 
 interface Props {
   snapshots: any[];
@@ -96,10 +99,12 @@ export default function BroadsheetTable({
   const scoreFields: ScoreField[] = [];
   const pdfRef = useRef<HTMLDivElement>(null);
 
-
   const [currentSnapshot, setCurrentSnapshot] =
     useState<StudentResultSnapshot | null>(null);
-const [downloading, setDownloading] = useState(false)
+  const [downloading, setDownloading] = useState(false);
+
+  const [emailingStudentId, setEmailingStudentId] =
+  useState<number | null>(null);
 
   const orderedSnapshots = [...snapshots].sort(
     (a, b) =>
@@ -168,7 +173,6 @@ const [downloading, setDownloading] = useState(false)
     async (studentId: number) => {
       const snapshot = snapshotMap.get(studentId);
 
-
       if (!snapshot) return;
 
       try {
@@ -190,7 +194,58 @@ const [downloading, setDownloading] = useState(false)
     [snapshotMap],
   );
 
+  const handleEmailResult = useCallback(
+    async (studentId: number, snapshotId:number) => {
+      const snapshot = snapshotMap.get(studentId);
 
+      if (!snapshot) {
+        toast.error("Result snapshot not found.");
+        return;
+      }
+
+      try {
+        setEmailingStudentId(studentId);
+
+        setCurrentSnapshot(snapshot);
+
+        // Give React time to render the PDF container.
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+
+        if (!pdfRef.current) {
+          throw new Error("Could not prepare the result PDF.");
+        }
+
+        toast.loading("Preparing result PDF...", {
+          id: `email-result-${studentId}`,
+        });
+
+        const pdfBlob = await generatePdfBlob(pdfRef.current, snapshot);
+
+        toast.loading("Sending result to parent...", {
+          id: `email-result-${studentId}`,
+        });
+
+        await sendResultEmail(snapshotId, pdfBlob);
+
+        toast.success("Result emailed successfully.", {
+          id: `email-result-${studentId}`,
+        });
+      } catch (error) {
+        console.error("Failed to email result:", error);
+
+        toast.error(
+          error instanceof Error ? error.message : "Failed to email result.",
+          {
+            id: `email-result-${studentId}`,
+          },
+        );
+      } finally {
+        setEmailingStudentId(null);
+      }
+    },
+    [snapshotMap],
+  );
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-whit shadow-sm ">
@@ -290,7 +345,7 @@ const [downloading, setDownloading] = useState(false)
                 Position
               </th>
             )}
-    
+
             <th
               className="
         min-w-32
@@ -446,12 +501,27 @@ const [downloading, setDownloading] = useState(false)
                       <Eye className="h-4 w-4" />
                     </button>
                     <button
-                    disabled={downloading}
+                      disabled={downloading}
                       onClick={() => handleDownload(snapshot.data.student.id)}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-600 transition hover:bg-blue-100 disabled:opacity-0.4"
                       title="Download Result"
                     >
                       <Download className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleEmailResult(snapshot.data.student.id, snapshot.id)
+                      }
+                      disabled={emailingStudentId === snapshot.data.student.id}
+                      title="Email result to parent"
+                      className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 transition hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {emailingStudentId === snapshot.data.student.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Mail className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </td>
@@ -469,7 +539,6 @@ const [downloading, setDownloading] = useState(false)
           )}
         </tbody>
       </table>
-  
 
       <div className="hidden">
         {currentSnapshot && (

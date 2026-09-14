@@ -198,7 +198,8 @@ def build_student(student, absolute_url):
         "admissionNumber": student.admission_number,
         "profilePicture": (
             absolute_url(student.user.profile_picture)
-           )
+           ),
+        "parent_email": student.parent_email if student.parent_email else "" 
        
     }
     

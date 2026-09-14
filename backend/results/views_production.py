@@ -57,6 +57,190 @@ class StudentResultSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("-computed_at")
         )
 
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="send-email",
+    )
+    def send_email(self, request, pk=None):
+        snapshot = self.get_object()
+
+        # ---------------------------------------------------------
+        # 1. Snapshot must be ready
+        # ---------------------------------------------------------
+        if snapshot.status != StudentResultSnapshot.STATUS_READY:
+            return Response(
+                {
+                    "detail": (
+                        "This result is not ready for emailing. "
+                        "Only ready result snapshots can be sent."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------------------------------------------------
+        # 2. Only admin/teacher/staff can send results
+        # ---------------------------------------------------------
+        user = request.user
+
+        is_admin = (
+            user.is_superuser
+            or user.is_staff
+            or getattr(user, "role", None) == "admin"
+        )
+
+        is_teacher = getattr(user, "role", None) == "teacher"
+
+        if not (is_admin or is_teacher):
+            return Response(
+                {
+                    "detail": (
+                        "You do not have permission to email "
+                        "student results."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ---------------------------------------------------------
+        # 3. Get student information from the snapshot JSON
+        # ---------------------------------------------------------
+        student_data = snapshot.data.get("student", {})
+
+        student_name = (
+            student_data.get("fullName")
+            or student_data.get("admissionNumber")
+            or "Student"
+        )
+
+        parent_email = student_data.get("parent_email")
+
+        if not parent_email:
+            return Response(
+                {
+                    "detail": (
+                        "No parent email address is available "
+                        "for this student."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------------------------------------------------
+        # 4. Get school/term/session information
+        # ---------------------------------------------------------
+        school_data = snapshot.data.get("school", {})
+
+        term_data = school_data.get("term", {})
+        session_data = school_data.get("session", {})
+
+        term_name = term_data.get("name", snapshot.term.name)
+        session_name = session_data.get("name", snapshot.session.name)
+
+        # ---------------------------------------------------------
+        # 5. Get the PDF uploaded by Next.js
+        # ---------------------------------------------------------
+        pdf_file = request.FILES.get("file")
+
+        if not pdf_file:
+            return Response(
+                {
+                    "detail": "No PDF file was provided."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------------------------------------------------
+        # 6. Validate file type
+        # ---------------------------------------------------------
+        if pdf_file.content_type != "application/pdf":
+            return Response(
+                {
+                    "detail": "The uploaded file must be a PDF."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------------------------------------------------
+        # 7. Basic file-size protection
+        # ---------------------------------------------------------
+        max_size = 10 * 1024 * 1024  # 10 MB
+
+        if pdf_file.size > max_size:
+            return Response(
+                {
+                    "detail": (
+                        "The PDF is too large. "
+                        "Maximum allowed size is 10 MB."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---------------------------------------------------------
+        # 8. Generate filename
+        # ---------------------------------------------------------
+        pdf_filename = (
+            f"{student_name}_{term_name}_result.pdf"
+        )
+
+        # ---------------------------------------------------------
+        # 9. Send through Resend
+        # ---------------------------------------------------------
+        try:
+            from .utils.services.email_service import send_result_email
+
+            pdf_bytes = pdf_file.read()
+
+            response = send_result_email(
+                recipient_email=parent_email,
+                student_name=student_name,
+                term_name=term_name,
+                session_name=session_name,
+                pdf_bytes=pdf_bytes,
+                pdf_filename=pdf_filename,
+            )
+
+        except Exception as exc:
+            # return Response(
+            #     {
+            #         "detail": "The result could not be emailed.",
+            #         "error": str(exc),
+            #     },
+            #     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            # )
+            import traceback
+
+            traceback.print_exc()
+
+            return Response(
+                {
+                    "detail": "The result could not be emailed.",
+                    "error": str(exc),
+                    "type": type(exc).__name__,
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # ---------------------------------------------------------
+        # 10. Return success
+        # ---------------------------------------------------------
+        return Response(
+                {
+                    "detail": "Result emailed successfully.",
+                    "recipient": parent_email,
+                    "student": student_name,
+                    "resend": {
+                        "id": (
+                            response.get("id")
+                            if isinstance(response, dict)
+                            else None
+                        ),
+                    },
+                },
+                status=status.HTTP_200_OK,
+            )
 # ============================================================================
 # 2. RESULT CUSTOMIZATION VIEWSET
 # ============================================================================

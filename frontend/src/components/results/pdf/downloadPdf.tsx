@@ -51,3 +51,40 @@ export async function downloadPdf(
     .from(element)
     .save();
 }
+
+export async function generatePdfBlob(
+  element: HTMLElement,
+  snapshot: StudentResultSnapshot,
+) {
+  const html2pdf = (await import("html2pdf.js")).default;
+
+  return await html2pdf()
+    .set({
+      filename: buildFilename(snapshot),
+
+      margin: 0,
+
+      image: {
+        type: "png",
+        quality: 1,
+      },
+
+      html2canvas: {
+        scale: 1,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        letterRendering: true,
+        scrollX: 0,
+        scrollY: 0,
+      },
+
+      jsPDF: {
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+      },
+    })
+    .from(element)
+    .outputPdf("blob");
+}
